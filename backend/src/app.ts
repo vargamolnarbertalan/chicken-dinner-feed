@@ -12,9 +12,20 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { config } from './config.js';
+import { createIngestSource } from './ingest/index.js';
 import { healthRoutes } from './routes/health.js';
+import { MatchStore } from './state/match-store.js';
+import { LiveHub } from './ws/live-hub.js';
+import { liveRoutes } from './ws/routes.js';
 
-export async function buildApp(): Promise<FastifyInstance> {
+/** The live pipeline, exposed so `index.ts` can start and stop it around the server's lifecycle. */
+export interface AppContext {
+  app: FastifyInstance;
+  start(): void;
+  shutdown(): Promise<void>;
+}
+
+export async function buildApp(): Promise<AppContext> {
   const app = Fastify({
     logger: {
       level: config.logLevel,
@@ -59,7 +70,14 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(fastifyWebsocket);
 
+  // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
+  // know which ingestion source is in use (ADR-0006).
+  const store = new MatchStore({ source: config.ingestSource });
+  const hub = new LiveHub({ store });
+  const ingestSource = createIngestSource(config.ingestSource);
+
   await app.register(healthRoutes, { prefix: '/api' });
+  await app.register(liveRoutes, { prefix: '/ws', hub });
 
   // Serving the built frontend is what makes the bundle a single process (ADR-0001). In a fresh
   // checkout the frontend may not be built yet; that must not stop the API from starting.
@@ -80,5 +98,29 @@ export async function buildApp(): Promise<FastifyInstance> {
     );
   }
 
-  return app;
+  return {
+    app,
+
+    start() {
+      hub.start();
+      ingestSource.start({
+        onUpdate(update) {
+          store.applyUpdate(update);
+          hub.schedulePublish();
+        },
+        onStatus(state, message) {
+          store.setStatus(state, message ?? null);
+          app.log.info({ state, message }, 'Ingest status changed');
+          hub.schedulePublish();
+        },
+      });
+    },
+
+    async shutdown() {
+      // Stop producing before tearing down consumers, so nothing publishes into a closed hub.
+      await ingestSource.stop();
+      hub.stop();
+      await app.close();
+    },
+  };
 }
