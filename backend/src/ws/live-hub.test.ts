@@ -70,7 +70,11 @@ describe('LiveHub', () => {
   });
 
   it('does not broadcast when nothing visible changed', () => {
+    // The state has to be established *before* the client connects, or the first update would
+    // itself be a genuine change (empty table → live match) and the assertion would be meaningless.
+    store.applyUpdate(update());
     hub.publish();
+
     const client = new FakeClient();
     hub.addClient(client);
     const before = client.sent.length;
