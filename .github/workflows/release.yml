@@ -1,0 +1,128 @@
+name: Release
+
+# Triggered by pushing a version tag, never automatically on merge — releasing is a decision, not a
+# side effect of merging (ADR-0009).
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: Build the all-in-one bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build all workspaces
+        run: npm run build
+
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # Assemble exactly what an operator needs and nothing else: no specs, no ADRs, no tests, no
+      # source, no dev dependencies (ADR-0009).
+      - name: Assemble bundle
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          BUNDLE="bundle/chicken-dinner-feed-$VERSION"
+          mkdir -p "$BUNDLE"/{backend/data/defaults,shared,docs}
+
+          # Backend: compiled output only.
+          cp -r backend/dist "$BUNDLE/backend/dist"
+          cp backend/.env.example "$BUNDLE/backend/.env.example"
+          if [ -d backend/data/defaults ]; then
+            cp -r backend/data/defaults/. "$BUNDLE/backend/data/defaults/"
+          fi
+
+          # Frontend: built assets, served by the backend from backend/public.
+          cp -r frontend/dist "$BUNDLE/backend/public"
+
+          # Shared contracts, linked as a local file: dependency so npm resolves it normally.
+          cp -r shared/dist "$BUNDLE/shared/dist"
+          cp shared/package.json "$BUNDLE/shared/package.json"
+
+          # Operator entry points and documentation.
+          cp install-dependencies.bat startup.bat "$BUNDLE/"
+          cp docs/user/user-guide.en.md docs/user/user-guide.hu.md "$BUNDLE/docs/"
+
+          # A standalone manifest holding only the backend's runtime dependencies, so
+          # install-dependencies.bat installs the minimum and nothing workspace-related.
+          node -e "
+            const fs = require('node:fs');
+            const backend = JSON.parse(fs.readFileSync('backend/package.json', 'utf8'));
+            const deps = { ...backend.dependencies, '@cdf/shared': 'file:./shared' };
+            fs.writeFileSync('$BUNDLE/package.json', JSON.stringify({
+              name: 'chicken-dinner-feed',
+              version: process.env.VERSION,
+              private: true,
+              type: 'module',
+              engines: { node: '>=22.19.0' },
+              scripts: { start: 'node backend/dist/index.js' },
+              dependencies: Object.fromEntries(Object.entries(deps).sort()),
+            }, null, 2) + '\n');
+          "
+
+          # Generate a lockfile for the bundle so 'npm ci' is reproducible on the operator's machine.
+          (cd "$BUNDLE" && npm install --package-lock-only --omit=dev)
+
+          # A short pointer; the full guides are in docs/.
+          cat > "$BUNDLE/README.txt" <<EOF
+          chicken-dinner-feed $VERSION
+
+          1. Run install-dependencies.bat once (needs internet).
+          2. Run startup.bat before each broadcast, and leave the window open.
+
+          Full instructions: docs/user-guide.en.md  |  docs/user-guide.hu.md
+          EOF
+
+      - name: Create ZIP
+        id: zip
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd bundle
+          zip -r "../chicken-dinner-feed-$VERSION.zip" "chicken-dinner-feed-$VERSION"
+          cd ..
+          echo "path=chicken-dinner-feed-$VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ steps.zip.outputs.path }}
+          body: |
+            ## Installation
+
+            1. Download and unpack `${{ steps.zip.outputs.path }}`.
+            2. Run `install-dependencies.bat` once — it needs an internet connection.
+            3. Run `startup.bat` to start the app, and leave the console window open.
+
+            Requires **Node.js 22 or newer** (<https://nodejs.org/>).
+
+            Upgrading? Unpack into a new folder, then copy your old `backend\data` folder across to
+            keep your configuration.
