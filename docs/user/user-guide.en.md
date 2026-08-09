@@ -68,13 +68,31 @@ To stop the app, close the console window, or click into it and press `Ctrl+C`.
 
 ## 5. Connecting the game data
 
-The match data comes from the PCOB client, and there are two things you must do **in PCOB**, not in
-this app:
+The match data comes from the PCOB client. Everything in this section happens **in PCOB**, not in
+this app — but if any of it is missed, this app shows no data.
 
-1. **Start the PCOB API.** Run `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. It opens its
-   own console window — **that window must also stay open**, or no data is produced.
-2. **Click "API Enable" in the PCOB client before the match starts.** If you forget, the app will
-   show _no data_ even though everything else is working correctly.
+### Once per tournament: get the account whitelisted
+
+This has to be done well in advance, not on the day.
+
+1. Log in to the PCOB client, ideally with an email and password. An observer with no PUBG Mobile
+   account can start the game on a phone, choose **Guest login**, then attach an email and password.
+2. Run the provided `.bat` file and read out the **OPENID** number.
+3. Send that OPENID to the publisher for **whitelisting**. **Without whitelisting there is no API
+   data at all**, no matter what else is configured correctly.
+4. Get **two accounts** whitelisted rather than one. If the first fails on the day, there is no time
+   to request another.
+
+### Before every match
+
+1. The observer joins the lobby through the PCOB (ShadowTracker) client and switches to observer
+   mode.
+2. **Tick "API Enable" in the PCOB client before the match starts.** If this is forgotten, the app
+   shows _no data_ even though everything else is working correctly. This is the single most common
+   cause of an apparently broken overlay.
+3. **Start the PCOB API.** Run `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat` from a command
+   prompt. It opens its own console window — **that window must also stay open**, or no data is
+   produced.
 
 Two things worth knowing, because they are not faults in this app:
 
@@ -91,6 +109,9 @@ The admin page shows the connection state at all times:
 | **Stale**        | Connected, but nothing new has arrived recently | Check that the host is still in the room                                 |
 | **Disconnected** | No connection to the PCOB API                   | Check the `launch.bat` window is still open and "API Enable" was clicked |
 
+If it says **Disconnected** and the `launch.bat` window is open, the likely cause is that the
+account was never whitelisted.
+
 If the connection drops mid-match, the overlay **keeps showing the last data it received** rather
 than going blank on air. It reconnects on its own when data returns.
 
@@ -100,7 +121,8 @@ _Coming soon — the exact steps will be finalised with the first overlay._ The 
 
 1. Create an overlay instance in the admin and copy its address.
 2. In OBS: **Sources → + → Browser**, paste the address, and set the width and height to your canvas
-   size (usually 1920 × 1080).
+   size. **1920 × 1080, 2560 × 1440 and 3840 × 2160 are all supported** — the overlay scales itself
+   and looks identical at each, so there is nothing to configure per resolution.
 3. Tick **Shutdown source when not visible** off, so the overlay stays connected while hidden.
 4. The overlay has a transparent background, so it composites straight over your video.
 
@@ -149,7 +171,9 @@ The connection to PCOB has probably dropped — the admin will show _Stale_ or _
 the `launch.bat` window and whether the room host is still connected.
 
 **No data at all, though everything looks fine**
-The most common cause by far: **"API Enable" was not clicked in PCOB before the match started**.
+In order of likelihood: **"API Enable" was not clicked** in PCOB before the match started; the
+`launch.bat` console window was closed; or the observer's **account was never whitelisted** by the
+publisher. The last one cannot be fixed on the day — see section 5.
 
 **The browser did not open on startup**
 Not a problem. Open a browser yourself and go to `http://127.0.0.1:4317/admin`.
