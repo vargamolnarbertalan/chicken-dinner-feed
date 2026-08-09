@@ -26,16 +26,24 @@ rejected alternatives. Summary of what is now settled:
 | [0010](adr/0010-poll-the-pcob-http-api.md)                 | Poll the PCOB HTTP API on `127.0.0.1:10086`                                  | Transport resolved by the client thread, not by the schema document                                     |
 | [0011](adr/0011-resolution-independent-overlay-scaling.md) | Overlays scale uniformly from a fixed 1920×1080 design canvas                | Answers the contractual FullHD / 1440p / 4K requirement                                                 |
 
+### Decisions resolved 2026-08-09
+
+- **Admin scope — `specs/APP-PLAN.md` is the source of truth**, not the narrower quoted scope. We
+  build the fuller admin: sizes, placement, animations, multiple overlay types and instances, on top
+  of the quoted colours and fonts. **The live overlay preview is downgraded to nice-to-have**, not a
+  must-have.
+  _Note:_ this does not weaken [ADR-0008](adr/0008-admin-as-protected-frontend-route.md). Admin-as-a-route
+  was chosen partly so the preview would be the real overlay rather than a lookalike — and because
+  that decision makes the preview nearly free, we will likely get it anyway. It simply stops being
+  something to spend effort defending if it turns out awkward.
+- **Resolution priority — 1080p is the bar.** 1440p and 4K stay contractual and are correct by
+  construction under [ADR-0011](adr/0011-resolution-independent-overlay-scaling.md), but no
+  significant effort goes into perfecting them yet.
+- **No delivery-date constraint.** Build now; the work is wanted now. Scheduling is not a factor in
+  prioritisation.
+
 ### Decisions still open
 
-- **🟠 Admin scope vs. the client quote.** The quote scopes round one to **colours and fonts**, with
-  a control panel as a separately-discussed later extension; `specs/APP-PLAN.md` specifies a full
-  admin (sizes, placement, animations, multiple types and instances, previews). The difference is
-  real work that was not quoted. Either is defensible — internal groundwork for the next engagement
-  is a reasonable motive — but it needs to be chosen, not drifted into. See
-  `specs/PCOB-FINDINGS.md` §6.
-- **🟠 Delivery date.** The client's stated window, 2026-06-02 to 06-07, has passed. Round 2
-  priorities depend on when the next event actually is.
 - **Overlay type registry shape** — how a new overlay type declares its settings schema so the admin
   can render a form for it generically. Deferred until there are two overlay types to generalise
   from; guessing now would be premature abstraction.
@@ -148,11 +156,14 @@ is described as post-match, and the client states they do not know how the live 
 
 Two independent ways to unblock, and the cheaper one does not involve the restricted document:
 
-1. **🟢 Capture one real response.** With a PCOB client running, "API Enable" ticked and
+1. **🟡 Capture one real response.** With a PCOB client running, "API Enable" ticked and
    `launch.bat` open, probe port 10086 — `GET /`, `GET /gettotalplayerlist`, and a few guessed
    sibling routes — and save one response body. A single payload would settle field names, nesting,
-   `LiveState` values and how teams and players are keyed. **This is the highest-value action
-   available and needs nothing from anyone outside the project.**
+   `LiveState` values and how teams and players are keyed.
+   **Status (2026-08-09): standing to-do, not currently actionable.** The PCOB client itself can
+   probably be started, but we have no way into a live PUBG Mobile match yet, and the API only
+   produces data inside one. Do this at the first opportunity — a rehearsal room would be enough,
+   it does not need a real tournament.
 2. **🔴 The schema document.**
    `docs.google.com/spreadsheets/d/1__DWeOyhrNs4PdXs9EoWwXdylU-CMICOQ-yNpw3Ag34` still returns
    **HTTP 401**; access requested by the client on 2026-08-09, no committed date. It would

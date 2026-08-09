@@ -233,22 +233,21 @@ is PMNC. Not a first collaboration, and the work was quoted as a fixed-price eng
 A **control panel** was explicitly framed as a _later_ extension to be discussed separately, not as
 part of this engagement.
 
-### ⚠️ Scope note
+### Scope note — resolved 2026-08-09
 
 `specs/APP-PLAN.md` specifies a full admin — colours, fonts, sizes, placement, animation controls,
 multiple overlay types and instances, live previews. The client quote scopes round one to **colours
 and fonts**, with the control panel as a future add-on.
 
-These are not the same scope. Both readings are defensible — building the admin anyway is reasonable
-if it is internal groundwork for the next engagement — but the difference is deliberate work that
-was not quoted, and it should be a conscious decision rather than a drift. Flagged in
-`docs/progression.md` under open decisions.
+**Decision: `APP-PLAN.md` wins.** We build the fuller admin, knowingly beyond the quoted scope, with
+the **live overlay preview downgraded to nice-to-have**. The extra work is accepted as groundwork
+rather than treated as drift.
 
-### Timeline
+### Timeline — resolved 2026-08-09
 
-The client's stated usage window was **2026-06-02 to 2026-06-07**, with "end of May" as the target
-delivery. **That window has passed** (this thread was forwarded on 2026-08-09). The next event date
-is unknown and needs confirming before round 2 is prioritised.
+The client's stated usage window was 2026-06-02 to 2026-06-07; it has passed. **No date constraint
+applies to the current work** — it is being built now because it is wanted now. Scheduling does not
+enter into prioritisation.
 
 ### What the tool replaces
 

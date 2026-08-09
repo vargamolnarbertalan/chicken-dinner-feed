@@ -44,8 +44,22 @@ viewport.
   accurate at any preview size.
 
 **Text rendering is the risk to watch.** Scaled type must stay crisp at 4K and must not shift by
-sub-pixels between resolutions in a way that changes line breaks. Verifying this at all three
-resolutions is part of the acceptance criteria for the first overlay, not an afterthought.
+sub-pixels between resolutions in a way that changes line breaks.
+
+### Priority: 1080p is the bar, 1440p and 4K come along for free
+
+Decided 2026-08-09. **1080p must be rock solid** — it is what productions actually run today, and it
+is the resolution the client will judge the work at. 1440p and 4K are contractual and are correct
+_by construction_ under this decision, but chasing pixel-perfection at those two is explicitly **not**
+worth significant effort right now.
+
+This is a statement about where verification effort goes, not a weakening of the mechanism. The
+scale factor costs nothing over hardcoded pixels — it is the same amount of code — so building it in
+from the start is the cheap path to all three, and skipping it would be the expensive one. Concretely:
+
+- **Acceptance for the first overlay:** correct and polished at 1920×1080.
+- **1440p and 4K:** sanity-checked (nothing clipped, nothing obviously wrong), with rounding and
+  text-crispness refinements deferred until someone actually broadcasts at those resolutions.
 
 ## Consequences
 
