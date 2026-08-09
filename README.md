@@ -14,8 +14,8 @@ broadcast tool can consume as browser sources.
 
 |             |                                                                                                |
 | ----------- | ---------------------------------------------------------------------------------------------- |
-| **Input**   | The PCOB client's local API on the observer PC — pushes match state roughly every 2 seconds    |
-| **Output**  | Browser-source overlay pages (leaderboard with live health bars, points, eliminations)         |
+| **Input**   | The PCOB client's local HTTP API on the observer PC (`127.0.0.1:10086`), refreshed every ~2 s  |
+| **Output**  | Browser-source overlay pages at 1080p / 1440p / 4K (leaderboard, health bars, points, elims)   |
 | **Control** | A local admin UI for colours, fonts, sizes, placement, show/hide animations, and live previews |
 | **Runs on** | The operator's Windows machine, entirely on localhost. No cloud, no database                   |
 
@@ -66,8 +66,9 @@ app always talks to a same-origin API in both development and production.
 ```
 chicken-dinner-feed/
 ├─ specs/                  Source material and findings
-│  ├─ APP-PLAN.md            The original product plan
-│  ├─ PCOB-FINDINGS.md       What the PCOB guideline means for us — read this first
+│  ├─ APP-PLAN.md            The product plan
+│  ├─ PCOB-FINDINGS.md       What the sources mean for us — read this first
+│  ├─ PCOB_Tool_..._thread.md  Client correspondence: API port, requirements, timeline
 │  └─ example.png            Target look for the leaderboard overlay
 ├─ docs/
 │  ├─ adr/                   Architecture Decision Records
@@ -88,8 +89,8 @@ chicken-dinner-feed/
 ### How the pieces fit
 
 ```
-PCOB client (local Windows process)
-        │  ~0.5 Hz, pushes on change
+PCOB client — local HTTP server on 127.0.0.1:10086
+        │  polled at 1 Hz; upstream refreshes every ~2 s
         ▼
  ingestion adapter  ──────────────► normalised domain model  (never raw PCOB payloads)
  (mock | pcob)                              │
@@ -102,7 +103,8 @@ PCOB client (local Windows process)
 ```
 
 Each arrow has an ADR behind it: ingestion boundary
-([0006](docs/adr/0006-pcob-ingestion-adapter-boundary.md)), snapshot fan-out
+([0006](docs/adr/0006-pcob-ingestion-adapter-boundary.md)), HTTP polling
+([0010](docs/adr/0010-poll-the-pcob-http-api.md)), snapshot fan-out
 ([0007](docs/adr/0007-websocket-state-fanout.md)), admin as a route
 ([0008](docs/adr/0008-admin-as-protected-frontend-route.md)).
 
@@ -128,12 +130,21 @@ version:
 | [WebSocket snapshots](docs/adr/0007-websocket-state-fanout.md)                           | Browser sources reload mid-match and must be correct instantly                       |
 | [Admin as a route](docs/adr/0008-admin-as-protected-frontend-route.md)                   | The preview must be the real overlay, not a lookalike                                |
 | [feat → develop → main](docs/adr/0009-git-workflow-and-release-process.md)               | As planned; releases are deliberate, tagged, and shipped as a bundle ZIP             |
+| [Poll PCOB over HTTP](docs/adr/0010-poll-the-pcob-http-api.md)                           | The API is an HTTP server on `127.0.0.1:10086`, not a push channel                   |
+| [Fixed design canvas](docs/adr/0011-resolution-independent-overlay-scaling.md)           | Contractual FullHD / 1440p / 4K support, identical proportions at all three          |
 
 ## Known blocker
 
-The authoritative **PCOB API schema document is access-restricted** (HTTP 401). Until it is
-available we do not know the transport, port, message envelope or field names, so `INGEST_SOURCE`
-defaults to `mock`. Details and the full list of open questions:
+The PCOB API's **transport is now known** — HTTP + JSON on `http://127.0.0.1:10086`, from the client
+correspondence in [`specs/PCOB_Tool_fejlesztes_thread.md`](specs/PCOB_Tool_fejlesztes_thread.md).
+
+Still unknown: the **JSON payload shape**, and **which route serves live in-match data** — the one
+documented endpoint, `gettotalplayerlist`, is described as post-match. So `INGEST_SOURCE` defaults to
+`mock`.
+
+The cheapest way to close this is to **capture a single real response** from a running PCOB client
+with "API Enable" ticked; it needs nothing from outside the project. The authoritative schema
+spreadsheet remains HTTP 401. Full list:
 [`specs/PCOB-FINDINGS.md`](specs/PCOB-FINDINGS.md#open-questions).
 
 ## Contributing

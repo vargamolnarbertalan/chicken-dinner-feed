@@ -69,14 +69,32 @@ Leállítani úgy tudod, hogy bezárod a konzolablakot, vagy belekattintasz és 
 
 ## 5. A játékadatok bekötése
 
-Az adatok a PCOB kliensből jönnek, és két dolgot **a PCOB-ban** kell elvégezned, nem ebben az
-alkalmazásban:
+Az adatok a PCOB kliensből jönnek. Az ebben a fejezetben leírtak mind **a PCOB-ban** történnek, nem
+ebben az alkalmazásban — de ha bármelyik kimarad, ez az alkalmazás nem kap adatot.
 
-1. **Indítsd el a PCOB API-t.** Futtasd a
+### Versenyenként egyszer: fiók whitelistelése
+
+Ezt jó előre el kell intézni, nem a helyszínen.
+
+1. Lépj be a PCOB kliensbe, lehetőleg email + jelszó párossal. Ha az observernek nincs PUBG Mobile
+   fiókja, mobilon indítsa el a játékot, válassza a **Guest login**-t, majd csatoljon hozzá emailt és
+   jelszót.
+2. Futtasd a kapott `.bat` fájlt, és olvasd ki az **OPENID** számsort.
+3. Ezt az OPENID-t el kell küldeni a kiadónak **whitelistelésre**. **Whitelist nélkül egyáltalán
+   nincs API adat**, hiába van minden más jól beállítva.
+4. Ne egy, hanem **két fiókot** whitelisteltess. Ha az egyik a helyszínen bedől, újat kérni már nincs
+   idő.
+
+### Minden meccs előtt
+
+1. Az observer a PCOB (ShadowTracker) kliensen keresztül becsatlakozik a lobbiba, és observer módba
+   áll.
+2. **A meccs kezdete előtt pipáld be az "API Enable" gombot a PCOB kliensben.** Ha ez kimarad, az
+   alkalmazás _nincs adat_ állapotot mutat, hiába működik egyébként minden. Messze ez a leggyakoribb
+   oka annak, ha látszólag nem működik az overlay.
+3. **Indítsd el a PCOB API-t.** Futtasd parancssorból a
    `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat` fájlt. Ez saját konzolablakot nyit —
    **azt az ablakot is nyitva kell hagyni**, különben nem keletkezik adat.
-2. **A meccs kezdete előtt kattints az "API Enable" gombra a PCOB kliensben.** Ha ez kimarad, az
-   alkalmazás _nincs adat_ állapotot mutat, hiába működik egyébként minden.
 
 Két dolog, amit érdemes tudni, mert ezek nem az alkalmazás hibái:
 
@@ -93,6 +111,9 @@ Az admin felület folyamatosan mutatja a kapcsolat állapotát:
 | **Stale**        | Van kapcsolat, de mostanában nem jött új adat | Ellenőrizd, hogy a host bent van-e még a szobában                                         |
 | **Disconnected** | Nincs kapcsolat a PCOB API-val                | Nézd meg, hogy nyitva van-e a `launch.bat` ablaka, és megnyomtad-e az "API Enable" gombot |
 
+Ha **Disconnected** állapotot mutat, és a `launch.bat` ablaka nyitva van, akkor valószínűleg a fiók
+whitelistelése maradt el.
+
 Ha meccs közben szakad meg a kapcsolat, az overlay **az utoljára kapott adatot tartja meg**, nem
 ürül ki az adásban. Amint újra jön adat, magától visszakapcsolódik.
 
@@ -102,7 +123,8 @@ _Hamarosan — a pontos lépések az első overlayjel véglegesednek._ A menet:
 
 1. Hozz létre egy overlay példányt az adminban, és másold ki a címét.
 2. OBS-ben: **Források → + → Böngésző**, illeszd be a címet, a szélességet és magasságot állítsd a
-   vászon méretére (általában 1920 × 1080).
+   vászon méretére. **1920 × 1080, 2560 × 1440 és 3840 × 2160 is támogatott** — az overlay magától
+   skálázódik, és mindháromnál ugyanúgy néz ki, tehát felbontásonként nincs mit beállítani.
 3. A **"Forrás leállítása, ha nem látható"** opciót kapcsold **ki**, hogy az overlay elrejtve is
    kapcsolatban maradjon.
 4. Az overlay háttere átlátszó, így közvetlenül ráilleszkedik a videóra.
@@ -153,8 +175,9 @@ Valószínűleg megszakadt a kapcsolat a PCOB-bal — az admin _Stale_ vagy _Dis
 mutat. Nézd meg a `launch.bat` ablakát, és hogy a szoba hostja bent van-e még.
 
 **Egyáltalán nincs adat, pedig minden rendben van**
-A messze leggyakoribb ok: **a meccs kezdete előtt nem lett megnyomva az "API Enable" gomb a
-PCOB-ban.**
+Gyakoriság szerint: **nem lett bepipálva az "API Enable"** a meccs kezdete előtt; bezárult a
+`launch.bat` konzolablaka; vagy az observer **fiókja nem lett whitelistelve** a kiadónál. Az utóbbi a
+helyszínen már nem javítható — lásd az 5. fejezetet.
 
 **Indításkor nem nyílt meg a böngésző**
 Ez nem baj. Nyiss egy böngészőt, és írd be: `http://127.0.0.1:4317/admin`.

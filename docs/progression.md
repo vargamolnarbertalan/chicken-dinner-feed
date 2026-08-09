@@ -3,7 +3,7 @@
 The running record of what is done, what is next, and what is blocked. Required by
 `specs/APP-PLAN.md`. Update it in the same commit as the work it describes.
 
-**Last updated:** 2026-08-09 · **Version:** 0.1.0 · **Phase:** scaffold
+**Last updated:** 2026-08-09 · **Version:** 0.1.0 · **Phase:** scaffold · **Client:** Esport1 (Zsófia Berze)
 
 ---
 
@@ -12,17 +12,35 @@ The running record of what is done, what is next, and what is blocked. Required 
 Every architectural decision is recorded in [`adr/`](adr/README.md) with its full context, costs and
 rejected alternatives. Summary of what is now settled:
 
-| #                                                         | Decision                                                                     | Notes                                                                                                   |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| [0001](adr/0001-local-windows-bundle-over-cloud-stack.md) | Local Windows all-in-one bundle, **not** a Docker/VPS stack                  | Resolved the plan's central open question. Driven by the discovery that the PCOB API is a local process |
-| [0002](adr/0002-node-typescript-fastify-backend.md)       | Node 22 + TypeScript + Fastify 5                                             | Replaces the plan's Django Ninja proposal; OpenAPI/Swagger is preserved                                 |
-| [0003](adr/0003-react-vite-tailwind-shadcn-frontend.md)   | React 19 + Vite 8 + Tailwind 4 + shadcn/ui, Motion, Zustand, TanStack Router | As the plan proposed, with the supporting libraries chosen                                              |
-| [0004](adr/0004-json-file-persistence.md)                 | JSON files behind a repository layer, no database                            | Atomic writes, schema-validated, versioned                                                              |
-| [0005](adr/0005-monorepo-with-shared-contracts.md)        | npm workspaces: `shared` / `backend` / `frontend`                            | `shared` is added to the layout the plan prescribed                                                     |
-| [0006](adr/0006-pcob-ingestion-adapter-boundary.md)       | PCOB isolated behind an ingestion adapter; mock source first                 | The response to the blocked API schema                                                                  |
-| [0007](adr/0007-websocket-state-fanout.md)                | Full versioned state snapshots over WebSocket                                | Not deltas; change-detected server-side                                                                 |
-| [0008](adr/0008-admin-as-protected-frontend-route.md)     | Admin is a route in the frontend app                                         | As the plan proposed. No auth in the POC; loopback binding is the control                               |
-| [0009](adr/0009-git-workflow-and-release-process.md)      | feat → develop → main, conventional commits, tagged bundle ZIP               | As the plan prescribed                                                                                  |
+| #                                                          | Decision                                                                     | Notes                                                                                                   |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [0001](adr/0001-local-windows-bundle-over-cloud-stack.md)  | Local Windows all-in-one bundle, **not** a Docker/VPS stack                  | Resolved the plan's central open question. Driven by the discovery that the PCOB API is a local process |
+| [0002](adr/0002-node-typescript-fastify-backend.md)        | Node 22 + TypeScript + Fastify 5                                             | Replaces the plan's Django Ninja proposal; OpenAPI/Swagger is preserved                                 |
+| [0003](adr/0003-react-vite-tailwind-shadcn-frontend.md)    | React 19 + Vite 8 + Tailwind 4 + shadcn/ui, Motion, Zustand, TanStack Router | As the plan proposed, with the supporting libraries chosen                                              |
+| [0004](adr/0004-json-file-persistence.md)                  | JSON files behind a repository layer, no database                            | Atomic writes, schema-validated, versioned                                                              |
+| [0005](adr/0005-monorepo-with-shared-contracts.md)         | npm workspaces: `shared` / `backend` / `frontend`                            | `shared` is added to the layout the plan prescribed                                                     |
+| [0006](adr/0006-pcob-ingestion-adapter-boundary.md)        | PCOB isolated behind an ingestion adapter; mock source first                 | The response to the blocked API schema                                                                  |
+| [0007](adr/0007-websocket-state-fanout.md)                 | Full versioned state snapshots over WebSocket                                | Not deltas; change-detected server-side                                                                 |
+| [0008](adr/0008-admin-as-protected-frontend-route.md)      | Admin is a route in the frontend app                                         | As the plan proposed. No auth in the POC; loopback binding is the control                               |
+| [0009](adr/0009-git-workflow-and-release-process.md)       | feat → develop → main, conventional commits, tagged bundle ZIP               | As the plan prescribed                                                                                  |
+| [0010](adr/0010-poll-the-pcob-http-api.md)                 | Poll the PCOB HTTP API on `127.0.0.1:10086`                                  | Transport resolved by the client thread, not by the schema document                                     |
+| [0011](adr/0011-resolution-independent-overlay-scaling.md) | Overlays scale uniformly from a fixed 1920×1080 design canvas                | Answers the contractual FullHD / 1440p / 4K requirement                                                 |
+
+### Decisions resolved 2026-08-09
+
+- **Admin scope — `specs/APP-PLAN.md` is the source of truth**, not the narrower quoted scope. We
+  build the fuller admin: sizes, placement, animations, multiple overlay types and instances, on top
+  of the quoted colours and fonts. **The live overlay preview is downgraded to nice-to-have**, not a
+  must-have.
+  _Note:_ this does not weaken [ADR-0008](adr/0008-admin-as-protected-frontend-route.md). Admin-as-a-route
+  was chosen partly so the preview would be the real overlay rather than a lookalike — and because
+  that decision makes the preview nearly free, we will likely get it anyway. It simply stops being
+  something to spend effort defending if it turns out awkward.
+- **Resolution priority — 1080p is the bar.** 1440p and 4K stay contractual and are correct by
+  construction under [ADR-0011](adr/0011-resolution-independent-overlay-scaling.md), but no
+  significant effort goes into perfecting them yet.
+- **No delivery-date constraint.** Build now; the work is wanted now. Scheduling is not a factor in
+  prioritisation.
 
 ### Decisions still open
 
@@ -70,9 +88,27 @@ generated OpenAPI, unknown `/api/*` paths return JSON 404s.
 
 ---
 
+## Done — round 1.1 (2026-08-09): client thread incorporated
+
+`specs/PCOB_Tool_fejlesztes_thread.md` added and analysed. Four material changes:
+
+- **Transport resolved.** The PCOB API is HTTP + JSON on `http://localhost:10086`, endpoint
+  `gettotalplayerlist`. Recorded as [ADR-0010](adr/0010-poll-the-pcob-http-api.md); the blocker
+  below is downgraded from red to partial.
+- **New contractual requirement:** the overlay must support FullHD, 1440p and 4K dynamically. This
+  was in the quote but not in `APP-PLAN.md`. Recorded as
+  [ADR-0011](adr/0011-resolution-independent-overlay-scaling.md) and added to the plan.
+- **Scope discrepancy surfaced** between the quoted scope (colours + fonts) and the planned admin.
+  Raised under open decisions rather than silently resolved.
+- **The access chain is now documented** — OPENID → publisher whitelist → API Enable → `launch.bat`.
+  Reflected in both user guides, because it is the most likely cause of "no data".
+
+---
+
 ## Next — round 2
 
-Ordered so that each step is demonstrable on its own.
+Ordered so that each step is demonstrable on its own. Steps 1–5 need nothing from the blocked API
+schema.
 
 1. **Domain model in `shared/`** — Zod schemas for match state, team, player, live state, plus the
    WebSocket envelope. This is the contract everything else is written against. _(ADR-0005, 0006)_
@@ -82,18 +118,23 @@ Ordered so that each step is demonstrable on its own.
    projection, coalescing. _(ADR-0007)_
 4. **Leaderboard overlay** — reproduce `specs/example.png`: rank, logo, short name, per-player health
    bars coloured by live state, points, eliminations. Animate health, knocks, deaths and reordering.
-   _(ADR-0003)_
+   Verify at 1080p, 1440p and 4K as an acceptance criterion, not afterwards. _(ADR-0003, 0011)_
 5. **Scoring engine** — configurable placement points table and points per elimination, computed
    backend-side. Needed before the PTS column means anything.
 6. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
    team roster and scoring ruleset as documents. _(ADR-0004)_
-7. **Admin** — instance CRUD, appearance settings bound to CSS custom properties, show/hide animation
+7. **Admin** — scope depends on the open decision above. Minimum: colours and fonts, as quoted.
+   Planned: instance CRUD, appearance settings bound to CSS custom properties, show/hide animation
    controls, live preview rendering the real overlay component. _(ADR-0008)_
-8. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+8. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+9. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
 
 ### Backlog
 
+- **Post-match export** (final standings as CSV or a sheet-ready table). The client performs exactly
+  this by hand today — save JSON, convert to CSV, paste into a Google Sheet. High value per unit of
+  effort. _(`specs/PCOB-FINDINGS.md` §6)_
 - Import an existing `TeamLogoAndColor.ini` to bootstrap the team roster in one click — cheap, and
   saves an operator retyping 16–25 teams. _(`specs/PCOB-FINDINGS.md` §3)_
 - Startup lock file so two backends cannot share one `data/` directory. _(ADR-0004)_
@@ -107,25 +148,35 @@ Ordered so that each step is demonstrable on its own.
 
 ## Blocked
 
-### 🔴 PCOB API schema document is not accessible
+### 🟠 PCOB API payload shape (downgraded from 🔴 on 2026-08-09)
 
-The spreadsheet linked from section 6 of the guideline
-(`docs.google.com/spreadsheets/d/1__DWeOyhrNs4PdXs9EoWwXdylU-CMICOQ-yNpw3Ag34`) returns **HTTP 401**
-to unauthenticated access. CSV export, `gviz` and `htmlview` endpoints were all tried.
+The client thread answered transport, host and port — HTTP + JSON on `127.0.0.1:10086`. What remains
+unknown is the **payload shape** and **which route serves live in-match data**. `gettotalplayerlist`
+is described as post-match, and the client states they do not know how the live table works either.
 
-**Unknown until it is available:** transport (WebSocket / TCP / HTTP / file), host and port, message
-envelope, field naming and nesting, `LiveState` enum values, how players and teams are keyed, and
-whether match start/end is signalled.
+Two independent ways to unblock, and the cheaper one does not involve the restricted document:
 
-**Needed:** an export of that sheet, or read access for an account that can fetch it.
+1. **🟡 Capture one real response.** With a PCOB client running, "API Enable" ticked and
+   `launch.bat` open, probe port 10086 — `GET /`, `GET /gettotalplayerlist`, and a few guessed
+   sibling routes — and save one response body. A single payload would settle field names, nesting,
+   `LiveState` values and how teams and players are keyed.
+   **Status (2026-08-09): standing to-do, not currently actionable.** The PCOB client itself can
+   probably be started, but we have no way into a live PUBG Mobile match yet, and the API only
+   produces data inside one. Do this at the first opportunity — a rehearsal room would be enough,
+   it does not need a real tournament.
+2. **🔴 The schema document.**
+   `docs.google.com/spreadsheets/d/1__DWeOyhrNs4PdXs9EoWwXdylU-CMICOQ-yNpw3Ag34` still returns
+   **HTTP 401**; access requested by the client on 2026-08-09, no committed date. It would
+   additionally list endpoints nobody has thought to probe.
 
 **Not blocking round 2.** ADR-0006 puts everything behind an adapter and builds the mock source
-first, so the overlay, scoring and admin can all be finished and demonstrated without it. Only the
-real `PcobSource` waits — and when the document arrives, the first task is validating the domain
+first, so the domain model, overlay, scoring and admin can all be finished and demonstrated without
+it. Only `PcobSource` waits — and when real data arrives, the first task is validating the domain
 model against it rather than assuming the mock was right.
 
 ### Lower priority
 
 - The _PCOB update note_ and _account application_ Google Docs are unverified; likely operator-only.
 - No access to a live PCOB client for integration testing yet. The first real-data session should be
-  scheduled as a milestone, not treated as a formality.
+  scheduled as a milestone, not treated as a formality — and it is now also the cheapest way to
+  unblock the payload question above.
