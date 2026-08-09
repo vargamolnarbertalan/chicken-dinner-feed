@@ -105,29 +105,50 @@ generated OpenAPI, unknown `/api/*` paths return JSON 404s.
 
 ---
 
-## Next — round 2
+## Done — round 2, part 1 (2026-08-09): the live pipeline
 
-Ordered so that each step is demonstrable on its own. Steps 1–5 need nothing from the blocked API
-schema.
+The backend half of the vertical slice. Nothing here needed the blocked API schema.
 
-1. **Domain model in `shared/`** — Zod schemas for match state, team, player, live state, plus the
-   WebSocket envelope. This is the contract everything else is written against. _(ADR-0005, 0006)_
-2. **Mock ingestion source** — a scripted match replay driving the adapter interface. Unblocks all
-   downstream work and doubles as the rehearsal/demo mode. _(ADR-0006)_
-3. **State store + WebSocket fan-out** — snapshot on connect, change detection against the rendered
-   projection, coalescing. _(ADR-0007)_
-4. **Leaderboard overlay** — reproduce `specs/example.png`: rank, logo, short name, per-player health
+- **Domain model in `shared/`** — `Player`, `Team`, `MatchState`, `IngestStatus`, the `LiveSnapshot`
+  and the WebSocket envelope. Deliberately **not** a mirror of the PCOB payload: player state is our
+  own four-value vocabulary (`alive`/`knocked`/`dead`/`unknown`), and `unknown` exists so a player
+  we have not heard about is never rendered as dead.
+- **Scoring engine** — placement points table plus points per elimination, defaulting to the
+  standard PUBG Mobile table (10/6/5/4/3/2/1/1, 1 per kill). Placement points are awarded only once
+  a team is actually out, never while it is still playing. Covered by unit tests.
+- **`MatchStore`** — holds the match in memory and owns the **elimination order**, which is the only
+  thing here that cannot be recomputed: a team's placement depends on _when_ it went out, and no
+  single ingest update contains that.
+- **`MockSource`** — a deterministic simulated match: sixteen teams, engagements, knocks, revives,
+  bleed-out, eliminations, and phase transitions. Tuned so a full arc runs in **~60 seconds**
+  instead of a real match's 25–30 minutes, because waiting ten minutes to see a rank change animate
+  makes overlay work impossible.
+- **`LiveHub`** — WebSocket fan-out with snapshot-on-connect, coalescing, and change detection
+  against the rendered projection. `ingest.lastUpdateAt` is excluded from the change key on purpose:
+  it advances on every poll, so including it would make every poll a broadcast and defeat the whole
+  mechanism.
+- Wired end to end: `/ws/live`, adapter → store → hub → sockets, started after the port opens.
+
+**Verified by running it:** a full mock match to completion over the real WebSocket — 16 teams
+reduced to 1 in ~57 s, with the winner scoring 25 points (10 placement + 15 eliminations), correct
+ranking throughout, and knocks and revives visible in the stream of snapshots. Tests are written but
+run by CI, per the project's manual-test policy.
+
+---
+
+## Next — round 2, part 2
+
+1. **Leaderboard overlay** — reproduce `specs/example.png`: rank, logo, short name, per-player health
    bars coloured by live state, points, eliminations. Animate health, knocks, deaths and reordering.
-   Verify at 1080p, 1440p and 4K as an acceptance criterion, not afterwards. _(ADR-0003, 0011)_
-5. **Scoring engine** — configurable placement points table and points per elimination, computed
-   backend-side. Needed before the PTS column means anything.
-6. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
-   team roster and scoring ruleset as documents. _(ADR-0004)_
-7. **Admin** — scope depends on the open decision above. Minimum: colours and fonts, as quoted.
-   Planned: instance CRUD, appearance settings bound to CSS custom properties, show/hide animation
-   controls, live preview rendering the real overlay component. _(ADR-0008)_
-8. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
-9. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+   Polished at 1080p; sanity-checked at 1440p and 4K. _(ADR-0003, 0011)_
+2. **Overlay WebSocket client** — reconnect with backoff, protocol-version check, hold last known
+   good state when the source drops. _(ADR-0007)_
+3. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
+   team roster and scoring ruleset as documents. Replaces the in-memory default roster. _(ADR-0004)_
+4. **Admin** — instance CRUD, appearance settings bound to CSS custom properties, show/hide
+   animation controls. Live preview is nice-to-have. _(ADR-0008)_
+5. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+6. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
 
 ### Backlog

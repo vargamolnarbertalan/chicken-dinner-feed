@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Every pull request, whatever it targets. Filtering by base branch silently skipped CI on stacked
+  # PRs — a branch based on another feature branch got no checks at all, which is exactly when you
+  # want them.
   pull_request:
-    branches: [develop, main]
   push:
     branches: [develop, main]
 

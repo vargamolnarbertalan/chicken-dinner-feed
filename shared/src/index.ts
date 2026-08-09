@@ -12,8 +12,31 @@
  *   - no Node-only and no DOM-only APIs, since both backend and browser import it;
  *   - it must never import from `@cdf/backend` or `@cdf/frontend`.
  *
- * The domain model, config documents and protocol envelope land here as they are designed. The
- * domain model deliberately does not mirror the PCOB API — see ADR-0006 and specs/PCOB-FINDINGS.md.
+ * The domain model deliberately does not mirror the PCOB API — see ADR-0006 and
+ * specs/PCOB-FINDINGS.md. In particular: points and ranking are computed by us because the API does
+ * not provide them, and after-match fields are modelled as absent rather than as zero.
  */
 
 export { PROTOCOL_VERSION, CONFIG_SCHEMA_VERSION } from './versions.js';
+
+export { playerLiveStateSchema, playerSchema } from './domain/player.js';
+export type { PlayerLiveState, Player } from './domain/player.js';
+
+export { teamSchema } from './domain/team.js';
+export type { Team } from './domain/team.js';
+
+export { matchPhaseSchema, matchStateSchema } from './domain/match.js';
+export type { MatchPhase, MatchState } from './domain/match.js';
+
+export {
+  ingestSourceKindSchema,
+  ingestConnectionStateSchema,
+  ingestStatusSchema,
+} from './domain/ingest.js';
+export type { IngestSourceKind, IngestConnectionState, IngestStatus } from './domain/ingest.js';
+
+export { liveSnapshotSchema, serverMessageSchema } from './protocol/live.js';
+export type { LiveSnapshot, ServerMessage } from './protocol/live.js';
+
+export { scoringRulesetSchema, DEFAULT_SCORING_RULESET } from './config/scoring.js';
+export type { ScoringRuleset } from './config/scoring.js';
