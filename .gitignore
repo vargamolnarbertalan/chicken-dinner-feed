@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.tmp/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime persistence (see ADR-0004) — config lives on the operator's machine,
+# it is never committed. Directory structure is kept via .gitkeep files.
+backend/data/**
+!backend/data/.gitkeep
+!backend/data/defaults/
+!backend/data/defaults/**
+
+# Release artifacts
+release/
+*.zip
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Tooling caches
+.eslintcache
+.oxlintcache

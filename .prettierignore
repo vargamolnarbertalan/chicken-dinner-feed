@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+coverage/
+release/
+specs/*.pdf
+specs/*.png
+frontend/src/components/ui/
+package-lock.json
