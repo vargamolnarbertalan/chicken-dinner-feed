@@ -4,6 +4,7 @@ import type {
   ScoringRuleset,
   TeamRosterDocument,
 } from '@cdf/shared';
+import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
@@ -361,10 +362,12 @@ export function AdminPage() {
 
                     <button
                       type="button"
-                      className="text-muted-foreground hover:text-destructive ml-auto text-xs"
+                      className="text-destructive hover:bg-destructive/10 ml-auto grid size-8 place-items-center rounded transition-colors"
                       onClick={() => setPendingDelete(selected)}
+                      aria-label={`Delete “${selected.name}”`}
+                      title={`Delete “${selected.name}”`}
                     >
-                      Delete
+                      <Trash2 className="size-4" aria-hidden />
                     </button>
                   </div>
 
