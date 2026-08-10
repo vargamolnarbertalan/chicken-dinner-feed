@@ -5,21 +5,24 @@ export type ToastTone = 'success' | 'error' | 'info';
 export interface Toast {
   id: number;
   tone: ToastTone;
-  message: string;
-}
-
-interface ToastState {
-  toasts: Toast[];
-  push(tone: ToastTone, message: string): void;
-  dismiss(id: number): void;
+  /** Short, bold. What happened. */
+  title: string;
+  /** Optional detail in normal weight — the why, or what to do about it. */
+  message?: string;
 }
 
 /** Errors stay longer: they usually need reading, and they usually need acting on. */
 const LIFETIME_MS: Record<ToastTone, number> = {
   success: 3000,
   info: 3000,
-  error: 6000,
+  error: 7000,
 };
+
+interface ToastState {
+  toasts: Toast[];
+  push(tone: ToastTone, title: string, message?: string): void;
+  dismiss(id: number): void;
+}
 
 let nextId = 1;
 
@@ -33,9 +36,9 @@ let nextId = 1;
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
 
-  push(tone, message) {
+  push(tone, title, message) {
     const id = nextId++;
-    set((state) => ({ toasts: [...state.toasts, { id, tone, message }] }));
+    set((state) => ({ toasts: [...state.toasts, { id, tone, title, message }] }));
     setTimeout(() => get().dismiss(id), LIFETIME_MS[tone]);
   },
 
@@ -44,9 +47,10 @@ export const useToastStore = create<ToastState>((set, get) => ({
   },
 }));
 
-/** Convenience wrappers, so callers never have to remember the tone strings. */
 export const toast = {
-  success: (message: string) => useToastStore.getState().push('success', message),
-  error: (message: string) => useToastStore.getState().push('error', message),
-  info: (message: string) => useToastStore.getState().push('info', message),
+  success: (title: string, message?: string) =>
+    useToastStore.getState().push('success', title, message),
+  error: (title: string, message?: string) =>
+    useToastStore.getState().push('error', title, message),
+  info: (title: string, message?: string) => useToastStore.getState().push('info', title, message),
 };

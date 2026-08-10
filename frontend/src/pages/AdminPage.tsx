@@ -13,6 +13,7 @@ import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
+import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
 
@@ -48,7 +49,7 @@ export function AdminPage() {
   const [teams, setTeams] = useState<TeamRosterDocument | null>(null);
   const [scoring, setScoring] = useState<ScoringRuleset | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [newId, setNewId] = useState('');
+  const [newName, setNewName] = useState('');
 
   // The admin joins the live channel as an observer, with no instance id. It gets match data for
   // the preview plus the visibility of every overlay, so it can show what is genuinely on air —
@@ -61,7 +62,7 @@ export function AdminPage() {
       setOverlays(document);
       return document;
     } catch (error) {
-      toast.error(describe(error));
+      toast.error('Could not load the overlays', describe(error));
       return null;
     }
   }, []);
@@ -79,13 +80,17 @@ export function AdminPage() {
         setScoring(ruleset);
         setSelectedId(overlayDocument.instances[0]?.id ?? null);
       } catch (error) {
-        toast.error(describe(error));
+        toast.error(
+          'Could not load the configuration',
+          `${describe(error)} Is the backend running?`,
+        );
       }
     })();
   }, []);
 
   const selected = overlays?.instances.find((instance) => instance.id === selectedId) ?? null;
   const selectedVisible = selected ? overlayStates[selected.id]?.visible : undefined;
+  const newInstanceId = toInstanceId(newName);
 
   const patchSelected = (changes: Partial<OverlayInstance>) => {
     if (!overlays || !selected) return;
@@ -100,9 +105,12 @@ export function AdminPage() {
   const saveInstance = async (instance: OverlayInstance) => {
     try {
       await api.updateOverlay(instance);
-      toast.success(`Saved “${instance.name}” — it is live on air now.`);
+      toast.success(
+        `Saved “${instance.name}”`,
+        'Every open browser source has already picked up the new look.',
+      );
     } catch (error) {
-      toast.error(describe(error));
+      toast.error(`Could not save “${instance.name}”`, describe(error));
     }
   };
 
@@ -111,10 +119,13 @@ export function AdminPage() {
       await api.createOverlay({ id, name, ...(copyFrom ? { copyAppearanceFrom: copyFrom } : {}) });
       await reloadOverlays();
       setSelectedId(id);
-      setNewId('');
-      toast.success(copyFrom ? `Duplicated as “${name}”.` : `Created “${name}”.`);
+      setNewName('');
+      toast.success(
+        copyFrom ? `Duplicated as “${name}”` : `Created “${name}”`,
+        `Its browser source address is /overlay/${id}`,
+      );
     } catch (error) {
-      toast.error(describe(error));
+      toast.error(`Could not create “${name}”`, describe(error));
     }
   };
 
@@ -124,10 +135,13 @@ export function AdminPage() {
       // Confirm what actually happened using the state the server returned, not what we assumed —
       // the two can differ if a director pressed a button at the same moment.
       toast.success(
-        state.visible ? `“${instance.name}” is now ON AIR.` : `“${instance.name}” is now hidden.`,
+        state.visible ? `“${instance.name}” is ON AIR` : `“${instance.name}” is hidden`,
+        state.visible
+          ? 'It animated on in every browser source showing this overlay.'
+          : 'It animated off in every browser source showing this overlay.',
       );
     } catch (error) {
-      toast.error(describe(error));
+      toast.error(`Could not change “${instance.name}”`, describe(error));
     }
   };
 
@@ -209,21 +223,42 @@ export function AdminPage() {
                 ))}
               </ul>
 
+              {/*
+               * The operator names the overlay; the id is derived. Asking for a URL-safe id and
+               * rejecting "Szép tabella 2" is the wrong question — they are naming a thing, not
+               * writing a URL. The derived address is shown so nothing is hidden from them.
+               */}
               <div className="grid gap-2">
-                <input
-                  type="text"
-                  placeholder="new-overlay-id"
-                  aria-label="New overlay id"
-                  className="border-border bg-background rounded border px-2 py-1.5 font-mono text-xs"
-                  value={newId}
-                  onChange={(event) => setNewId(event.target.value)}
-                />
+                <label className="grid gap-1 text-xs">
+                  <span className="text-muted-foreground">New overlay name</span>
+                  <input
+                    type="text"
+                    placeholder="Second leaderboard"
+                    className="border-border bg-background rounded border px-2 py-1.5 text-sm"
+                    value={newName}
+                    onChange={(event) => setNewName(event.target.value)}
+                  />
+                </label>
+
+                {newName.trim() && (
+                  <p className="text-muted-foreground text-xs">
+                    Address:{' '}
+                    {newInstanceId ? (
+                      <code className="font-mono">/overlay/{newInstanceId}</code>
+                    ) : (
+                      <span className="text-destructive">
+                        that name has no letters or digits to build an address from
+                      </span>
+                    )}
+                  </p>
+                )}
+
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
-                    disabled={!newId.trim()}
-                    onClick={() => void createOverlay(newId.trim(), newId.trim())}
+                    disabled={!newInstanceId}
+                    onClick={() => void createOverlay(newInstanceId, newName.trim())}
                     title="Create an overlay with the default appearance"
                   >
                     Create
@@ -231,10 +266,9 @@ export function AdminPage() {
                   <button
                     type="button"
                     className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
-                    disabled={!newId.trim() || !selected}
+                    disabled={!newInstanceId || !selected}
                     onClick={() =>
-                      selected &&
-                      void createOverlay(newId.trim(), `${selected.name} copy`, selected.id)
+                      selected && void createOverlay(newInstanceId, newName.trim(), selected.id)
                     }
                     title={
                       selected
@@ -294,9 +328,12 @@ export function AdminPage() {
                           await api.deleteOverlay(selected.id);
                           const refreshed = await reloadOverlays();
                           setSelectedId(refreshed?.instances[0]?.id ?? null);
-                          toast.success(`Deleted “${selected.name}”.`);
+                          toast.success(
+                            `Deleted “${selected.name}”`,
+                            `Any browser source still pointing at /overlay/${selected.id} will now show nothing.`,
+                          );
                         } catch (error) {
-                          toast.error(describe(error));
+                          toast.error(`Could not delete “${selected.name}”`, describe(error));
                         }
                       }}
                     >
@@ -343,9 +380,9 @@ export function AdminPage() {
               onClick={async () => {
                 try {
                   setTeams(await api.saveTeams(teams));
-                  toast.success('Teams saved.');
+                  toast.success('Teams saved', 'The names on air have already changed.');
                 } catch (error) {
-                  toast.error(describe(error));
+                  toast.error('Could not save the teams', describe(error));
                 }
               }}
             >
@@ -363,9 +400,12 @@ export function AdminPage() {
               onClick={async () => {
                 try {
                   setScoring(await api.saveScoring(scoring));
-                  toast.success('Scoring saved — the standings have already updated.');
+                  toast.success(
+                    'Scoring saved',
+                    'The standings were recalculated immediately, mid-match included.',
+                  );
                 } catch (error) {
-                  toast.error(describe(error));
+                  toast.error('Could not save the scoring', describe(error));
                 }
               }}
             >
