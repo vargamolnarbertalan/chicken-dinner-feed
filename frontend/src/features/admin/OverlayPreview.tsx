@@ -4,8 +4,6 @@ import { LeaderboardOverlay } from '@/components/overlay/LeaderboardOverlay';
 
 type PreviewMode = 'canvas' | 'actual';
 
-const CANVAS_WIDTH = 560;
-
 /** A checkerboard stands in for live video, so translucent backgrounds can be judged, not guessed. */
 const CHECKERBOARD: CSSProperties = {
   backgroundColor: '#18181b',
@@ -27,29 +25,34 @@ export interface OverlayPreviewProps {
  * (ADR-0008) — a lookalike preview would drift from what actually goes on air.
  *
  * Two modes, because one cannot do both jobs. The panel occupies under a fifth of the broadcast
- * canvas, so a preview that shows the whole 16∶9 frame renders it at roughly 100 px wide — fine for
- * checking placement, useless for judging a colour or whether a name is legible. **Actual size**
- * renders at true 1080p pixels so those decisions can actually be made.
+ * canvas, so a preview that shows the whole 16∶9 frame renders it small — fine for checking
+ * placement, useless for judging a colour or whether a name is legible. **Actual size** renders at
+ * true 1080p pixels so those decisions can be made.
  *
- * Both work by overriding `--overlay-base-unit`, which is exactly what that property was split out
- * for: the operator's size setting still multiplies on top in either mode.
+ * In canvas mode the scale comes from **container query units**: `100cqw / 1920` is one design pixel
+ * expressed against whatever width the preview happens to have. That means the preview grows when
+ * the sidebar is collapsed, with no measuring, no resize listener and no re-render — the same trick
+ * as the viewport-based unit on a real broadcast surface, pointed at a box instead (ADR-0011).
  */
 export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
   const [mode, setMode] = useState<PreviewMode>('canvas');
 
-  const unit = mode === 'canvas' ? CANVAS_WIDTH / 1920 : 1;
+  const isCanvas = mode === 'canvas';
+  const baseUnit = isCanvas ? 'calc(100cqw / 1920)' : '1px';
 
-  const position: CSSProperties =
-    mode === 'canvas'
-      ? {
-          position: 'absolute',
-          top: appearance.offsetY === null ? '50%' : `calc(${appearance.offsetY} * ${unit}px)`,
-          transform: appearance.offsetY === null ? 'translateY(-50%)' : undefined,
-          ...(appearance.anchor === 'left'
-            ? { left: `calc(${appearance.offsetX} * ${unit}px)` }
-            : { right: `calc(${appearance.offsetX} * ${unit}px)` }),
-        }
-      : { padding: 16 };
+  const position: CSSProperties = isCanvas
+    ? {
+        position: 'absolute',
+        top:
+          appearance.offsetY === null
+            ? '50%'
+            : `calc(${appearance.offsetY} * var(--overlay-base-unit))`,
+        transform: appearance.offsetY === null ? 'translateY(-50%)' : undefined,
+        ...(appearance.anchor === 'left'
+          ? { left: `calc(${appearance.offsetX} * var(--overlay-base-unit))` }
+          : { right: `calc(${appearance.offsetX} * var(--overlay-base-unit))` }),
+      }
+    : { padding: 16 };
 
   return (
     <div className="grid gap-2">
@@ -74,10 +77,10 @@ export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
       </div>
 
       <div
-        className="border-border relative overflow-auto rounded border"
+        className="border-border relative w-full overflow-auto rounded border"
         style={{
-          width: CANVAS_WIDTH,
-          ...(mode === 'canvas' ? { aspectRatio: '16 / 9' } : { maxHeight: 520 }),
+          containerType: 'inline-size',
+          ...(isCanvas ? { aspectRatio: '16 / 9' } : { maxHeight: 520 }),
           ...CHECKERBOARD,
         }}
       >
@@ -85,8 +88,8 @@ export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
           style={
             {
               // Only the base is overridden; the operator's size setting still multiplies on top.
-              '--overlay-base-unit': `${unit}px`,
-              ...(mode === 'canvas' ? { position: 'absolute', inset: 0 } : {}),
+              '--overlay-base-unit': baseUnit,
+              ...(isCanvas ? { position: 'absolute', inset: 0 } : {}),
             } as CSSProperties
           }
         >
@@ -103,8 +106,8 @@ export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
       </div>
 
       <p className="text-muted-foreground text-xs">
-        {mode === 'canvas'
-          ? 'The whole 16∶9 frame — use this to judge placement.'
+        {isCanvas
+          ? 'The whole 16∶9 frame — use this to judge placement. Collapse the sidebar for a bigger preview.'
           : 'True 1080p pixels — use this to judge colours and legibility.'}
       </p>
     </div>
