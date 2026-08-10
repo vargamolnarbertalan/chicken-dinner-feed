@@ -244,7 +244,29 @@ via `document.fonts.check()`; a non-font rejected; the font removed and the over
 
 ---
 
-## Next — round 3, part 3
+## Done — round 3, part 3 (2026-08-10): admin branding
+
+- **Page titles.** Each overlay tab is titled with its own name, the admin with
+  `Admin - PUBG overlays`. Checking a setup means opening several overlay tabs at once, and without
+  distinct titles they are indistinguishable.
+- **The app logo** in the admin header, and as the favicon. A 128 px copy is generated from the
+  1.7 MB original rather than scaling that down in the browser for a 44 px slot.
+- **Admin palette taken from the logo**, sampled with a script rather than eyeballed: gold
+  `#f8d51a`, orange `#eb952f`, red `#e11911`, sky `#3ca7e9`, navy `#062542`, white `#efeff1`.
+  Dark by default — this is read in a dim gallery beside a video wall.
+- Text colours were **contrast-checked**: the logo's own red reaches only 3.96:1 on the page, so a
+  lighter one at the same hue is used wherever something has to be read, and the mark's red is kept
+  for solid fills.
+- `color-scheme: dark` so native selects, sliders and scrollbars follow, scoped away from the
+  overlay surface.
+
+**Verified:** admin and two overlay tabs report the right titles; the overlay renders identically
+before and after the restyle — the two palettes are independent and the admin's cannot reach the
+broadcast.
+
+---
+
+## Next — round 3, part 4
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
