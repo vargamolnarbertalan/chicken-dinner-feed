@@ -13,7 +13,7 @@
  * client could not render correctly. Clients reject snapshots whose version they do not know and
  * surface a visible error instead of rendering partial data.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * Version of the persisted configuration documents on disk (ADR-0004).

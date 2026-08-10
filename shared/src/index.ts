@@ -63,6 +63,14 @@ export type {
 } from './config/overlay-instance.js';
 
 export {
+  customFontSchema,
+  customFontsDocumentSchema,
+  DEFAULT_CUSTOM_FONTS,
+  fontFamilyValue,
+} from './config/fonts.js';
+export type { CustomFont, CustomFontsDocument } from './config/fonts.js';
+
+export {
   teamRosterEntrySchema,
   teamRosterDocumentSchema,
   DEFAULT_TEAM_ROSTER,

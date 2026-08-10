@@ -1,4 +1,5 @@
-import type { OverlayAppearance, OverlayColors } from '@cdf/shared';
+import type { CustomFont, OverlayAppearance, OverlayColors } from '@cdf/shared';
+import { fontFamilyValue } from '@cdf/shared';
 import { ColorField } from './ColorField';
 
 const FONT_OPTIONS = [
@@ -11,10 +12,12 @@ const FONT_OPTIONS = [
 
 export interface AppearanceEditorProps {
   appearance: OverlayAppearance;
+  /** Uploaded fonts, offered alongside the built-in choices. */
+  customFonts: CustomFont[];
   onChange(appearance: OverlayAppearance): void;
 }
 
-export function AppearanceEditor({ appearance, onChange }: AppearanceEditorProps) {
+export function AppearanceEditor({ appearance, customFonts, onChange }: AppearanceEditorProps) {
   const patch = (changes: Partial<OverlayAppearance>) => onChange({ ...appearance, ...changes });
   const patchColor = (key: keyof OverlayColors, value: string) =>
     patch({ colors: { ...appearance.colors, [key]: value } });
@@ -101,11 +104,35 @@ export function AppearanceEditor({ appearance, onChange }: AppearanceEditorProps
               value={appearance.fontFamily}
               onChange={(event) => patch({ fontFamily: event.target.value })}
             >
-              {FONT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              <optgroup label="Built in">
+                {FONT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+              {customFonts.length > 0 && (
+                <optgroup label="Your fonts">
+                  {customFonts.map((font) => (
+                    <option key={font.family} value={fontFamilyValue(font.family)}>
+                      {font.family}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/*
+               * A value that matches neither list means the font it referred to was removed. Kept
+               * as an option so the select does not silently jump to something else and quietly
+               * change what is on air.
+               */}
+              {!FONT_OPTIONS.some((option) => option.value === appearance.fontFamily) &&
+                !customFonts.some(
+                  (font) => fontFamilyValue(font.family) === appearance.fontFamily,
+                ) && (
+                  <option value={appearance.fontFamily}>
+                    {appearance.fontFamily.split(',')[0]?.replace(/'/g, '')} (missing)
+                  </option>
+                )}
             </select>
           </label>
 

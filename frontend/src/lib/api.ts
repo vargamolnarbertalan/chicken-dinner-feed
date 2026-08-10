@@ -1,4 +1,6 @@
 import type {
+  CustomFont,
+  CustomFontsDocument,
   OverlayInstance,
   OverlayInstancesDocument,
   ScoringRuleset,
@@ -91,6 +93,19 @@ export const api = {
       document: TeamRosterDocument;
     }>('/teams/import-ini', { method: 'POST', body });
   },
+
+  getFonts: () => request<CustomFontsDocument>('/config/fonts'),
+
+  uploadFont: (file: File) => {
+    const body = new FormData();
+    body.append('font', file);
+    return request<CustomFont>('/config/fonts', { method: 'POST', body });
+  },
+
+  deleteFont: (family: string) =>
+    request<CustomFontsDocument>(`/config/fonts/${encodeURIComponent(family)}`, {
+      method: 'DELETE',
+    }),
 
   getScoring: () => request<ScoringRuleset>('/config/scoring'),
   saveScoring: (ruleset: ScoringRuleset) =>

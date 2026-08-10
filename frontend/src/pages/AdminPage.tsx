@@ -1,4 +1,5 @@
 import type {
+  CustomFont,
   OverlayInstance,
   OverlayInstancesDocument,
   ScoringRuleset,
@@ -9,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
+import { FontManager } from '@/features/admin/FontManager';
 import { ImportIniButton } from '@/features/admin/ImportIniButton';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
 import { OnAirBadge } from '@/features/admin/OnAirBadge';
@@ -16,11 +18,12 @@ import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
+import { applyCustomFontFaces } from '@/lib/font-faces';
 import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
 
-type Tab = 'overlays' | 'teams' | 'scoring';
+type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts';
 
 const SIDEBAR_STORAGE_KEY = 'cdf.admin.sidebar';
 
@@ -53,6 +56,7 @@ export function AdminPage() {
   const [overlays, setOverlays] = useState<OverlayInstancesDocument | null>(null);
   const [teams, setTeams] = useState<TeamRosterDocument | null>(null);
   const [scoring, setScoring] = useState<ScoringRuleset | null>(null);
+  const [fonts, setFonts] = useState<CustomFont[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   /** The instance the operator has asked to delete, pending confirmation. */
@@ -88,14 +92,19 @@ export function AdminPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [overlayDocument, teamDocument, ruleset] = await Promise.all([
+        const [overlayDocument, teamDocument, ruleset, fontDocument] = await Promise.all([
           api.getOverlays(),
           api.getTeams(),
           api.getScoring(),
+          api.getFonts(),
         ]);
         setOverlays(overlayDocument);
         setTeams(teamDocument);
         setScoring(ruleset);
+        setFonts(fontDocument.fonts);
+        // Registered here as well as on the live channel, so the previews and the sample text are
+        // correct before any overlay message has arrived.
+        applyCustomFontFaces(fontDocument.fonts);
         setSelectedId(overlayDocument.instances[0]?.id ?? null);
       } catch (error) {
         toast.error(
@@ -235,6 +244,7 @@ export function AdminPage() {
             ['overlays', 'Overlays'],
             ['teams', 'Teams'],
             ['scoring', 'Scoring'],
+            ['fonts', 'Fonts'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -449,6 +459,7 @@ export function AdminPage() {
 
                   <AppearanceEditor
                     appearance={selected.appearance}
+                    customFonts={fonts}
                     onChange={(appearance) => patchSelected({ appearance })}
                   />
                 </section>
@@ -495,6 +506,12 @@ export function AdminPage() {
             >
               Save teams
             </button>
+          </div>
+        )}
+
+        {tab === 'fonts' && (
+          <div className="grid max-w-2xl gap-4">
+            <FontManager fonts={fonts} onChange={setFonts} />
           </div>
         )}
 

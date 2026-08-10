@@ -15,8 +15,10 @@ import {
 import { config } from './config.js';
 import { createIngestSource } from './ingest/index.js';
 import { ConfigStore } from './persistence/config-store.js';
+import { FontStore, MAX_FONT_BYTES } from './persistence/font-store.js';
 import { LogoStore, MAX_LOGO_BYTES } from './persistence/logo-store.js';
 import { configRoutes } from './routes/config.js';
+import { fontRoutes } from './routes/fonts.js';
 import { logoRoutes } from './routes/logos.js';
 import { healthRoutes } from './routes/health.js';
 import { overlayControlRoutes } from './routes/overlay-control.js';
@@ -76,7 +78,9 @@ export async function buildApp(): Promise<AppContext> {
   });
 
   await app.register(fastifyWebsocket);
-  await app.register(fastifyMultipart, { limits: { fileSize: MAX_LOGO_BYTES, files: 1 } });
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: Math.max(MAX_LOGO_BYTES, MAX_FONT_BYTES), files: 1 },
+  });
 
   // Configuration is loaded before anything else so a malformed file stops startup with a readable
   // message, rather than surfacing as a broken overlay once the operator is on air (ADR-0004).
@@ -88,6 +92,9 @@ export async function buildApp(): Promise<AppContext> {
 
   const logoStore = new LogoStore(config.dataDir);
   await logoStore.init();
+
+  const fontStore = new FontStore(config.dataDir);
+  await fontStore.init();
 
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
@@ -101,6 +108,7 @@ export async function buildApp(): Promise<AppContext> {
     store,
     overlayControl,
     resolveInstance: (instanceId) => configStore.findInstance(instanceId),
+    listFonts: () => configStore.fonts.current.fonts,
     listInstanceIds: () => configStore.instances.current.instances.map((instance) => instance.id),
   });
   const ingestSource = createIngestSource(config.ingestSource);
@@ -118,6 +126,8 @@ export async function buildApp(): Promise<AppContext> {
         hub.schedulePublish();
         break;
       case 'instances':
+      case 'fonts':
+        // A font uploaded mid-setup has to reach open browser sources without a reload.
         hub.refreshAllOverlayStates();
         break;
     }
@@ -142,12 +152,18 @@ export async function buildApp(): Promise<AppContext> {
   });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
   await app.register(logoRoutes, { prefix: '/api', logos: logoStore, config: configStore });
+  await app.register(fontRoutes, { prefix: '/api', fonts: fontStore, config: configStore });
 
   // Team logos are operator files, not build output, so they are served from the data directory.
   // `decorateReply: false` because the frontend's static plugin already owns `reply.sendFile`.
   await app.register(fastifyStatic, {
     root: logoStore.root,
     prefix: '/api/logos/',
+    decorateReply: false,
+  });
+  await app.register(fastifyStatic, {
+    root: fontStore.root,
+    prefix: '/api/fonts/',
     decorateReply: false,
   });
   await app.register(liveRoutes, { prefix: '/ws', hub });

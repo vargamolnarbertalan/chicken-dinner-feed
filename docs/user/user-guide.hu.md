@@ -190,7 +190,8 @@ Válassz ki balra egy overlayt, majd állítsd:
 - **Placement** — a képernyő melyik oldalán, milyen távol az adott széltől, függőlegesen középen
   legyen-e, és mekkora. A távolságok 1080p pixelben értendők, és 1440p-n meg 4K-n is ugyanazt
   jelentik.
-- **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat.
+- **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat. A betűtípus-lista
+  néhány beépített választást tartalmaz, plusz mindent, amit a **Fonts** fülön feltöltöttél.
 - **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
   félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
   megmaradjon az átlátszóság.
@@ -235,6 +236,22 @@ egyetlen, ami ott is éles marad. Egyébként legalább 256 × 256 legyen. A log
 azért van ott, hogy lásd, mely részek átlátszók.
 
 A logókon kívül minden máshoz kell a **Save teams** gomb.
+
+### Fonts fül
+
+A közvetítési grafika arculatos, és egy verseny betűtípusa ritkán van azok között, amiket egy
+alkalmazás ésszerűen szállítani tud. Itt töltheted fel a sajátodat, és onnantól minden overlay
+**Font** listájában megjelenik.
+
+**TTF, OTF, WOFF és WOFF2** támogatott, 8 MB-ig — egy márka betűtípusa általában asztali `.ttf` vagy
+`.otf` formában érkezik, és ezek közvetlenül működnek, konvertálás nélkül.
+
+Minden betűtípus **saját magával** van előnézetezve, olyan szöveggel, amilyet az overlay is mutat —
+a név ugyanis semmit nem árul el arról, olvashatók-e a számjegyek overlay-méretben.
+
+Ha ugyanolyan nevű fájlt töltesz fel újra, az **lecseréli** a korábbit, nem hoz létre másodpéldányt.
+Egy betűtípus eltávolítása után az azt használó overlayek a rendszer betűtípusára esnek vissza,
+amíg nem választasz másikat — az alkalmazás nem írja át magától, mi megy adásba.
 
 ### Scoring fül
 
