@@ -14,7 +14,9 @@ import {
 import { config } from './config.js';
 import { createIngestSource } from './ingest/index.js';
 import { healthRoutes } from './routes/health.js';
+import { overlayControlRoutes } from './routes/overlay-control.js';
 import { MatchStore } from './state/match-store.js';
+import { OverlayControlStore } from './state/overlay-control-store.js';
 import { LiveHub } from './ws/live-hub.js';
 import { liveRoutes } from './ws/routes.js';
 
@@ -73,10 +75,23 @@ export async function buildApp(): Promise<AppContext> {
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
   const store = new MatchStore({ source: config.ingestSource });
-  const hub = new LiveHub({ store });
+  const overlayControl = new OverlayControlStore();
+  const hub = new LiveHub({ store, overlayControl });
   const ingestSource = createIngestSource(config.ingestSource);
 
+  if (config.isNetworkExposed) {
+    app.log.warn(
+      { host: config.host, controlToken: config.controlToken ? 'set' : 'not set' },
+      config.controlToken
+        ? 'Listening beyond loopback. The admin UI has no authentication — only the control ' +
+            'endpoints are token-protected.'
+        : 'Listening beyond loopback with no CONTROL_TOKEN set. Anyone on this network can reach ' +
+            'the admin UI and show or hide your overlays.',
+    );
+  }
+
   await app.register(healthRoutes, { prefix: '/api' });
+  await app.register(overlayControlRoutes, { prefix: '/api', store: overlayControl });
   await app.register(liveRoutes, { prefix: '/ws', hub });
 
   // Serving the built frontend is what makes the bundle a single process (ADR-0001). In a fresh

@@ -19,6 +19,7 @@ decision changes, write a new ADR and mark the old one `Superseded by ADR-XXXX`.
 | [0009](0009-git-workflow-and-release-process.md)       | feat → develop → main with tagged bundle releases            | Accepted |
 | [0010](0010-poll-the-pcob-http-api.md)                 | Poll the PCOB HTTP API on `127.0.0.1:10086`                  | Accepted |
 | [0011](0011-resolution-independent-overlay-scaling.md) | Scale overlays from a fixed design canvas                    | Accepted |
+| [0012](0012-http-overlay-control-for-stream-decks.md)  | Overlay visibility is server state, driven by plain HTTP     | Accepted |
 
 ## Writing a new one
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ingestStatusSchema } from '../domain/ingest.js';
 import { matchStateSchema } from '../domain/match.js';
+import { overlayVisibilitySchema } from '../domain/overlay.js';
 
 /**
  * The complete live state, sent as a whole rather than as a delta (ADR-0007).
@@ -34,6 +35,19 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('snapshot'),
     protocolVersion: z.number().int(),
     snapshot: liveSnapshotSchema,
+  }),
+  /**
+   * Show/hide state for the instance this client is rendering.
+   *
+   * Kept as its own message rather than folded into the snapshot on purpose: match data is shared
+   * by every overlay and changes constantly, while visibility is per-instance and changes only when
+   * a director presses a button. Merging them would make one director's key press rebroadcast the
+   * entire match state to every overlay in the production.
+   */
+  z.object({
+    type: z.literal('overlay'),
+    protocolVersion: z.number().int(),
+    overlay: overlayVisibilitySchema,
   }),
   z.object({
     type: z.literal('error'),

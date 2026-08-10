@@ -16,8 +16,16 @@ export const liveRoutes: FastifyPluginAsync<LiveRoutesOptions> = async (app, opt
 
   app.get('/live', { websocket: true }, (socket, request) => {
     const client = socket as unknown as LiveClient;
-    hub.addClient(client);
-    request.log.debug({ clients: hub.clientCount }, 'Overlay client connected');
+
+    // The overlay identifies itself in the URL rather than in a first message, so the server can
+    // answer with the right visibility state in the same breath as the first snapshot.
+    const instanceId =
+      typeof (request.query as { instance?: unknown } | undefined)?.instance === 'string'
+        ? (request.query as { instance: string }).instance || null
+        : null;
+
+    hub.addClient(client, instanceId);
+    request.log.debug({ clients: hub.clientCount, instanceId }, 'Live client connected');
 
     socket.on('close', () => {
       hub.removeClient(client);

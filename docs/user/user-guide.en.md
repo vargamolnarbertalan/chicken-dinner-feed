@@ -4,9 +4,10 @@ _Magyarul: [user-guide.hu.md](user-guide.hu.md)_
 
 This guide is for the person operating the broadcast. It assumes no programming knowledge.
 
-> **This version is a scaffold.** Installation and startup work as described below. The overlay and
-> admin screens are still being built, so the sections marked _Coming soon_ describe what is planned
-> rather than what you can click today.
+> **This version is in progress.** Installation, startup, the leaderboard overlay and Stream Deck
+> control all work as described. The **admin page is not built yet**, so section 8 describes what is
+> planned rather than what you can click today — and until it exists, overlay ids are chosen by you
+> rather than created in a UI.
 
 ---
 
@@ -117,20 +118,63 @@ than going blank on air. It reconnects on its own when data returns.
 
 ## 6. Adding an overlay to your broadcast software
 
-_Coming soon — the exact steps will be finalised with the first overlay._ The approach:
-
-1. Create an overlay instance in the admin and copy its address.
+1. Pick a short name for the overlay — anything you like, for example `main`. That is its **id**, and
+   its address is `http://127.0.0.1:4317/overlay/main`. (Once the admin page exists you will create
+   instances there instead of choosing ids yourself.)
 2. In OBS: **Sources → + → Browser**, paste the address, and set the width and height to your canvas
    size. **1920 × 1080, 2560 × 1440 and 3840 × 2160 are all supported** — the overlay scales itself
    and looks identical at each, so there is nothing to configure per resolution.
-3. Tick **Shutdown source when not visible** off, so the overlay stays connected while hidden.
+3. Untick **Shutdown source when not visible**, so the overlay stays connected while hidden.
 4. The overlay has a transparent background, so it composites straight over your video.
 
-Repeat for each overlay instance. Multiple instances of the same overlay type — for example a light
-and a dark version, or a branded and a generic version — are driven by the same live data and can be
-configured independently.
+Repeat for each overlay you want, giving each a different id. Multiple overlays are driven by the
+same live data but are shown and hidden independently.
 
-## 7. Configuring overlays
+## 7. Controlling overlays from a Stream Deck (Bitfocus Companion)
+
+Overlays can be animated on and off air from a hardware button. The app answers plain web addresses,
+so anything that can make a web request works — Companion is just the usual one.
+
+### The addresses
+
+Replace `<id>` with the overlay instance id (the same one that appears in its browser-source
+address):
+
+| Address                                          | What it does                          |
+| ------------------------------------------------ | ------------------------------------- |
+| `http://127.0.0.1:4317/api/overlays/<id>/show`   | Animates the overlay on               |
+| `http://127.0.0.1:4317/api/overlays/<id>/hide`   | Animates it off                       |
+| `http://127.0.0.1:4317/api/overlays/<id>/toggle` | Flips it                              |
+| `http://127.0.0.1:4317/api/overlays/<id>/state`  | Reports whether it is currently shown |
+
+### Setting up a Companion button
+
+1. Add a button and give it an action from the **Generic HTTP** module.
+2. Choose **GET** and paste one of the addresses above.
+3. That is the whole setup. A `toggle` button is usually the most useful; `show` and `hide` on
+   separate buttons is safer when several people are operating.
+
+Two things worth knowing:
+
+- **Pressing a button twice is safe.** Pressing "show" on an overlay that is already showing does
+  nothing — it will not restart the animation or make the overlay flicker on air.
+- **Reloading a browser source keeps the current state.** An overlay that is hidden stays hidden
+  when its browser source reloads; it will not flash on screen.
+
+### If Companion runs on a different computer
+
+By default the app only listens to the machine it is running on, so a Companion on another computer
+cannot reach it. To allow it:
+
+1. Open `backend\.env` in Notepad and change `HOST=127.0.0.1` to `HOST=0.0.0.0`.
+2. In Companion, use the overlay machine's network address instead of `127.0.0.1`.
+
+⚠️ **This also makes the admin page reachable by anyone on the same network**, and the admin has no
+password. On a closed production network that is usually fine. If you want a little protection, set
+`CONTROL_TOKEN=something-you-choose` in `backend\.env` and append `?token=something-you-choose` to
+the addresses in Companion. That protects the show/hide buttons only, not the admin page.
+
+## 8. Configuring overlays
 
 _Coming soon._ Planned controls, per overlay instance:
 
@@ -146,7 +190,7 @@ what goes on air.
 **Points are calculated by this app, not by the game.** The PCOB API does not supply tournament
 points, so the scoring ruleset must match your tournament's rules. Check it before a broadcast.
 
-## 8. Your settings
+## 9. Your settings
 
 Your configuration is stored as files in the **`backend\data`** folder inside the app folder.
 
@@ -155,7 +199,7 @@ Your configuration is stored as files in the **`backend\data`** folder inside th
 - **When upgrading:** unpack the new version to a _new_ folder, then copy your old `backend\data`
   into it before starting.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 **"Port 4317 is already in use"**
 The app is probably already running. Look for another console window and close it. If the port is
@@ -178,7 +222,7 @@ publisher. The last one cannot be fixed on the day — see section 5.
 **The browser did not open on startup**
 Not a problem. Open a browser yourself and go to `http://127.0.0.1:4317/admin`.
 
-## 10. Getting help
+## 11. Getting help
 
 When reporting a problem, include:
 

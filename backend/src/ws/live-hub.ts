@@ -1,6 +1,7 @@
 import type { LiveSnapshot, ServerMessage } from '@cdf/shared';
 import { PROTOCOL_VERSION } from '@cdf/shared';
 import type { MatchStore, Projection } from '../state/match-store.js';
+import type { OverlayControlStore } from '../state/overlay-control-store.js';
 
 /**
  * The little of a WebSocket we actually use.
@@ -18,6 +19,8 @@ const SOCKET_OPEN = 1;
 
 export interface LiveHubOptions {
   store: MatchStore;
+  /** Optional: without it the hub serves match data only and no visibility messages are sent. */
+  overlayControl?: OverlayControlStore;
   /**
    * Updates arriving faster than this collapse into one broadcast. Bounds client work regardless of
    * how the source behaves, and costs at most this much latency.
@@ -40,8 +43,10 @@ export interface LiveHubOptions {
  *    than after the next change, which might be seconds away or never.
  */
 export class LiveHub {
-  private readonly clients = new Set<LiveClient>();
+  /** Value is the overlay instance the client renders, or null for the admin and other observers. */
+  private readonly clients = new Map<LiveClient, string | null>();
   private readonly store: MatchStore;
+  private readonly overlayControl: OverlayControlStore | undefined;
   private readonly coalesceMs: number;
   private readonly staleCheckMs: number;
 
@@ -51,9 +56,11 @@ export class LiveHub {
 
   private coalesceTimer: NodeJS.Timeout | null = null;
   private staleTimer: NodeJS.Timeout | null = null;
+  private unsubscribeOverlayControl: (() => void) | null = null;
 
   constructor(options: LiveHubOptions) {
     this.store = options.store;
+    this.overlayControl = options.overlayControl;
     this.coalesceMs = options.coalesceMs ?? 50;
     this.staleCheckMs = options.staleCheckMs ?? 1000;
   }
@@ -63,19 +70,46 @@ export class LiveHub {
     this.staleTimer ??= setInterval(() => {
       if (this.store.markStaleIfSilent()) this.publish();
     }, this.staleCheckMs);
+
+    // A visibility change goes only to the overlays it concerns, and immediately — a director's key
+    // press must not wait for the next coalescing window.
+    this.unsubscribeOverlayControl ??=
+      this.overlayControl?.subscribe((state) => {
+        const message: ServerMessage = {
+          type: 'overlay',
+          protocolVersion: PROTOCOL_VERSION,
+          overlay: state,
+        };
+        for (const [client, instanceId] of this.clients) {
+          if (instanceId === state.instanceId) this.sendTo(client, message);
+        }
+      }) ?? null;
   }
 
   stop(): void {
     if (this.staleTimer) clearInterval(this.staleTimer);
     if (this.coalesceTimer) clearTimeout(this.coalesceTimer);
+    this.unsubscribeOverlayControl?.();
     this.staleTimer = null;
     this.coalesceTimer = null;
+    this.unsubscribeOverlayControl = null;
   }
 
-  addClient(client: LiveClient): void {
-    this.clients.add(client);
+  addClient(client: LiveClient, instanceId: string | null = null): void {
+    this.clients.set(client, instanceId);
+
     const snapshot = this.lastSnapshot ?? this.buildSnapshot(this.store.project());
     this.sendTo(client, { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, snapshot });
+
+    // Send current visibility straight away, so a browser source reloaded mid-show comes back in
+    // the state it was in rather than defaulting to visible and flashing on air.
+    if (instanceId && this.overlayControl) {
+      this.sendTo(client, {
+        type: 'overlay',
+        protocolVersion: PROTOCOL_VERSION,
+        overlay: this.overlayControl.get(instanceId),
+      });
+    }
   }
 
   removeClient(client: LiveClient): void {
@@ -115,7 +149,7 @@ export class LiveHub {
       protocolVersion: PROTOCOL_VERSION,
       snapshot,
     };
-    for (const client of this.clients) this.sendTo(client, message);
+    for (const client of this.clients.keys()) this.sendTo(client, message);
 
     return true;
   }
