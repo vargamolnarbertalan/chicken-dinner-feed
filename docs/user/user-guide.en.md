@@ -118,9 +118,8 @@ than going blank on air. It reconnects on its own when data returns.
 
 ## 6. Adding an overlay to your broadcast software
 
-1. Open the admin page and go to **Overlays**. Each overlay has an **id**, shown under its name —
-   the address is `http://127.0.0.1:4317/overlay/<id>`. A `main` overlay exists from the start; add
-   more with **Add an overlay**.
+1. Open the admin page and go to **Overlays**. Select an overlay, then use the **Copy** button next
+   to _Browser source address_ — retyping it by hand is a good way to end up with a blank source.
 2. In OBS: **Sources → + → Browser**, paste the address, and set the width and height to your canvas
    size. **1920 × 1080, 2560 × 1440 and 3840 × 2160 are all supported** — the overlay scales itself
    and looks identical at each, so there is nothing to configure per resolution.
@@ -193,13 +192,18 @@ Select an overlay on the left, then adjust:
 
 ⚠️ **Changes only reach your broadcast when you press Save.** The preview updates as you type.
 
+Each overlay shows whether it is currently **ON AIR** or **HIDDEN**, both in the list on the left and
+next to the show/hide button. That state is live: if someone presses a Stream Deck button, the admin
+updates to match. Every action you take confirms itself with a short notification in the corner,
+which fades on its own or can be dismissed with the ×.
+
 The preview has two modes. **Full canvas** shows the whole 16∶9 frame — use it to judge placement.
 **Actual size** renders at true 1080p pixels — use it to judge colours and whether names are
 legible. The checkerboard stands in for your video, so you can see how translucent backgrounds look.
 
-To create a second overlay — for example a light and a dark version driven by the same data — type
-an id and press **Add an overlay**. It copies the appearance of whichever overlay is selected, so
-you can start from something and adjust.
+To make a second overlay — for example a light and a dark version driven by the same data — type an
+id, then press either **Create** (starts from the defaults) or **Duplicate** (copies the look of the
+overlay currently selected).
 
 **An overlay id cannot be changed after it is created.** It is baked into your browser source and
 Companion buttons, so renaming it would silently break them. Create a new overlay instead.

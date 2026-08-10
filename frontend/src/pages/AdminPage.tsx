@@ -5,12 +5,16 @@ import type {
   TeamRosterDocument,
 } from '@cdf/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
+import { CopyableUrl } from '@/features/admin/CopyableUrl';
+import { OnAirBadge } from '@/features/admin/OnAirBadge';
 import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
 import { useLiveStore } from '@/stores/live-store';
+import { toast } from '@/stores/toast-store';
 
 type Tab = 'overlays' | 'teams' | 'scoring';
 
@@ -29,8 +33,14 @@ const CONNECTION_LABEL: Record<string, { label: string; hint: string; tone: stri
   },
 };
 
+function describe(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function AdminPage() {
   const snapshot = useLiveStore((state) => state.snapshot);
+  const overlayStates = useLiveStore((state) => state.overlayStates);
   const connect = useLiveStore((state) => state.connect);
 
   const [tab, setTab] = useState<Tab>('overlays');
@@ -38,12 +48,23 @@ export function AdminPage() {
   const [teams, setTeams] = useState<TeamRosterDocument | null>(null);
   const [scoring, setScoring] = useState<ScoringRuleset | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ tone: 'ok' | 'error'; message: string } | null>(null);
   const [newId, setNewId] = useState('');
 
-  // The admin joins the live channel with no instance id: it wants match data for the preview, but
-  // it is not an overlay and must not receive another instance's visibility.
+  // The admin joins the live channel as an observer, with no instance id. It gets match data for
+  // the preview plus the visibility of every overlay, so it can show what is genuinely on air —
+  // including a change a director just made from a stream deck.
   useEffect(() => connect(), [connect]);
+
+  const reloadOverlays = useCallback(async (): Promise<OverlayInstancesDocument | null> => {
+    try {
+      const document = await api.getOverlays();
+      setOverlays(document);
+      return document;
+    } catch (error) {
+      toast.error(describe(error));
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -58,21 +79,57 @@ export function AdminPage() {
         setScoring(ruleset);
         setSelectedId(overlayDocument.instances[0]?.id ?? null);
       } catch (error) {
-        setStatus({ tone: 'error', message: describe(error) });
+        toast.error(describe(error));
       }
     })();
   }, []);
 
   const selected = overlays?.instances.find((instance) => instance.id === selectedId) ?? null;
+  const selectedVisible = selected ? overlayStates[selected.id]?.visible : undefined;
 
-  const saveInstance = useCallback(async (instance: OverlayInstance) => {
+  const patchSelected = (changes: Partial<OverlayInstance>) => {
+    if (!overlays || !selected) return;
+    setOverlays({
+      ...overlays,
+      instances: overlays.instances.map((instance) =>
+        instance.id === selected.id ? { ...instance, ...changes } : instance,
+      ),
+    });
+  };
+
+  const saveInstance = async (instance: OverlayInstance) => {
     try {
       await api.updateOverlay(instance);
-      setStatus({ tone: 'ok', message: `Saved “${instance.name}”.` });
+      toast.success(`Saved “${instance.name}” — it is live on air now.`);
     } catch (error) {
-      setStatus({ tone: 'error', message: describe(error) });
+      toast.error(describe(error));
     }
-  }, []);
+  };
+
+  const createOverlay = async (id: string, name: string, copyFrom?: string) => {
+    try {
+      await api.createOverlay({ id, name, ...(copyFrom ? { copyAppearanceFrom: copyFrom } : {}) });
+      await reloadOverlays();
+      setSelectedId(id);
+      setNewId('');
+      toast.success(copyFrom ? `Duplicated as “${name}”.` : `Created “${name}”.`);
+    } catch (error) {
+      toast.error(describe(error));
+    }
+  };
+
+  const toggleVisibility = async (instance: OverlayInstance) => {
+    try {
+      const state = await api.setOverlayVisibility(instance.id, 'toggle');
+      // Confirm what actually happened using the state the server returned, not what we assumed —
+      // the two can differ if a director pressed a button at the same moment.
+      toast.success(
+        state.visible ? `“${instance.name}” is now ON AIR.` : `“${instance.name}” is now hidden.`,
+      );
+    } catch (error) {
+      toast.error(describe(error));
+    }
+  };
 
   const ingest = snapshot?.ingest;
   const connection = ingest
@@ -81,6 +138,12 @@ export function AdminPage() {
 
   return (
     <div className="min-h-dvh">
+      {/*
+       * Mounted here rather than at the router root on purpose: the overlay routes render onto a
+       * broadcast surface, and a toast appearing there would go out on air.
+       */}
+      <Toaster />
+
       <header className="border-border flex flex-wrap items-center gap-4 border-b px-6 py-4">
         <div className="mr-auto">
           <h1 className="text-lg font-semibold tracking-tight">chicken-dinner-feed</h1>
@@ -119,18 +182,9 @@ export function AdminPage() {
         ))}
       </nav>
 
-      {status && (
-        <div
-          role="status"
-          className={`px-6 py-2 text-sm ${status.tone === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
-        >
-          {status.message}
-        </div>
-      )}
-
       <main className="p-6">
         {tab === 'overlays' && overlays && (
-          <div className="grid gap-8 lg:grid-cols-[16rem_1fr_auto]">
+          <div className="grid gap-8 lg:grid-cols-[17rem_1fr_auto]">
             <aside className="grid content-start gap-3">
               <h2 className="text-sm font-medium">Instances</h2>
               <ul className="grid gap-1">
@@ -139,14 +193,17 @@ export function AdminPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedId(instance.id)}
-                      className={`w-full rounded px-3 py-2 text-left text-sm ${
+                      className={`flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm ${
                         instance.id === selectedId ? 'bg-secondary' : 'hover:bg-secondary/60'
                       }`}
                     >
-                      <span className="block">{instance.name}</span>
-                      <span className="text-muted-foreground block font-mono text-xs">
-                        /overlay/{instance.id}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{instance.name}</span>
+                        <span className="text-muted-foreground block truncate font-mono text-xs">
+                          /overlay/{instance.id}
+                        </span>
                       </span>
+                      <OnAirBadge visible={overlayStates[instance.id]?.visible} size="sm" />
                     </button>
                   </li>
                 ))}
@@ -161,29 +218,37 @@ export function AdminPage() {
                   value={newId}
                   onChange={(event) => setNewId(event.target.value)}
                 />
-                <button
-                  type="button"
-                  className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
-                  disabled={!newId.trim()}
-                  onClick={async () => {
-                    try {
-                      await api.createOverlay({
-                        id: newId.trim(),
-                        name: newId.trim(),
-                        ...(selectedId ? { copyAppearanceFrom: selectedId } : {}),
-                      });
-                      const refreshed = await api.getOverlays();
-                      setOverlays(refreshed);
-                      setSelectedId(newId.trim());
-                      setNewId('');
-                      setStatus({ tone: 'ok', message: 'Overlay created.' });
-                    } catch (error) {
-                      setStatus({ tone: 'error', message: describe(error) });
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
+                    disabled={!newId.trim()}
+                    onClick={() => void createOverlay(newId.trim(), newId.trim())}
+                    title="Create an overlay with the default appearance"
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
+                    disabled={!newId.trim() || !selected}
+                    onClick={() =>
+                      selected &&
+                      void createOverlay(newId.trim(), `${selected.name} copy`, selected.id)
                     }
-                  }}
-                >
-                  Add an overlay
-                </button>
+                    title={
+                      selected
+                        ? `Create it with the appearance of “${selected.name}”`
+                        : 'Select an overlay to copy first'
+                    }
+                  >
+                    Duplicate
+                  </button>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  <strong>Create</strong> starts from the defaults. <strong>Duplicate</strong>{' '}
+                  copies the look of {selected ? `“${selected.name}”` : 'the selected overlay'}.
+                </p>
               </div>
             </aside>
 
@@ -196,16 +261,7 @@ export function AdminPage() {
                       aria-label="Overlay name"
                       className="border-border bg-background rounded border px-2 py-1.5 text-sm"
                       value={selected.name}
-                      onChange={(event) =>
-                        setOverlays({
-                          ...overlays,
-                          instances: overlays.instances.map((instance) =>
-                            instance.id === selected.id
-                              ? { ...instance, name: event.target.value }
-                              : instance,
-                          ),
-                        })
-                      }
+                      onChange={(event) => patchSelected({ name: event.target.value })}
                     />
                     <button
                       type="button"
@@ -214,30 +270,33 @@ export function AdminPage() {
                     >
                       Save
                     </button>
-                    <button
-                      type="button"
-                      className="border-border rounded border px-3 py-1.5 text-sm"
-                      onClick={async () => {
-                        try {
-                          await api.setOverlayVisibility(selected.id, 'toggle');
-                        } catch (error) {
-                          setStatus({ tone: 'error', message: describe(error) });
-                        }
-                      }}
-                    >
-                      Show / hide on air
-                    </button>
+
+                    <div className="border-border flex items-center gap-2 rounded border px-2 py-1">
+                      <OnAirBadge visible={selectedVisible} />
+                      <button
+                        type="button"
+                        className="hover:bg-secondary rounded px-2 py-1 text-sm"
+                        onClick={() => void toggleVisibility(selected)}
+                      >
+                        {selectedVisible === true
+                          ? 'Hide it'
+                          : selectedVisible === false
+                            ? 'Show it'
+                            : 'Show / hide'}
+                      </button>
+                    </div>
+
                     <button
                       type="button"
                       className="text-muted-foreground hover:text-destructive ml-auto text-xs"
                       onClick={async () => {
                         try {
                           await api.deleteOverlay(selected.id);
-                          const refreshed = await api.getOverlays();
-                          setOverlays(refreshed);
-                          setSelectedId(refreshed.instances[0]?.id ?? null);
+                          const refreshed = await reloadOverlays();
+                          setSelectedId(refreshed?.instances[0]?.id ?? null);
+                          toast.success(`Deleted “${selected.name}”.`);
                         } catch (error) {
-                          setStatus({ tone: 'error', message: describe(error) });
+                          toast.error(describe(error));
                         }
                       }}
                     >
@@ -247,14 +306,7 @@ export function AdminPage() {
 
                   <AppearanceEditor
                     appearance={selected.appearance}
-                    onChange={(appearance) =>
-                      setOverlays({
-                        ...overlays,
-                        instances: overlays.instances.map((instance) =>
-                          instance.id === selected.id ? { ...instance, appearance } : instance,
-                        ),
-                      })
-                    }
+                    onChange={(appearance) => patchSelected({ appearance })}
                   />
                 </section>
 
@@ -268,9 +320,10 @@ export function AdminPage() {
                     This is the real overlay, driven by live match data. Changes appear here
                     immediately, but only reach your broadcast when you press Save.
                   </p>
-                  <code className="bg-muted rounded px-2 py-1 text-xs">
-                    {window.location.origin}/overlay/{selected.id}
-                  </code>
+                  <CopyableUrl
+                    label="Browser source address"
+                    url={`${window.location.origin}/overlay/${selected.id}`}
+                  />
                 </aside>
               </>
             ) : (
@@ -290,9 +343,9 @@ export function AdminPage() {
               onClick={async () => {
                 try {
                   setTeams(await api.saveTeams(teams));
-                  setStatus({ tone: 'ok', message: 'Teams saved.' });
+                  toast.success('Teams saved.');
                 } catch (error) {
-                  setStatus({ tone: 'error', message: describe(error) });
+                  toast.error(describe(error));
                 }
               }}
             >
@@ -310,12 +363,9 @@ export function AdminPage() {
               onClick={async () => {
                 try {
                   setScoring(await api.saveScoring(scoring));
-                  setStatus({
-                    tone: 'ok',
-                    message: 'Scoring saved — standings update immediately.',
-                  });
+                  toast.success('Scoring saved — the standings have already updated.');
                 } catch (error) {
-                  setStatus({ tone: 'error', message: describe(error) });
+                  toast.error(describe(error));
                 }
               }}
             >
@@ -326,9 +376,4 @@ export function AdminPage() {
       </main>
     </div>
   );
-}
-
-function describe(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }

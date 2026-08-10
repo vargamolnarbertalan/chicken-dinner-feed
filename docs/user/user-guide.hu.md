@@ -120,9 +120,9 @@ Ha meccs közben szakad meg a kapcsolat, az overlay **az utoljára kapott adatot
 
 ## 6. Overlay hozzáadása a közvetítő szoftverhez
 
-1. Nyisd meg az admin felületet, és menj az **Overlays** fülre. Minden overlaynek van egy
-   **azonosítója**, ami a neve alatt látszik — a cím `http://127.0.0.1:4317/overlay/<id>`. Egy
-   `main` overlay eleve létezik; továbbiakat az **Add an overlay** gombbal hozol létre.
+1. Nyisd meg az admin felületet, menj az **Overlays** fülre, válassz ki egy overlayt, majd használd
+   a _Browser source address_ melletti **Copy** gombot — kézzel átgépelni jó módszer arra, hogy üres
+   forrásod legyen.
 2. OBS-ben: **Források → + → Böngésző**, illeszd be a címet, a szélességet és magasságot állítsd a
    vászon méretére. **1920 × 1080, 2560 × 1440 és 3840 × 2160 is támogatott** — az overlay magától
    skálázódik, és mindháromnál ugyanúgy néz ki, tehát felbontásonként nincs mit beállítani.
@@ -199,14 +199,19 @@ Válassz ki balra egy overlayt, majd állítsd:
 ⚠️ **A változtatások csak a Save gomb megnyomásakor kerülnek adásba.** Az előnézet gépelés közben
 frissül.
 
+Minden overlaynél látszik, hogy éppen **ON AIR** vagy **HIDDEN** — a bal oldali listában és a
+show/hide gomb mellett is. Ez az állapot élő: ha valaki megnyom egy Stream Deck gombot, az admin
+követi. Minden művelet rövid értesítéssel visszaigazolja magát a sarokban, ami magától eltűnik, vagy
+az ×-szel bezárható.
+
 Az előnézetnek két módja van. A **Full canvas** a teljes 16∶9 képet mutatja — ezen az elhelyezést
 tudod megítélni. Az **Actual size** valódi 1080p pixelekben jelenít meg — ezen a színeket és azt,
 hogy olvashatók-e a nevek. A kockás háttér a videót helyettesíti, hogy lásd, hogyan mutatnak az
 átlátszó hátterek.
 
 Második overlay létrehozásához — például egy világos és egy sötét változat ugyanabból az adatból —
-írj be egy azonosítót, és nyomd meg az **Add an overlay** gombot. A kiválasztott overlay
-megjelenését másolja, tehát van miből kiindulni.
+írj be egy azonosítót, majd nyomd meg vagy a **Create** (alapértelmezésből indul), vagy a
+**Duplicate** gombot (az éppen kijelölt overlay megjelenését másolja).
 
 **Az overlay azonosítója létrehozás után nem módosítható.** Bele van égetve a browser source-ba és a
 Companion gombokba, tehát az átnevezés csendben eltörné őket. Helyette hozz létre újat.

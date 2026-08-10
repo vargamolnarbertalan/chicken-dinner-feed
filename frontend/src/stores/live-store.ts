@@ -14,9 +14,16 @@ interface LiveState {
    * (ADR-0006).
    */
   snapshot: LiveSnapshot | null;
-  overlay: OverlayVisibility | null;
-  /** This instance's configuration, or null when the id has not been configured in the admin. */
-  instance: OverlayInstance | null;
+  /**
+   * Visibility by instance id.
+   *
+   * A map rather than a single value because the admin observes **every** instance — it has to show
+   * what is actually on air, including a change a director made from a stream deck. An overlay page
+   * only ever receives its own id, so it simply reads its own key.
+   */
+  overlayStates: Record<string, OverlayVisibility>;
+  /** Configuration by instance id. A configured-but-unknown id maps to null. */
+  instances: Record<string, OverlayInstance | null>;
   /**
    * False until the first visibility message has been applied. Lets the overlay appear in its
    * current state on load instead of animating in as though a director had just triggered it.
@@ -31,8 +38,8 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   connection: 'connecting',
   protocolMismatch: null,
   snapshot: null,
-  overlay: null,
-  instance: null,
+  overlayStates: {},
+  instances: {},
   hasAnimatedIn: false,
 
   connect(instanceId) {
@@ -46,7 +53,16 @@ export const useLiveStore = create<LiveState>((set, get) => ({
             set({ snapshot: message.snapshot });
             break;
           case 'overlay':
-            set({ overlay: message.overlay, instance: message.instance });
+            set((state) => ({
+              overlayStates: {
+                ...state.overlayStates,
+                [message.overlay.instanceId]: message.overlay,
+              },
+              instances: {
+                ...state.instances,
+                [message.overlay.instanceId]: message.instance,
+              },
+            }));
             break;
           case 'error':
             console.error('[live] server reported an error:', message.message);

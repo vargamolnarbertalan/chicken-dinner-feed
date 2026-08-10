@@ -23,6 +23,8 @@ export interface LiveHubOptions {
   overlayControl?: OverlayControlStore;
   /** Resolves an instance's configuration. Returns null for an id that is not configured. */
   resolveInstance?: (instanceId: string) => OverlayInstance | null;
+  /** Every configured instance id, so an observer can be told about all of them. */
+  listInstanceIds?: () => string[];
   /**
    * Updates arriving faster than this collapse into one broadcast. Bounds client work regardless of
    * how the source behaves, and costs at most this much latency.
@@ -50,6 +52,7 @@ export class LiveHub {
   private readonly store: MatchStore;
   private readonly overlayControl: OverlayControlStore | undefined;
   private readonly resolveInstance: ((instanceId: string) => OverlayInstance | null) | undefined;
+  private readonly listInstanceIds: (() => string[]) | undefined;
   private readonly coalesceMs: number;
   private readonly staleCheckMs: number;
 
@@ -65,6 +68,7 @@ export class LiveHub {
     this.store = options.store;
     this.overlayControl = options.overlayControl;
     this.resolveInstance = options.resolveInstance;
+    this.listInstanceIds = options.listInstanceIds;
     this.coalesceMs = options.coalesceMs ?? 50;
     this.staleCheckMs = options.staleCheckMs ?? 1000;
   }
@@ -98,10 +102,18 @@ export class LiveHub {
     const snapshot = this.lastSnapshot ?? this.buildSnapshot(this.store.project());
     this.sendTo(client, { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, snapshot });
 
-    // Send current visibility and configuration straight away, so a browser source reloaded
-    // mid-show comes back in the state it was in rather than defaulting to visible and flashing.
-    if (instanceId && this.overlayControl) {
+    if (!this.overlayControl) return;
+
+    if (instanceId) {
+      // Send current visibility and configuration straight away, so a browser source reloaded
+      // mid-show comes back in the state it was in rather than defaulting to visible and flashing.
       this.sendTo(client, this.overlayMessage(instanceId));
+    } else {
+      // An observer — the admin. It gets the state of every instance, so it can show what is
+      // actually on air, including changes a director made from a stream deck.
+      for (const id of this.listInstanceIds?.() ?? []) {
+        this.sendTo(client, this.overlayMessage(id));
+      }
     }
   }
 
@@ -116,16 +128,18 @@ export class LiveHub {
 
     const message = this.overlayMessage(instanceId);
     for (const [client, clientInstance] of this.clients) {
-      if (clientInstance === instanceId) this.sendTo(client, message);
+      // Observers (clientInstance === null) hear about every instance: the admin has to reflect
+      // what is on air even when the change came from a stream deck rather than from itself.
+      if (clientInstance === instanceId || clientInstance === null) this.sendTo(client, message);
     }
   }
 
   /** Every configured instance — used after a bulk config change. */
   refreshAllOverlayStates(): void {
-    const instanceIds = new Set(
-      [...this.clients.values()].filter((id): id is string => id !== null),
-    );
-    for (const instanceId of instanceIds) this.sendOverlayState(instanceId);
+    const fromClients = [...this.clients.values()].filter((id): id is string => id !== null);
+    for (const instanceId of new Set([...(this.listInstanceIds?.() ?? []), ...fromClients])) {
+      this.sendOverlayState(instanceId);
+    }
   }
 
   private overlayMessage(instanceId: string): ServerMessage {

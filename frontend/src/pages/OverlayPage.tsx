@@ -19,8 +19,8 @@ export interface OverlayPageProps {
  */
 export function OverlayPage({ instanceId }: OverlayPageProps) {
   const snapshot = useLiveStore((state) => state.snapshot);
-  const overlay = useLiveStore((state) => state.overlay);
-  const instance = useLiveStore((state) => state.instance);
+  const overlay = useLiveStore((state) => state.overlayStates[instanceId]);
+  const instance = useLiveStore((state) => state.instances[instanceId] ?? null);
   const protocolMismatch = useLiveStore((state) => state.protocolMismatch);
   const connect = useLiveStore((state) => state.connect);
 

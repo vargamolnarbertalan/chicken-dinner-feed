@@ -94,6 +94,7 @@ export async function buildApp(): Promise<AppContext> {
     store,
     overlayControl,
     resolveInstance: (instanceId) => configStore.findInstance(instanceId),
+    listInstanceIds: () => configStore.instances.current.instances.map((instance) => instance.id),
   });
   const ingestSource = createIngestSource(config.ingestSource);
 
