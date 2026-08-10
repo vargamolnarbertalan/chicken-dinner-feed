@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 interface Health {
   status: string;
@@ -12,6 +13,8 @@ const DEMO_INSTANCE = 'default';
 
 /** Landing page. A signpost while the admin is being built, not a product screen. */
 export function HomePage() {
+  useDocumentTitle('PUBG overlays');
+
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
 

@@ -27,7 +27,7 @@ export function OnAirBadge({ visible, size = 'md' }: OnAirBadgeProps) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded ${padding} font-semibold tracking-wide ${
-        visible ? 'bg-red-600 text-white' : 'bg-secondary text-muted-foreground'
+        visible ? 'bg-[var(--brand-red)] text-white' : 'bg-secondary text-muted-foreground'
       }`}
       title={visible ? 'This overlay is currently showing' : 'This overlay is currently hidden'}
     >

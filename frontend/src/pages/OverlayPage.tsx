@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { appearanceToAnimation, appearanceToPosition } from '@/components/overlay/appearance';
 import { LeaderboardOverlay } from '@/components/overlay/LeaderboardOverlay';
 import { u } from '@/components/overlay/overlay-scale';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useLiveStore } from '@/stores/live-store';
 
 export interface OverlayPageProps {
@@ -34,6 +35,10 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
   }, []);
 
   useEffect(() => connect(instanceId), [connect, instanceId]);
+
+  // Falls back to the id until the configuration arrives, so a tab is never nameless — and an
+  // unconfigured overlay is still identifiable by the address it was opened with.
+  useDocumentTitle(instance?.name ?? instanceId);
 
   if (protocolMismatch !== null) {
     // Deliberately visible rather than silent (ADR-0007). A browser source left open across an

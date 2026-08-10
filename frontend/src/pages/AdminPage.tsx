@@ -18,6 +18,7 @@ import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { applyCustomFontFaces } from '@/lib/font-faces';
 import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
@@ -48,6 +49,8 @@ function describe(error: unknown): string {
 }
 
 export function AdminPage() {
+  useDocumentTitle('Admin - PUBG overlays');
+
   const snapshot = useLiveStore((state) => state.snapshot);
   const overlayStates = useLiveStore((state) => state.overlayStates);
   const connect = useLiveStore((state) => state.connect);
@@ -221,10 +224,23 @@ export function AdminPage() {
         )}
       </ConfirmDialog>
 
-      <header className="border-border flex flex-wrap items-center gap-4 border-b px-6 py-4">
+      {/*
+       * The gold rule under the header echoes the accent strip on the overlay itself, so the tool
+       * and what it puts on screen read as the same product.
+       */}
+      <header className="flex flex-wrap items-center gap-4 border-b border-b-[var(--brand-gold)]/70 bg-[var(--brand-navy)] px-6 py-3">
+        <img
+          src="/images/app-logo-128.png"
+          alt=""
+          width={44}
+          height={44}
+          className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+        />
         <div className="mr-auto">
-          <h1 className="text-lg font-semibold tracking-tight">chicken-dinner-feed</h1>
-          <p className="text-muted-foreground text-xs">Overlay control</p>
+          <h1 className="text-lg font-semibold tracking-tight">
+            <span className="text-[var(--brand-gold)]">Chicken</span> Dinner Feed
+          </h1>
+          <p className="text-muted-foreground text-xs tracking-wide uppercase">Overlay control</p>
         </div>
 
         {connection && (
@@ -251,8 +267,10 @@ export function AdminPage() {
             key={value}
             type="button"
             onClick={() => setTab(value)}
-            className={`border-b-2 px-3 py-2 text-sm ${
-              tab === value ? 'border-foreground' : 'text-muted-foreground border-transparent'
+            className={`border-b-2 px-3 py-2 text-sm transition-colors ${
+              tab === value
+                ? 'border-[var(--brand-gold)] text-[var(--brand-gold)]'
+                : 'text-muted-foreground hover:text-foreground border-transparent'
             }`}
           >
             {label}
