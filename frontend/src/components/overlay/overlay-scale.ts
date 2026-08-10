@@ -17,6 +17,8 @@ export function u(designPixels: number): string {
 export const LEADERBOARD_METRICS = {
   panelWidth: 340,
   paddingX: 10,
+  /** The accent strip along the top of the panel — the overlay's branding colour. */
+  accentBarHeight: 3,
   headerHeight: 40,
   rowHeight: 44,
   legendHeight: 34,

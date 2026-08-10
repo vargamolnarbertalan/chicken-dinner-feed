@@ -1,13 +1,5 @@
 import type { OverlayAppearance, OverlayColors } from '@cdf/shared';
-
-const COLOR_FIELDS: { key: keyof OverlayColors; label: string; hint?: string }[] = [
-  { key: 'playerAlive', label: 'Alive', hint: 'Health bar for a player still up' },
-  { key: 'playerKnocked', label: 'Knocked', hint: 'Downed but revivable' },
-  { key: 'playerDead', label: 'Eliminated' },
-  { key: 'accent', label: 'Accent' },
-  { key: 'text', label: 'Text' },
-  { key: 'textMuted', label: 'Muted text' },
-];
+import { ColorField } from './ColorField';
 
 const FONT_OPTIONS = [
   { value: "'Inter', system-ui, sans-serif", label: 'Inter' },
@@ -16,15 +8,6 @@ const FONT_OPTIONS = [
   { value: 'system-ui, sans-serif', label: 'System' },
   { value: "'Courier New', monospace", label: 'Monospace' },
 ];
-
-/**
- * Colour inputs need a hex value; the stored colours may be `rgba(...)` for the translucent panel
- * backgrounds. Rather than convert — and quietly drop the alpha an operator needs for a background
- * that sits over video — translucent values are edited as text.
- */
-function isHex(value: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(value);
-}
 
 export interface AppearanceEditorProps {
   appearance: OverlayAppearance;
@@ -150,54 +133,76 @@ export function AppearanceEditor({ appearance, onChange }: AppearanceEditorProps
       </section>
 
       <section className="grid gap-3">
-        <h3 className="text-sm font-medium">Colours</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {COLOR_FIELDS.map((field) => {
-            const value = appearance.colors[field.key];
-            return (
-              <label key={field.key} className="grid gap-1 text-xs">
-                <span className="text-muted-foreground">{field.label}</span>
-                <div className="flex items-center gap-2">
-                  {isHex(value) ? (
-                    <input
-                      type="color"
-                      className="border-border h-8 w-10 rounded border bg-transparent"
-                      value={value}
-                      onChange={(event) => patchColor(field.key, event.target.value)}
-                      aria-label={field.label}
-                    />
-                  ) : null}
-                  <input
-                    type="text"
-                    className="border-border bg-background w-full rounded border px-2 py-1.5 font-mono text-xs"
-                    value={value}
-                    onChange={(event) => patchColor(field.key, event.target.value)}
-                  />
-                </div>
-                {field.hint && <span className="text-muted-foreground">{field.hint}</span>}
-              </label>
-            );
-          })}
+        <div>
+          <h3 className="text-sm font-medium">Panel</h3>
+          <p className="text-muted-foreground text-xs">
+            These sit over live video, so their opacity matters as much as their colour.
+          </p>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <ColorField
+            label="Background"
+            hint="Behind the team rows"
+            value={appearance.colors.background}
+            allowAlpha
+            onChange={(value) => patchColor('background', value)}
+          />
+          <ColorField
+            label="Header background"
+            hint="Behind the column titles and the legend"
+            value={appearance.colors.headerBackground}
+            allowAlpha
+            onChange={(value) => patchColor('headerBackground', value)}
+          />
+          <ColorField
+            label="Row stripe"
+            hint="Every other row, to keep long lists readable"
+            value={appearance.colors.rowAltBackground}
+            allowAlpha
+            onChange={(value) => patchColor('rowAltBackground', value)}
+          />
+          <ColorField
+            label="Accent"
+            hint="The strip along the top and the line under the header"
+            value={appearance.colors.accent}
+            allowAlpha
+            onChange={(value) => patchColor('accent', value)}
+          />
+        </div>
+      </section>
 
-        <details className="text-xs">
-          <summary className="text-muted-foreground cursor-pointer">
-            Panel backgrounds (translucent — edit as text)
-          </summary>
-          <div className="mt-2 grid gap-2">
-            {(['background', 'headerBackground', 'rowAltBackground'] as const).map((key) => (
-              <label key={key} className="grid gap-1">
-                <span className="text-muted-foreground">{key}</span>
-                <input
-                  type="text"
-                  className="border-border bg-background rounded border px-2 py-1.5 font-mono text-xs"
-                  value={appearance.colors[key]}
-                  onChange={(event) => patchColor(key, event.target.value)}
-                />
-              </label>
-            ))}
-          </div>
-        </details>
+      <section className="grid gap-3">
+        <h3 className="text-sm font-medium">Players and type</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <ColorField
+            label="Alive"
+            hint="Health bar for a player still up"
+            value={appearance.colors.playerAlive}
+            onChange={(value) => patchColor('playerAlive', value)}
+          />
+          <ColorField
+            label="Knocked"
+            hint="Downed but revivable"
+            value={appearance.colors.playerKnocked}
+            onChange={(value) => patchColor('playerKnocked', value)}
+          />
+          <ColorField
+            label="Eliminated"
+            value={appearance.colors.playerDead}
+            onChange={(value) => patchColor('playerDead', value)}
+          />
+          <ColorField
+            label="Text"
+            value={appearance.colors.text}
+            onChange={(value) => patchColor('text', value)}
+          />
+          <ColorField
+            label="Muted text"
+            hint="Column titles and the legend"
+            value={appearance.colors.textMuted}
+            onChange={(value) => patchColor('textMuted', value)}
+          />
+        </div>
       </section>
 
       <section className="grid gap-3">

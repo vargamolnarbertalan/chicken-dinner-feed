@@ -36,6 +36,13 @@ export function LeaderboardOverlay({ match, appearance }: LeaderboardOverlayProp
         overflow: 'hidden',
       }}
     >
+      {/*
+       * The accent strip. This is the branding hook — the one colour that makes an overlay look
+       * like a particular tournament's rather than generic, which is exactly what the client asked
+       * for when they wanted branded and generic versions of the same data.
+       */}
+      <div style={{ height: u(M.accentBarHeight), backgroundColor: 'var(--overlay-accent)' }} />
+
       <div
         className="grid items-center"
         style={{
@@ -47,6 +54,7 @@ export function LeaderboardOverlay({ match, appearance }: LeaderboardOverlayProp
           color: 'var(--overlay-text)',
           fontSize: u(12),
           letterSpacing: u(0.6),
+          borderBottom: `${u(1)} solid var(--overlay-accent)`,
         }}
       >
         <span className="font-bold">#</span>
