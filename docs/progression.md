@@ -42,6 +42,15 @@ rejected alternatives. Summary of what is now settled:
 - **No delivery-date constraint.** Build now; the work is wanted now. Scheduling is not a factor in
   prioritisation.
 
+### Decisions resolved 2026-08-10
+
+- **Controlling an unknown overlay id is now a 404**, not a silent success.
+  [ADR-0012](adr/0012-http-overlay-control-for-stream-decks.md) accepted implicit instance creation
+  only "while overlay instances are not yet persisted entities" and flagged it to revisit when they
+  were. The persistence round made them real, so the control endpoints now check the configuration.
+  Behind a stream deck, a 200 for an overlay that does not exist is indistinguishable from a broken
+  button.
+
 ### Decisions still open
 
 - **Overlay type registry shape** — how a new overlay type declares its settings schema so the admin

@@ -127,7 +127,11 @@ export async function buildApp(): Promise<AppContext> {
   }
 
   await app.register(healthRoutes, { prefix: '/api' });
-  await app.register(overlayControlRoutes, { prefix: '/api', store: overlayControl });
+  await app.register(overlayControlRoutes, {
+    prefix: '/api',
+    store: overlayControl,
+    isConfigured: (instanceId) => configStore.findInstance(instanceId) !== null,
+  });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
   await app.register(liveRoutes, { prefix: '/ws', hub });
 

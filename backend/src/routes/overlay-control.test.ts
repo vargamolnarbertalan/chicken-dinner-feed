@@ -92,9 +92,33 @@ describe('overlay control routes', () => {
     expect(other.json()).toMatchObject({ instanceId: 'secondary', visible: true });
   });
 
-  it('rejects an id that could not appear in a URL', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/overlays/Not Valid/state' });
+  it('rejects an id that could not be a valid overlay id', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/overlays/Not_Valid/state' });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it('reports a mistyped instance as not found rather than silently succeeding', async () => {
+    // Behind a stream deck, a 200 for an overlay that does not exist is indistinguishable from a
+    // broken button. Instances became real configured entities in the persistence round, so this is
+    // the point ADR-0012 flagged for revisiting.
+    const configured = Fastify().withTypeProvider<ZodTypeProvider>();
+    configured.setValidatorCompiler(validatorCompiler);
+    configured.setSerializerCompiler(serializerCompiler);
+    await configured.register(overlayControlRoutes, {
+      prefix: '/api',
+      store: new OverlayControlStore(),
+      isConfigured: (instanceId) => instanceId === 'main',
+    });
+    await configured.ready();
+
+    const known = await configured.inject({ method: 'GET', url: '/api/overlays/main/state' });
+    const unknown = await configured.inject({ method: 'GET', url: '/api/overlays/typo/state' });
+
+    expect(known.statusCode).toBe(200);
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().error).toContain('typo');
+
+    await configured.close();
   });
 });
