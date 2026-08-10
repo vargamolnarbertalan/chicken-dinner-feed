@@ -5,6 +5,7 @@ import type {
   TeamRosterDocument,
 } from '@cdf/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
@@ -50,6 +51,8 @@ export function AdminPage() {
   const [scoring, setScoring] = useState<ScoringRuleset | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  /** The instance the operator has asked to delete, pending confirmation. */
+  const [pendingDelete, setPendingDelete] = useState<OverlayInstance | null>(null);
 
   // The admin joins the live channel as an observer, with no instance id. It gets match data for
   // the preview plus the visibility of every overlay, so it can show what is genuinely on air —
@@ -145,6 +148,21 @@ export function AdminPage() {
     }
   };
 
+  const deleteOverlay = async (instance: OverlayInstance) => {
+    setPendingDelete(null);
+    try {
+      await api.deleteOverlay(instance.id);
+      const refreshed = await reloadOverlays();
+      setSelectedId(refreshed?.instances[0]?.id ?? null);
+      toast.success(
+        `Deleted “${instance.name}”`,
+        `Any browser source still pointing at /overlay/${instance.id} will now show nothing.`,
+      );
+    } catch (error) {
+      toast.error(`Could not delete “${instance.name}”`, describe(error));
+    }
+  };
+
   const ingest = snapshot?.ingest;
   const connection = ingest
     ? (CONNECTION_LABEL[ingest.state] ?? CONNECTION_LABEL.disconnected!)
@@ -157,6 +175,27 @@ export function AdminPage() {
        * broadcast surface, and a toast appearing there would go out on air.
        */}
       <Toaster />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={`Delete “${pendingDelete?.name ?? ''}”?`}
+        confirmLabel="Delete it"
+        destructive
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && void deleteOverlay(pendingDelete)}
+      >
+        <p>
+          Its settings are removed for good. Any browser source pointing at{' '}
+          <code className="font-mono text-xs">/overlay/{pendingDelete?.id}</code> will show nothing
+          afterwards, and Stream Deck buttons for it will stop working.
+        </p>
+        {pendingDelete && overlayStates[pendingDelete.id]?.visible && (
+          // Worth saying plainly: this one is not merely configured, it is on screen right now.
+          <p className="text-destructive font-medium">
+            This overlay is on air at the moment. Deleting it will take it off.
+          </p>
+        )}
+      </ConfirmDialog>
 
       <header className="border-border flex flex-wrap items-center gap-4 border-b px-6 py-4">
         <div className="mr-auto">
@@ -323,19 +362,7 @@ export function AdminPage() {
                     <button
                       type="button"
                       className="text-muted-foreground hover:text-destructive ml-auto text-xs"
-                      onClick={async () => {
-                        try {
-                          await api.deleteOverlay(selected.id);
-                          const refreshed = await reloadOverlays();
-                          setSelectedId(refreshed?.instances[0]?.id ?? null);
-                          toast.success(
-                            `Deleted “${selected.name}”`,
-                            `Any browser source still pointing at /overlay/${selected.id} will now show nothing.`,
-                          );
-                        } catch (error) {
-                          toast.error(`Could not delete “${selected.name}”`, describe(error));
-                        }
-                      }}
+                      onClick={() => setPendingDelete(selected)}
                     >
                       Delete
                     </button>
