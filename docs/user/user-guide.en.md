@@ -4,10 +4,10 @@ _Magyarul: [user-guide.hu.md](user-guide.hu.md)_
 
 This guide is for the person operating the broadcast. It assumes no programming knowledge.
 
-> **This version is in progress.** Installation, startup, the leaderboard overlay and Stream Deck
-> control all work as described. The **admin page is not built yet**, so section 8 describes what is
-> planned rather than what you can click today — and until it exists, overlay ids are chosen by you
-> rather than created in a UI.
+> **This version is in progress.** Installation, startup, the leaderboard overlay, the admin page
+> and Stream Deck control all work as described. Team **logos** are not implemented yet, and the
+> live game connection still needs the real PCOB adapter — until then the app runs on simulated
+> match data so you can set everything up in advance.
 
 ---
 
@@ -118,9 +118,8 @@ than going blank on air. It reconnects on its own when data returns.
 
 ## 6. Adding an overlay to your broadcast software
 
-1. Pick a short name for the overlay — anything you like, for example `main`. That is its **id**, and
-   its address is `http://127.0.0.1:4317/overlay/main`. (Once the admin page exists you will create
-   instances there instead of choosing ids yourself.)
+1. Open the admin page and go to **Overlays**. Select an overlay, then use the **Copy** button next
+   to _Browser source address_ — retyping it by hand is a good way to end up with a blank source.
 2. In OBS: **Sources → + → Browser**, paste the address, and set the width and height to your canvas
    size. **1920 × 1080, 2560 × 1440 and 3840 × 2160 are all supported** — the overlay scales itself
    and looks identical at each, so there is nothing to configure per resolution.
@@ -176,19 +175,59 @@ the addresses in Companion. That protects the show/hide buttons only, not the ad
 
 ## 8. Configuring overlays
 
-_Coming soon._ Planned controls, per overlay instance:
+Everything is on the admin page at `http://127.0.0.1:4317/admin`.
 
-- colours, fonts and font sizes;
-- size and position on the canvas;
-- show and hide animations, with adjustable speed;
-- team names and logos;
-- the scoring ruleset — placement points per rank and points per elimination.
+### Overlays tab
 
-Every change is shown in a **live preview** that renders the real overlay, so what you see is exactly
-what goes on air.
+Select an overlay on the left, then adjust:
 
-**Points are calculated by this app, not by the game.** The PCOB API does not supply tournament
-points, so the scoring ruleset must match your tournament's rules. Check it before a broadcast.
+- **Placement** — which side of the screen, distance from that edge, whether it is centred
+  vertically, and its size. Distances are given in 1080p pixels and mean the same thing at 1440p and
+  4K.
+- **Type and rows** — font, how many teams to show, whether the colour legend appears.
+- **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
+  The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
+  keep them see-through.
+- **Show / hide animation** — direction, speed and easing.
+
+⚠️ **Changes only reach your broadcast when you press Save.** The preview updates as you type.
+
+Each overlay shows whether it is currently **ON AIR** or **HIDDEN**, both in the list on the left and
+next to the show/hide button. That state is live: if someone presses a Stream Deck button, the admin
+updates to match. Every action you take confirms itself with a short notification in the corner,
+which fades on its own or can be dismissed with the ×.
+
+The preview has two modes. **Full canvas** shows the whole 16∶9 frame — use it to judge placement.
+**Actual size** renders at true 1080p pixels — use it to judge colours and whether names are
+legible. The checkerboard stands in for your video, so you can see how translucent backgrounds look.
+
+To make a second overlay — for example a light and a dark version driven by the same data — type an
+id, then press either **Create** (starts from the defaults) or **Duplicate** (copies the look of the
+overlay currently selected).
+
+**An overlay id cannot be changed after it is created.** It is baked into your browser source and
+Companion buttons, so renaming it would silently break them. Create a new overlay instead.
+
+### Teams tab
+
+Team names and short names, by team number. **The number is the slot the game reports** — it has to
+match the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's players will
+appear on the wrong row. The short name is what the overlay prints.
+
+Press **Save teams** when you are done.
+
+### Scoring tab
+
+**Points are calculated by this app, not by the game.** The PCOB API supplies no tournament points
+at all, so this must match your tournament's rules — check it before every event.
+
+- **Points per elimination** — added for every kill the team gets.
+- **Placement points** — awarded when a team is eliminated, or when the match ends. A team still
+  playing has not placed yet and scores nothing here. Positions past the end of the list score zero.
+
+The default is the standard PUBG Mobile table (10/6/5/4/3/2/1/1, 1 point per kill).
+
+Saving takes effect immediately, including mid-match.
 
 ## 9. Your settings
 

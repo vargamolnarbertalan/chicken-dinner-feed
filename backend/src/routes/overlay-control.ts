@@ -1,4 +1,4 @@
-import { overlayVisibilitySchema } from '@cdf/shared';
+import { overlayInstanceIdSchema, overlayVisibilitySchema } from '@cdf/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -6,10 +6,20 @@ import type { OverlayControlStore } from '../state/overlay-control-store.js';
 
 export interface OverlayControlRoutesOptions {
   store: OverlayControlStore;
+  /**
+   * Whether an instance actually exists in the configuration.
+   *
+   * Optional so the routes can be exercised on their own, but supplied in the real app. Without it
+   * a mistyped Companion URL returns 200 and silently controls an overlay nobody is watching —
+   * which looks, from behind a stream deck, exactly like a broken button.
+   */
+  isConfigured?: (instanceId: string) => boolean;
 }
 
+// The same id rules as everywhere else, so a malformed id is rejected here rather than quietly
+// creating something unreachable.
 const paramsSchema = z.object({
-  instanceId: z.string().min(1),
+  instanceId: overlayInstanceIdSchema,
 });
 
 const querySchema = z.object({
@@ -35,7 +45,35 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
   app,
   options,
 ) => {
-  const { store } = options;
+  const { store, isConfigured } = options;
+
+  /**
+   * Accept a `POST` that declares JSON and sends nothing.
+   *
+   * These endpoints take everything from the URL, so a body is never needed — but a stream deck
+   * configured to `POST` will happily send `content-type: application/json` with an empty body, and
+   * the default parser rejects that as a bad request. On air that is a dead button, caused by a
+   * technicality the operator cannot see. Scoped to this plugin, so the config routes still reject
+   * an empty body where one is genuinely required.
+   */
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body, done: (error: Error | null, result?: unknown) => void) => {
+      const raw = typeof body === 'string' ? body.trim() : '';
+      if (raw === '') return done(null, {});
+
+      try {
+        done(null, JSON.parse(raw));
+      } catch (cause) {
+        // Fastify turns a parser error into a 500 unless it carries a status. The built-in JSON
+        // parser sets 400; replacing it means taking that responsibility on too.
+        const error = cause as Error & { statusCode?: number };
+        error.statusCode = 400;
+        done(error);
+      }
+    },
+  );
 
   /**
    * Optional shared secret, off by default.
@@ -54,6 +92,7 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
   const responseSchema = {
     200: overlayVisibilitySchema,
     401: z.object({ error: z.string() }),
+    404: z.object({ error: z.string() }),
   };
 
   function register(
@@ -81,7 +120,15 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
           return;
         }
 
-        return apply(request.params.instanceId);
+        const { instanceId } = request.params;
+        if (isConfigured && !isConfigured(instanceId)) {
+          await reply
+            .code(404)
+            .send({ error: `No overlay with the id "${instanceId}". Check the address.` });
+          return;
+        }
+
+        return apply(instanceId);
       },
     });
   }

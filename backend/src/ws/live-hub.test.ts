@@ -1,8 +1,7 @@
-import type { ServerMessage } from '@cdf/shared';
+import type { ServerMessage, TeamRosterEntry } from '@cdf/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { IngestUpdate } from '../ingest/source.js';
 import { MatchStore } from '../state/match-store.js';
-import type { TeamRosterEntry } from '../state/roster.js';
 import { LiveHub, type LiveClient } from './live-hub.js';
 
 const roster: TeamRosterEntry[] = [

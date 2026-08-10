@@ -1,5 +1,5 @@
-import type { IngestSourceKind, MatchPhase } from '@cdf/shared';
-import { DEFAULT_TEAM_ROSTER, type TeamRosterEntry } from '../state/roster.js';
+import type { IngestSourceKind, MatchPhase, TeamRosterEntry } from '@cdf/shared';
+import { DEFAULT_TEAM_ROSTER } from '@cdf/shared';
 import type { IngestPlayer, IngestSource, IngestSourceEvents } from './source.js';
 
 export interface MockSourceOptions {
@@ -85,7 +85,7 @@ export class MockSource implements IngestSource {
   private matchNumber = 0;
 
   constructor(options: MockSourceOptions = {}) {
-    this.roster = options.roster ?? DEFAULT_TEAM_ROSTER;
+    this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
     this.tickMs = options.tickMs ?? 2000;
     this.rng = createRng(options.seed ?? 20260809);
   }

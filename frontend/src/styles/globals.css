@@ -60,8 +60,14 @@
    * The overlay is authored against a 1920×1080 grid; this converts it to whatever the browser
    * source is actually running at. Both terms are divided so the scale is uniform and the aspect
    * ratio is never distorted — at 1080p it resolves to 1px, at 1440p to 1.333px, at 4K to 2px.
+   *
+   * Split into two properties so they compose: `--overlay-base-unit` is what the *surface* dictates,
+   * and the overlay derives `--overlay-unit` from it by applying the operator's size setting. The
+   * admin preview overrides only the base, pinning it to the preview box instead of the viewport,
+   * and the operator's scale still applies on top.
    */
-  --overlay-unit: min(100vw / 1920, 100vh / 1080);
+  --overlay-base-unit: min(100vw / 1920, 100vh / 1080);
+  --overlay-unit: var(--overlay-base-unit);
 }
 
 .dark {

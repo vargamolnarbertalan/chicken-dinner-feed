@@ -1,5 +1,7 @@
+import { DEFAULT_OVERLAY_APPEARANCE } from '@cdf/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect } from 'react';
+import { appearanceToAnimation, appearanceToPosition } from '@/components/overlay/appearance';
 import { LeaderboardOverlay } from '@/components/overlay/LeaderboardOverlay';
 import { u } from '@/components/overlay/overlay-scale';
 import { useLiveStore } from '@/stores/live-store';
@@ -17,7 +19,8 @@ export interface OverlayPageProps {
  */
 export function OverlayPage({ instanceId }: OverlayPageProps) {
   const snapshot = useLiveStore((state) => state.snapshot);
-  const overlay = useLiveStore((state) => state.overlay);
+  const overlay = useLiveStore((state) => state.overlayStates[instanceId]);
+  const instance = useLiveStore((state) => state.instances[instanceId] ?? null);
   const protocolMismatch = useLiveStore((state) => state.protocolMismatch);
   const connect = useLiveStore((state) => state.connect);
 
@@ -59,15 +62,13 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
   // while waiting would flash the overlay on air whenever a hidden one is reloaded.
   if (!snapshot || !overlay) return null;
 
+  // An unconfigured id still renders, using the defaults. Showing nothing would look identical to a
+  // broken connection, and the operator has no way to tell them apart mid-broadcast.
+  const appearance = instance?.appearance ?? DEFAULT_OVERLAY_APPEARANCE;
+  const animation = appearanceToAnimation(appearance);
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: '50%',
-        left: u(24),
-        transform: 'translateY(-50%)',
-      }}
-    >
+    <div style={appearanceToPosition(appearance)}>
       {/*
        * `initial={false}` suppresses the animation on first paint only: an overlay that was already
        * on air when the page loaded must simply be there, not slide in as though a director had
@@ -77,14 +78,12 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
         {overlay.visible && (
           <motion.div
             key="panel"
-            initial={{ x: '-115%', opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '-115%', opacity: 0 }}
-            // TODO: drive duration and easing from the per-instance settings once the admin exists;
-            // these match the --overlay-anim-* tokens by hand for now.
-            transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+            initial={animation.initial}
+            animate={animation.animate}
+            exit={animation.exit}
+            transition={animation.transition}
           >
-            <LeaderboardOverlay match={snapshot.match} />
+            <LeaderboardOverlay match={snapshot.match} appearance={appearance} />
           </motion.div>
         )}
       </AnimatePresence>

@@ -13,6 +13,8 @@ import {
 } from 'fastify-type-provider-zod';
 import { config } from './config.js';
 import { createIngestSource } from './ingest/index.js';
+import { ConfigStore } from './persistence/config-store.js';
+import { configRoutes } from './routes/config.js';
 import { healthRoutes } from './routes/health.js';
 import { overlayControlRoutes } from './routes/overlay-control.js';
 import { MatchStore } from './state/match-store.js';
@@ -72,12 +74,47 @@ export async function buildApp(): Promise<AppContext> {
 
   await app.register(fastifyWebsocket);
 
+  // Configuration is loaded before anything else so a malformed file stops startup with a readable
+  // message, rather than surfacing as a broken overlay once the operator is on air (ADR-0004).
+  const configStore = new ConfigStore({
+    dataDir: config.dataDir,
+    onWarn: (message, detail) => app.log.error({ detail }, message),
+  });
+  await configStore.load();
+
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
-  const store = new MatchStore({ source: config.ingestSource });
+  const store = new MatchStore({
+    source: config.ingestSource,
+    roster: configStore.teams.current.teams,
+    ruleset: configStore.scoring.current,
+  });
   const overlayControl = new OverlayControlStore();
-  const hub = new LiveHub({ store, overlayControl });
+  const hub = new LiveHub({
+    store,
+    overlayControl,
+    resolveInstance: (instanceId) => configStore.findInstance(instanceId),
+    listInstanceIds: () => configStore.instances.current.instances.map((instance) => instance.id),
+  });
   const ingestSource = createIngestSource(config.ingestSource);
+
+  // Configuration changes have to reach the live path immediately: a new scoring ruleset changes
+  // the standings on air, and an appearance change must reach open browser sources without a reload.
+  configStore.subscribe((change) => {
+    switch (change) {
+      case 'teams':
+        store.setRoster(configStore.teams.current.teams);
+        hub.schedulePublish();
+        break;
+      case 'scoring':
+        store.setRuleset(configStore.scoring.current);
+        hub.schedulePublish();
+        break;
+      case 'instances':
+        hub.refreshAllOverlayStates();
+        break;
+    }
+  });
 
   if (config.isNetworkExposed) {
     app.log.warn(
@@ -91,7 +128,12 @@ export async function buildApp(): Promise<AppContext> {
   }
 
   await app.register(healthRoutes, { prefix: '/api' });
-  await app.register(overlayControlRoutes, { prefix: '/api', store: overlayControl });
+  await app.register(overlayControlRoutes, {
+    prefix: '/api',
+    store: overlayControl,
+    isConfigured: (instanceId) => configStore.findInstance(instanceId) !== null,
+  });
+  await app.register(configRoutes, { prefix: '/api', store: configStore });
   await app.register(liveRoutes, { prefix: '/ws', hub });
 
   // Serving the built frontend is what makes the bundle a single process (ADR-0001). In a fresh

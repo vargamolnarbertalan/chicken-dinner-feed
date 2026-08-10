@@ -4,24 +4,24 @@ Real-time bridge between the **PUBG Mobile PCOB API** and broadcast software. It
 telemetry, applies a configurable tournament scoring ruleset, and renders animated overlays that a
 broadcast tool can consume as browser sources.
 
-> **Status: in progress.** The live pipeline, the leaderboard overlay and Stream Deck control work
-> end to end against a simulated match. The **admin UI, persistence and real PCOB ingestion** are
-> not built yet — see [`docs/progression.md`](docs/progression.md).
+> **Status: in progress.** The live pipeline, the leaderboard overlay, configuration and the admin
+> UI all work end to end against a simulated match. **Team logos and real PCOB ingestion** are not
+> built yet — see [`docs/progression.md`](docs/progression.md).
 >
 > Try it: `npm install && npm run build && npm start`, then open
-> <http://127.0.0.1:4317/overlay/main> and toggle it with
-> <http://127.0.0.1:4317/api/overlays/main/toggle>.
+> <http://127.0.0.1:4317/admin> to configure, <http://127.0.0.1:4317/overlay/main> to watch, and
+> <http://127.0.0.1:4317/api/overlays/main/toggle> to animate it on and off.
 
 ---
 
 ## What it is
 
-|             |                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| **Input**   | The PCOB client's local HTTP API on the observer PC (`127.0.0.1:10086`), refreshed every ~2 s    |
-| **Output**  | Browser-source overlay pages at 1080p / 1440p / 4K (leaderboard, health bars, points, elims)     |
-| **Control** | Plain HTTP endpoints for Stream Deck / Bitfocus Companion, plus a local admin UI (not built yet) |
-| **Runs on** | The operator's Windows machine, entirely on localhost. No cloud, no database                     |
+|             |                                                                                               |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| **Input**   | The PCOB client's local HTTP API on the observer PC (`127.0.0.1:10086`), refreshed every ~2 s |
+| **Output**  | Browser-source overlay pages at 1080p / 1440p / 4K (leaderboard, health bars, points, elims)  |
+| **Control** | Plain HTTP endpoints for Stream Deck / Bitfocus Companion, plus a local admin UI              |
+| **Runs on** | The operator's Windows machine, entirely on localhost. No cloud, no database                  |
 
 The key constraint driving the design: **the PCOB API is a local Windows process**, not a remote
 service — see [`specs/PCOB-FINDINGS.md`](specs/PCOB-FINDINGS.md) and
