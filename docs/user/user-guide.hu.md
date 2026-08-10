@@ -4,10 +4,10 @@ _In English: [user-guide.en.md](user-guide.en.md)_
 
 Ez az útmutató a közvetítést kezelő operátornak készült. Programozói ismereteket nem feltételez.
 
-> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay, az admin felület és
-> a Stream Deck vezérlés az itt leírtak szerint működik. A csapat**logók** még nincsenek kész, és az
-> élő játékkapcsolathoz még hiányzik a valódi PCOB adapter — addig az alkalmazás szimulált
-> meccsadatokon fut, így előre be tudsz állítani mindent.
+> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay, az admin felület, a
+> csapatlogók és a Stream Deck vezérlés az itt leírtak szerint működik. Az élő játékkapcsolathoz még
+> hiányzik a valódi PCOB adapter — addig az alkalmazás szimulált meccsadatokon fut, így előre be
+> tudsz állítani mindent.
 
 ---
 
@@ -218,11 +218,23 @@ Companion gombokba, tehát az átnevezés csendben eltörné őket. Helyette hoz
 
 ### Teams fül
 
-Csapatnevek és rövid nevek, csapatszám szerint. **A szám az a slot, amit a játék jelent** — meg kell
-egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított, különben
-rossz csapat játékosai jelennek meg rossz sorban. A rövid nevet írja ki az overlay.
+Csapatnevek, rövid nevek és logók, csapatszám szerint. **A szám az a slot, amit a játék jelent** —
+meg kell egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított,
+különben rossz csapat játékosai jelennek meg rossz sorban. A rövid nevet írja ki az overlay.
 
-Ha kész vagy, nyomd meg a **Save teams** gombot.
+**Kezdd az Import TeamLogoAndColor.ini gombbal.** Ezt a fájlt az observer amúgy is karbantartja a
+PCOB kliens számára, és az importálás egy lépésben kitölti az összes csapatszámot, nevet és logót —
+16–25 sor kézi begépelése helyett. A teljes listát **lecseréli**, mert az a fájl az esemény
+csapatlistája. Ha egy logó útvonal már nem létezik, az import megmondja, hány hiányzott, nem hagyja,
+hogy adásban derüljön ki.
+
+**Logók.** Kattints a csapat melletti négyzetre, és válassz képet; azonnal feltöltődik és rögtön
+megjelenik az adásban is — ehhez nem kell Save. A kis × eltávolítja. PNG, JPEG, WebP és SVG
+támogatott, 2 MB-ig. Ha van, válaszd az **SVG**-t: az overlay 4K-ig megy, és vektoros logó az
+egyetlen, ami ott is éles marad. Egyébként legalább 256 × 256 legyen. A logók mögötti kockás minta
+azért van ott, hogy lásd, mely részek átlátszók.
+
+A logókon kívül minden máshoz kell a **Save teams** gomb.
 
 ### Scoring fül
 

@@ -202,15 +202,35 @@ the socket.
 
 ---
 
-## Next — round 3
+## Done — round 3, part 1 (2026-08-10): team logos
 
-1. **Team logos** — upload or point at a folder, replacing the placeholder squares. The
-   `TeamLogoAndColor.ini` import is the cheap win here (`specs/PCOB-FINDINGS.md` §3).
-2. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
-3. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+- **Upload, preview and removal** per team, with the format identified from the file's own bytes
+  rather than its name or declared type — both come from the client and are wrong often enough to
+  matter. PNG, JPEG, WebP and SVG, capped at 2 MB. SVG is allowed deliberately: overlays run to 4K
+  and a vector logo is the only kind that stays sharp there (ADR-0011).
+- **Logo URLs carry a version**, so replacing a logo actually shows up in a browser source that has
+  been open all day rather than being served from cache.
+- **`TeamLogoAndColor.ini` import** — the cheap win flagged since round 1. It reads the file the
+  observer already maintains for the PCOB client, and fills in every team number, name and logo in
+  one step. It copies the logos the ini points at, and reports the paths it could not find rather
+  than quietly skipping them. Replaces the roster rather than merging, because that file is the
+  event's team list; the confirmation says so.
+- Uploading links the logo into the roster immediately, without a separate save. An uploaded logo
+  that is not used looks exactly like an upload that failed.
+
+**Verified by running it:** a PNG and an SVG uploaded and rendered on the overlay; a text file
+renamed `.png` rejected; path traversal on the logo route refused; a six-team ini imported with five
+logos copied and one dead path reported.
+
+---
+
+## Next — round 3, part 2
+
+1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
-4. **Post-match export** — the workflow the client performs by hand today.
-5. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
+3. **Post-match export** — the workflow the client performs by hand today.
+4. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
 
 ### Backlog
 
