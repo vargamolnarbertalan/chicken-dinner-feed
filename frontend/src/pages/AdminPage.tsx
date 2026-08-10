@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
+import { ImportIniButton } from '@/features/admin/ImportIniButton';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
 import { OnAirBadge } from '@/features/admin/OnAirBadge';
 import { OverlayPreview } from '@/features/admin/OverlayPreview';
@@ -478,6 +479,7 @@ export function AdminPage() {
 
         {tab === 'teams' && teams && (
           <div className="grid max-w-3xl gap-4">
+            <ImportIniButton onImported={setTeams} />
             <TeamRosterEditor document={teams} onChange={setTeams} />
             <button
               type="button"

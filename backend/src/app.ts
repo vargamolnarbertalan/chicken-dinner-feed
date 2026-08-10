@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import fastifyCors from '@fastify/cors';
+import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -14,7 +15,9 @@ import {
 import { config } from './config.js';
 import { createIngestSource } from './ingest/index.js';
 import { ConfigStore } from './persistence/config-store.js';
+import { LogoStore, MAX_LOGO_BYTES } from './persistence/logo-store.js';
 import { configRoutes } from './routes/config.js';
+import { logoRoutes } from './routes/logos.js';
 import { healthRoutes } from './routes/health.js';
 import { overlayControlRoutes } from './routes/overlay-control.js';
 import { MatchStore } from './state/match-store.js';
@@ -73,6 +76,7 @@ export async function buildApp(): Promise<AppContext> {
   });
 
   await app.register(fastifyWebsocket);
+  await app.register(fastifyMultipart, { limits: { fileSize: MAX_LOGO_BYTES, files: 1 } });
 
   // Configuration is loaded before anything else so a malformed file stops startup with a readable
   // message, rather than surfacing as a broken overlay once the operator is on air (ADR-0004).
@@ -81,6 +85,9 @@ export async function buildApp(): Promise<AppContext> {
     onWarn: (message, detail) => app.log.error({ detail }, message),
   });
   await configStore.load();
+
+  const logoStore = new LogoStore(config.dataDir);
+  await logoStore.init();
 
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
@@ -134,6 +141,15 @@ export async function buildApp(): Promise<AppContext> {
     isConfigured: (instanceId) => configStore.findInstance(instanceId) !== null,
   });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
+  await app.register(logoRoutes, { prefix: '/api', logos: logoStore, config: configStore });
+
+  // Team logos are operator files, not build output, so they are served from the data directory.
+  // `decorateReply: false` because the frontend's static plugin already owns `reply.sendFile`.
+  await app.register(fastifyStatic, {
+    root: logoStore.root,
+    prefix: '/api/logos/',
+    decorateReply: false,
+  });
   await app.register(liveRoutes, { prefix: '/ws', hub });
 
   // Serving the built frontend is what makes the bundle a single process (ADR-0001). In a fresh

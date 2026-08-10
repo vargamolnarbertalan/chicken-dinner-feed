@@ -4,10 +4,10 @@ _Magyarul: [user-guide.hu.md](user-guide.hu.md)_
 
 This guide is for the person operating the broadcast. It assumes no programming knowledge.
 
-> **This version is in progress.** Installation, startup, the leaderboard overlay, the admin page
-> and Stream Deck control all work as described. Team **logos** are not implemented yet, and the
-> live game connection still needs the real PCOB adapter — until then the app runs on simulated
-> match data so you can set everything up in advance.
+> **This version is in progress.** Installation, startup, the leaderboard overlay, the admin page,
+> team logos and Stream Deck control all work as described. The live game connection still needs the
+> real PCOB adapter — until then the app runs on simulated match data, so you can set everything up
+> in advance.
 
 ---
 
@@ -210,11 +210,23 @@ Companion buttons, so renaming it would silently break them. Create a new overla
 
 ### Teams tab
 
-Team names and short names, by team number. **The number is the slot the game reports** — it has to
-match the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's players will
-appear on the wrong row. The short name is what the overlay prints.
+Team names, short names and logos, by team number. **The number is the slot the game reports** — it
+has to match the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's
+players will appear on the wrong row. The short name is what the overlay prints.
 
-Press **Save teams** when you are done.
+**Start with Import TeamLogoAndColor.ini.** That is the file your observer already maintains for the
+PCOB client, and importing it fills in every team number, name and logo in one step instead of
+typing 16–25 rows by hand. It **replaces** the whole list, because that file is the team list for
+the event. If a logo path in it no longer exists, the import says how many were missing rather than
+leaving you to notice on air.
+
+**Logos.** Click the square beside a team to pick an image; it uploads immediately and appears on air
+straight away — no need to press Save for that. The small × removes it. PNG, JPEG, WebP and SVG are
+accepted, up to 2 MB. Prefer **SVG** if you have it: overlays run at up to 4K and a vector logo is
+the only kind that stays sharp there. Otherwise use at least 256 × 256. The chequered background
+behind each logo is there so you can see which parts are transparent.
+
+Everything except the logos needs **Save teams**.
 
 ### Scoring tab
 

@@ -1,4 +1,5 @@
 import type { TeamRosterDocument, TeamRosterEntry } from '@cdf/shared';
+import { TeamLogoCell } from './TeamLogoCell';
 
 export interface TeamRosterEditorProps {
   document: TeamRosterDocument;
@@ -33,7 +34,8 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
     <div className="grid gap-3">
       <p className="text-muted-foreground text-xs">
         The number is the slot the game reports, matching your <code>TeamLogoAndColor.ini</code>.
-        The short name is what the overlay prints.
+        The short name is what the overlay prints. Logos upload as soon as you pick them — the rest
+        of the row needs <strong>Save teams</strong>. Importing an ini replaces this whole list.
       </p>
 
       <div className="grid gap-2">
@@ -42,11 +44,22 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
           .map((team) => (
             <div
               key={team.teamNo}
-              className="grid grid-cols-[3rem_1fr_7rem_2rem] items-center gap-2"
+              className="grid grid-cols-[2.5rem_4.5rem_1fr_7rem_2rem] items-center gap-2"
             >
               <span className="text-muted-foreground text-center text-sm tabular-nums">
                 {team.teamNo}
               </span>
+              <TeamLogoCell
+                team={team}
+                onChange={(updated) =>
+                  onChange({
+                    ...document,
+                    teams: document.teams.map((entry) =>
+                      entry.teamNo === updated.teamNo ? updated : entry,
+                    ),
+                  })
+                }
+              />
               <input
                 type="text"
                 aria-label={`Team ${team.teamNo} name`}
