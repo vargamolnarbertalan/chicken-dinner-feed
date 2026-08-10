@@ -1,7 +1,6 @@
-import type { ScoringRuleset } from '@cdf/shared';
+import type { ScoringRuleset, TeamRosterEntry } from '@cdf/shared';
 import { describe, expect, it } from 'vitest';
 import type { IngestPlayer } from '../ingest/source.js';
-import type { TeamRosterEntry } from '../state/roster.js';
 import { computeStandings } from './standings.js';
 
 const ruleset: ScoringRuleset = {

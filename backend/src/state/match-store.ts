@@ -4,11 +4,11 @@ import type {
   IngestStatus,
   MatchState,
   ScoringRuleset,
+  TeamRosterEntry,
 } from '@cdf/shared';
-import { DEFAULT_SCORING_RULESET } from '@cdf/shared';
+import { DEFAULT_SCORING_RULESET, DEFAULT_TEAM_ROSTER } from '@cdf/shared';
 import type { IngestUpdate } from '../ingest/source.js';
 import { computeStandings } from '../scoring/standings.js';
-import { DEFAULT_TEAM_ROSTER, type TeamRosterEntry } from './roster.js';
 
 export interface MatchStoreOptions {
   source: IngestSourceKind;
@@ -35,8 +35,8 @@ export interface Projection {
  * what stops the overlay blanking out on air (ADR-0006).
  */
 export class MatchStore {
-  private readonly roster: readonly TeamRosterEntry[];
   private readonly staleAfterMs: number;
+  private roster: readonly TeamRosterEntry[];
   private ruleset: ScoringRuleset;
 
   private lastUpdate: IngestUpdate | null = null;
@@ -49,13 +49,23 @@ export class MatchStore {
   private readonly eliminated = new Set<number>();
 
   constructor(private readonly options: MatchStoreOptions) {
-    this.roster = options.roster ?? DEFAULT_TEAM_ROSTER;
+    this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
     this.ruleset = options.ruleset ?? DEFAULT_SCORING_RULESET;
     this.staleAfterMs = options.staleAfterMs ?? 10_000;
   }
 
   setRuleset(ruleset: ScoringRuleset): void {
     this.ruleset = ruleset;
+  }
+
+  /**
+   * Replace the roster.
+   *
+   * Applied to the next projection rather than to stored state, so an operator fixing a team name
+   * mid-match sees it on air at the next update without disturbing the standings.
+   */
+  setRoster(roster: readonly TeamRosterEntry[]): void {
+    this.roster = roster;
   }
 
   setStatus(state: IngestConnectionState, message: string | null = null): void {

@@ -3,7 +3,7 @@
 The running record of what is done, what is next, and what is blocked. Required by
 `specs/APP-PLAN.md`. Update it in the same commit as the work it describes.
 
-**Last updated:** 2026-08-09 · **Version:** 0.1.0 · **Phase:** scaffold · **Client:** Esport1 (Zsófia Berze)
+**Last updated:** 2026-08-10 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
 
 ---
 
@@ -161,17 +161,47 @@ flashing the overlay on air.
 
 ---
 
-## Next — round 2, part 3
+## Done — round 2, part 3 (2026-08-10): persistence and the admin
 
-1. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
-   team roster and scoring ruleset as documents. Replaces the in-memory default roster and turns
-   overlay ids into real entities. _(ADR-0004)_
-2. **Admin** — instance CRUD, appearance settings bound to CSS custom properties, show/hide
-   animation controls, scoring ruleset editing. Live preview is nice-to-have. _(ADR-0008)_
-3. **Team logos** — resolve and serve them, replacing the placeholder squares.
-4. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
-5. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+The app is now configurable rather than hardcoded.
+
+- **Persistence** ([ADR-0004](adr/0004-json-file-persistence.md)) — three JSON documents, split by
+  aggregate so saving overlay appearance cannot corrupt the team roster. **Writes are atomic**
+  (temp file → `fsync` → rename), because configuration is saved by someone who may be minutes from
+  air on a machine that could lose power, and a truncated file would cost a whole tournament's
+  setup. **Reads are schema-validated and fail loudly**, since hand-editing these files in Notepad
+  is a supported workflow.
+- **Config API** — overlay instances (create / update / delete), team roster, scoring ruleset.
+  Guard rails return operator-language errors: duplicate ids, duplicate team numbers, and changing
+  an instance id are all refused, the last because it would silently break every browser source and
+  Companion button already pointing at it.
+- **Admin UI** — instance list with create/duplicate/delete, appearance editor (placement, size,
+  font, colours, animation, teams shown), team roster editor, scoring editor, and a connection
+  indicator that says what to do rather than just showing a colour.
+- **Live preview** — the _real_ overlay component, driven by real match data. Downgraded to
+  nice-to-have and delivered anyway, because admin-as-a-route made it nearly free. Two modes: full
+  canvas for placement, actual size for colour and legibility — the panel is under a fifth of the
+  canvas, so one view cannot do both jobs.
+- **Config reaches the live path immediately.** A scoring change recomputes the standings on air; an
+  appearance change is pushed to open browser sources over the existing per-instance channel.
+- **Tests owed from the last round paid off** — the control store and the atomic repository.
+
+**Verified by running it:** config seeded on first start; duplicate id, duplicate team number and id
+rename all rejected with readable messages; scoring changed from 1 to 5 points per elimination and
+the standings updated live; an appearance colour saved in the admin arrived at an open overlay over
+the socket.
+
+---
+
+## Next — round 3
+
+1. **Team logos** — upload or point at a folder, replacing the placeholder squares. The
+   `TeamLogoAndColor.ini` import is the cheap win here (`specs/PCOB-FINDINGS.md` §3).
+2. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+3. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
+4. **Post-match export** — the workflow the client performs by hand today.
+5. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
 
 ### Backlog
 

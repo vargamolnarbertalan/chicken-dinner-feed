@@ -1,4 +1,4 @@
-import type { LiveSnapshot, OverlayVisibility } from '@cdf/shared';
+import type { LiveSnapshot, OverlayInstance, OverlayVisibility } from '@cdf/shared';
 import { create } from 'zustand';
 import { LiveConnection, type ConnectionPhase } from '@/lib/live-connection';
 
@@ -15,6 +15,8 @@ interface LiveState {
    */
   snapshot: LiveSnapshot | null;
   overlay: OverlayVisibility | null;
+  /** This instance's configuration, or null when the id has not been configured in the admin. */
+  instance: OverlayInstance | null;
   /**
    * False until the first visibility message has been applied. Lets the overlay appear in its
    * current state on load instead of animating in as though a director had just triggered it.
@@ -30,6 +32,7 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   protocolMismatch: null,
   snapshot: null,
   overlay: null,
+  instance: null,
   hasAnimatedIn: false,
 
   connect(instanceId) {
@@ -43,7 +46,7 @@ export const useLiveStore = create<LiveState>((set, get) => ({
             set({ snapshot: message.snapshot });
             break;
           case 'overlay':
-            set({ overlay: message.overlay });
+            set({ overlay: message.overlay, instance: message.instance });
             break;
           case 'error':
             console.error('[live] server reported an error:', message.message);

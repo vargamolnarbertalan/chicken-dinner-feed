@@ -1,4 +1,4 @@
-import type { LiveSnapshot, ServerMessage } from '@cdf/shared';
+import type { LiveSnapshot, OverlayInstance, ServerMessage } from '@cdf/shared';
 import { PROTOCOL_VERSION } from '@cdf/shared';
 import type { MatchStore, Projection } from '../state/match-store.js';
 import type { OverlayControlStore } from '../state/overlay-control-store.js';
@@ -21,6 +21,8 @@ export interface LiveHubOptions {
   store: MatchStore;
   /** Optional: without it the hub serves match data only and no visibility messages are sent. */
   overlayControl?: OverlayControlStore;
+  /** Resolves an instance's configuration. Returns null for an id that is not configured. */
+  resolveInstance?: (instanceId: string) => OverlayInstance | null;
   /**
    * Updates arriving faster than this collapse into one broadcast. Bounds client work regardless of
    * how the source behaves, and costs at most this much latency.
@@ -47,6 +49,7 @@ export class LiveHub {
   private readonly clients = new Map<LiveClient, string | null>();
   private readonly store: MatchStore;
   private readonly overlayControl: OverlayControlStore | undefined;
+  private readonly resolveInstance: ((instanceId: string) => OverlayInstance | null) | undefined;
   private readonly coalesceMs: number;
   private readonly staleCheckMs: number;
 
@@ -61,6 +64,7 @@ export class LiveHub {
   constructor(options: LiveHubOptions) {
     this.store = options.store;
     this.overlayControl = options.overlayControl;
+    this.resolveInstance = options.resolveInstance;
     this.coalesceMs = options.coalesceMs ?? 50;
     this.staleCheckMs = options.staleCheckMs ?? 1000;
   }
@@ -75,14 +79,7 @@ export class LiveHub {
     // press must not wait for the next coalescing window.
     this.unsubscribeOverlayControl ??=
       this.overlayControl?.subscribe((state) => {
-        const message: ServerMessage = {
-          type: 'overlay',
-          protocolVersion: PROTOCOL_VERSION,
-          overlay: state,
-        };
-        for (const [client, instanceId] of this.clients) {
-          if (instanceId === state.instanceId) this.sendTo(client, message);
-        }
+        this.sendOverlayState(state.instanceId);
       }) ?? null;
   }
 
@@ -101,15 +98,47 @@ export class LiveHub {
     const snapshot = this.lastSnapshot ?? this.buildSnapshot(this.store.project());
     this.sendTo(client, { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, snapshot });
 
-    // Send current visibility straight away, so a browser source reloaded mid-show comes back in
-    // the state it was in rather than defaulting to visible and flashing on air.
+    // Send current visibility and configuration straight away, so a browser source reloaded
+    // mid-show comes back in the state it was in rather than defaulting to visible and flashing.
     if (instanceId && this.overlayControl) {
-      this.sendTo(client, {
-        type: 'overlay',
-        protocolVersion: PROTOCOL_VERSION,
-        overlay: this.overlayControl.get(instanceId),
-      });
+      this.sendTo(client, this.overlayMessage(instanceId));
     }
+  }
+
+  /**
+   * Push an instance's visibility and configuration to the overlays rendering it.
+   *
+   * Called both when a director triggers show/hide and when an operator edits appearance in the
+   * admin — an appearance change has to reach open browser sources without a reload.
+   */
+  sendOverlayState(instanceId: string): void {
+    if (!this.overlayControl) return;
+
+    const message = this.overlayMessage(instanceId);
+    for (const [client, clientInstance] of this.clients) {
+      if (clientInstance === instanceId) this.sendTo(client, message);
+    }
+  }
+
+  /** Every configured instance — used after a bulk config change. */
+  refreshAllOverlayStates(): void {
+    const instanceIds = new Set(
+      [...this.clients.values()].filter((id): id is string => id !== null),
+    );
+    for (const instanceId of instanceIds) this.sendOverlayState(instanceId);
+  }
+
+  private overlayMessage(instanceId: string): ServerMessage {
+    return {
+      type: 'overlay',
+      protocolVersion: PROTOCOL_VERSION,
+      overlay: this.overlayControl?.get(instanceId) ?? {
+        instanceId,
+        visible: true,
+        changedAt: 0,
+      },
+      instance: this.resolveInstance?.(instanceId) ?? null,
+    };
   }
 
   removeClient(client: LiveClient): void {

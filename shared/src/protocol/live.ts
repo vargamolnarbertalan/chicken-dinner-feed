@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ingestStatusSchema } from '../domain/ingest.js';
 import { matchStateSchema } from '../domain/match.js';
+import { overlayInstanceSchema } from '../config/overlay-instance.js';
 import { overlayVisibilitySchema } from '../domain/overlay.js';
 
 /**
@@ -48,6 +49,14 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('overlay'),
     protocolVersion: z.number().int(),
     overlay: overlayVisibilitySchema,
+    /**
+     * The instance's configuration, or null when the id has not been configured.
+     *
+     * Carried on the same channel as visibility so an appearance change made in the admin reaches
+     * every browser source immediately, with no reload — which is also what makes the admin's live
+     * preview genuinely live.
+     */
+    instance: overlayInstanceSchema.nullable(),
   }),
   z.object({
     type: z.literal('error'),

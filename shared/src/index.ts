@@ -43,3 +43,28 @@ export type { LiveSnapshot, ServerMessage } from './protocol/live.js';
 
 export { scoringRulesetSchema, DEFAULT_SCORING_RULESET } from './config/scoring.js';
 export type { ScoringRuleset } from './config/scoring.js';
+
+export {
+  overlayColorsSchema,
+  overlayAnimationSchema,
+  overlayAppearanceSchema,
+  overlayInstanceIdSchema,
+  overlayInstanceSchema,
+  overlayInstancesDocumentSchema,
+  DEFAULT_OVERLAY_APPEARANCE,
+  DEFAULT_OVERLAY_INSTANCES,
+} from './config/overlay-instance.js';
+export type {
+  OverlayColors,
+  OverlayAnimation,
+  OverlayAppearance,
+  OverlayInstance,
+  OverlayInstancesDocument,
+} from './config/overlay-instance.js';
+
+export {
+  teamRosterEntrySchema,
+  teamRosterDocumentSchema,
+  DEFAULT_TEAM_ROSTER,
+} from './config/team-roster.js';
+export type { TeamRosterEntry, TeamRosterDocument } from './config/team-roster.js';

@@ -1,6 +1,5 @@
-import type { Player, ScoringRuleset, Team } from '@cdf/shared';
+import type { Player, ScoringRuleset, Team, TeamRosterEntry } from '@cdf/shared';
 import type { IngestPlayer } from '../ingest/source.js';
-import type { TeamRosterEntry } from '../state/roster.js';
 
 export interface StandingsInput {
   players: readonly IngestPlayer[];

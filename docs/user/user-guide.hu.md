@@ -4,10 +4,10 @@ _In English: [user-guide.en.md](user-guide.en.md)_
 
 Ez az útmutató a közvetítést kezelő operátornak készült. Programozói ismereteket nem feltételez.
 
-> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay és a Stream Deck
-> vezérlés az itt leírtak szerint működik. Az **admin felület még nincs kész**, ezért a 8. fejezet
-> azt írja le, ami tervezett — és amíg nincs meg, az overlay azonosítókat te választod, nem egy
-> felületen hozod létre őket.
+> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay, az admin felület és
+> a Stream Deck vezérlés az itt leírtak szerint működik. A csapat**logók** még nincsenek kész, és az
+> élő játékkapcsolathoz még hiányzik a valódi PCOB adapter — addig az alkalmazás szimulált
+> meccsadatokon fut, így előre be tudsz állítani mindent.
 
 ---
 
@@ -120,9 +120,9 @@ Ha meccs közben szakad meg a kapcsolat, az overlay **az utoljára kapott adatot
 
 ## 6. Overlay hozzáadása a közvetítő szoftverhez
 
-1. Válassz az overlaynek egy rövid nevet — bármi lehet, például `main`. Ez lesz az **azonosítója**, a
-   címe pedig `http://127.0.0.1:4317/overlay/main`. (Ha majd elkészül az admin felület, ott hozod
-   létre a példányokat, nem magadnak kell azonosítót választanod.)
+1. Nyisd meg az admin felületet, és menj az **Overlays** fülre. Minden overlaynek van egy
+   **azonosítója**, ami a neve alatt látszik — a cím `http://127.0.0.1:4317/overlay/<id>`. Egy
+   `main` overlay eleve létezik; továbbiakat az **Add an overlay** gombbal hozol létre.
 2. OBS-ben: **Források → + → Böngésző**, illeszd be a címet, a szélességet és magasságot állítsd a
    vászon méretére. **1920 × 1080, 2560 × 1440 és 3840 × 2160 is támogatott** — az overlay magától
    skálázódik, és mindháromnál ugyanúgy néz ki, tehát felbontásonként nincs mit beállítani.
@@ -181,20 +181,57 @@ felületet nem.
 
 ## 8. Overlayek beállítása
 
-_Hamarosan._ A tervezett beállítások, overlay példányonként:
+Minden az admin felületen van: `http://127.0.0.1:4317/admin`.
 
-- színek, betűtípusok és betűméretek;
-- méret és pozíció a vásznon;
-- fel- és leanimálás, állítható sebességgel;
-- csapatnevek és logók;
-- a pontozási szabályrendszer — helyezési pontok és pont/kiütés.
+### Overlays fül
 
-Minden változást **élő előnézet** mutat, ami a valódi overlayt jeleníti meg, tehát pontosan azt
-látod, ami adásba megy.
+Válassz ki balra egy overlayt, majd állítsd:
 
-**A pontokat ez az alkalmazás számolja, nem a játék.** A PCOB API nem ad versenypontokat, ezért a
-pontozási szabályrendszernek meg kell egyeznie a te versenyed szabályaival. Közvetítés előtt
-ellenőrizd.
+- **Placement** — a képernyő melyik oldalán, milyen távol az adott széltől, függőlegesen középen
+  legyen-e, és mekkora. A távolságok 1080p pixelben értendők, és 1440p-n meg 4K-n is ugyanazt
+  jelentik.
+- **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat.
+- **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
+  félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
+  megmaradjon az átlátszóság.
+- **Show / hide animation** — irány, sebesség, lefutás.
+
+⚠️ **A változtatások csak a Save gomb megnyomásakor kerülnek adásba.** Az előnézet gépelés közben
+frissül.
+
+Az előnézetnek két módja van. A **Full canvas** a teljes 16∶9 képet mutatja — ezen az elhelyezést
+tudod megítélni. Az **Actual size** valódi 1080p pixelekben jelenít meg — ezen a színeket és azt,
+hogy olvashatók-e a nevek. A kockás háttér a videót helyettesíti, hogy lásd, hogyan mutatnak az
+átlátszó hátterek.
+
+Második overlay létrehozásához — például egy világos és egy sötét változat ugyanabból az adatból —
+írj be egy azonosítót, és nyomd meg az **Add an overlay** gombot. A kiválasztott overlay
+megjelenését másolja, tehát van miből kiindulni.
+
+**Az overlay azonosítója létrehozás után nem módosítható.** Bele van égetve a browser source-ba és a
+Companion gombokba, tehát az átnevezés csendben eltörné őket. Helyette hozz létre újat.
+
+### Teams fül
+
+Csapatnevek és rövid nevek, csapatszám szerint. **A szám az a slot, amit a játék jelent** — meg kell
+egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított, különben
+rossz csapat játékosai jelennek meg rossz sorban. A rövid nevet írja ki az overlay.
+
+Ha kész vagy, nyomd meg a **Save teams** gombot.
+
+### Scoring fül
+
+**A pontokat ez az alkalmazás számolja, nem a játék.** A PCOB API egyáltalán nem ad versenypontokat,
+ezért ennek meg kell egyeznie a te versenyed szabályaival — minden esemény előtt ellenőrizd.
+
+- **Points per elimination** — minden kiütésért járó pont.
+- **Placement points** — akkor jár, ha a csapat kiesik, vagy ha véget ér a meccs. Egy még játékban
+  lévő csapat még nem helyezett, tehát innen nem kap pontot. A lista végén túli helyezések nulla
+  pontot érnek.
+
+Az alapértelmezés a standard PUBG Mobile tábla (10/6/5/4/3/2/1/1, 1 pont/kill).
+
+A mentés azonnal érvénybe lép, meccs közben is.
 
 ## 9. A beállításaid
 
