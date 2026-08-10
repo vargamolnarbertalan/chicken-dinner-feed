@@ -1,4 +1,4 @@
-import type { LiveSnapshot, OverlayInstance, ServerMessage } from '@cdf/shared';
+import type { CustomFont, LiveSnapshot, OverlayInstance, ServerMessage } from '@cdf/shared';
 import { PROTOCOL_VERSION } from '@cdf/shared';
 import type { MatchStore, Projection } from '../state/match-store.js';
 import type { OverlayControlStore } from '../state/overlay-control-store.js';
@@ -25,6 +25,8 @@ export interface LiveHubOptions {
   resolveInstance?: (instanceId: string) => OverlayInstance | null;
   /** Every configured instance id, so an observer can be told about all of them. */
   listInstanceIds?: () => string[];
+  /** Uploaded fonts, sent with every overlay message so a browser source can register them. */
+  listFonts?: () => CustomFont[];
   /**
    * Updates arriving faster than this collapse into one broadcast. Bounds client work regardless of
    * how the source behaves, and costs at most this much latency.
@@ -53,6 +55,7 @@ export class LiveHub {
   private readonly overlayControl: OverlayControlStore | undefined;
   private readonly resolveInstance: ((instanceId: string) => OverlayInstance | null) | undefined;
   private readonly listInstanceIds: (() => string[]) | undefined;
+  private readonly listFonts: (() => CustomFont[]) | undefined;
   private readonly coalesceMs: number;
   private readonly staleCheckMs: number;
 
@@ -69,6 +72,7 @@ export class LiveHub {
     this.overlayControl = options.overlayControl;
     this.resolveInstance = options.resolveInstance;
     this.listInstanceIds = options.listInstanceIds;
+    this.listFonts = options.listFonts;
     this.coalesceMs = options.coalesceMs ?? 50;
     this.staleCheckMs = options.staleCheckMs ?? 1000;
   }
@@ -152,6 +156,7 @@ export class LiveHub {
         changedAt: 0,
       },
       instance: this.resolveInstance?.(instanceId) ?? null,
+      fonts: this.listFonts?.() ?? [],
     };
   }
 

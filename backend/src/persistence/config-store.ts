@@ -1,11 +1,15 @@
 import path from 'node:path';
 import type {
+  CustomFont,
+  CustomFontsDocument,
   OverlayInstance,
   OverlayInstancesDocument,
   ScoringRuleset,
   TeamRosterDocument,
 } from '@cdf/shared';
 import {
+  customFontsDocumentSchema,
+  DEFAULT_CUSTOM_FONTS,
   DEFAULT_OVERLAY_INSTANCES,
   DEFAULT_SCORING_RULESET,
   DEFAULT_TEAM_ROSTER,
@@ -15,7 +19,7 @@ import {
 } from '@cdf/shared';
 import { JsonDocument } from './json-document.js';
 
-export type ConfigChange = 'instances' | 'teams' | 'scoring';
+export type ConfigChange = 'instances' | 'teams' | 'scoring' | 'fonts';
 export type ConfigListener = (change: ConfigChange) => void;
 
 export interface ConfigStoreOptions {
@@ -40,6 +44,7 @@ export class ConfigStore {
   readonly instances: JsonDocument<OverlayInstancesDocument>;
   readonly teams: JsonDocument<TeamRosterDocument>;
   readonly scoring: JsonDocument<ScoringRuleset>;
+  readonly fonts: JsonDocument<CustomFontsDocument>;
 
   constructor(options: ConfigStoreOptions) {
     const { dataDir, onWarn } = options;
@@ -64,6 +69,13 @@ export class ConfigStore {
       createDefault: () => DEFAULT_SCORING_RULESET,
       onWarn,
     });
+
+    this.fonts = new JsonDocument({
+      filePath: path.join(dataDir, 'custom-fonts.json'),
+      schema: customFontsDocumentSchema,
+      createDefault: () => DEFAULT_CUSTOM_FONTS,
+      onWarn,
+    });
   }
 
   /**
@@ -74,6 +86,7 @@ export class ConfigStore {
     await this.instances.load();
     await this.teams.load();
     await this.scoring.load();
+    await this.fonts.load();
   }
 
   findInstance(instanceId: string): OverlayInstance | null {
@@ -98,6 +111,12 @@ export class ConfigStore {
   async saveScoring(ruleset: ScoringRuleset): Promise<ScoringRuleset> {
     const saved = await this.scoring.write(ruleset);
     this.emit('scoring');
+    return saved;
+  }
+
+  async saveFonts(fonts: CustomFont[]): Promise<CustomFontsDocument> {
+    const saved = await this.fonts.write({ ...this.fonts.current, fonts });
+    this.emit('fonts');
     return saved;
   }
 

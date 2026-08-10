@@ -224,7 +224,27 @@ logos copied and one dead path reported.
 
 ---
 
-## Next — round 3, part 2
+## Done — round 3, part 2 (2026-08-10): custom fonts
+
+- **Upload your own typeface** — TTF, OTF, WOFF, WOFF2 up to 8 MB, identified from the file's own
+  bytes. Desktop `.ttf`/`.otf` are accepted rather than demanding web formats, because that is what a
+  brand's font actually arrives as. The built-in choices stay.
+- **A Fonts tab** that previews each font in itself, using overlay-like text: a family name says
+  nothing about whether the digits read at broadcast size.
+- **`@font-face` is injected live**, delivered on the same channel as the overlay configuration, so
+  a font uploaded mid-setup reaches open browser sources without a reload.
+- `font-display: block` rather than `swap`: swapping paints a fallback first and then flips, which on
+  air is a visible flicker of the wrong typeface.
+- Removing a font **leaves overlays using it alone** — they fall back to the system font, which is
+  visible and correctable, rather than having their appearance silently rewritten.
+- Protocol bumped to **v3**.
+
+**Verified by running it:** a real TTF uploaded, served, applied to the overlay and confirmed loaded
+via `document.fonts.check()`; a non-font rejected; the font removed and the overlay restored.
+
+---
+
+## Next — round 3, part 3
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean

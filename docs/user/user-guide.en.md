@@ -184,7 +184,8 @@ Select an overlay on the left, then adjust:
 - **Placement** — which side of the screen, distance from that edge, whether it is centred
   vertically, and its size. Distances are given in 1080p pixels and mean the same thing at 1440p and
   4K.
-- **Type and rows** — font, how many teams to show, whether the colour legend appears.
+- **Type and rows** — font, how many teams to show, whether the colour legend appears. The font
+  list holds a few built-in choices plus anything you have uploaded on the **Fonts** tab.
 - **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
   The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
   keep them see-through.
@@ -227,6 +228,21 @@ the only kind that stays sharp there. Otherwise use at least 256 × 256. The che
 behind each logo is there so you can see which parts are transparent.
 
 Everything except the logos needs **Save teams**.
+
+### Fonts tab
+
+Broadcast graphics are branded, and a tournament's typeface is rarely one of the handful shipped
+with the app. Upload your own here and it appears in the **Font** list of every overlay.
+
+**TTF, OTF, WOFF and WOFF2** are accepted, up to 8 MB — a brand's font usually arrives as a desktop
+`.ttf` or `.otf`, and those work directly, with no conversion.
+
+Each font is previewed in itself, using the kind of text an overlay actually shows, because a name
+tells you nothing about whether the digits are legible at overlay size.
+
+Uploading a file with the same name again **replaces** that font rather than adding a second copy.
+Removing a font leaves overlays that were using it on the system font until you pick another — the
+app will not quietly change what is on air on your behalf.
 
 ### Scoring tab
 

@@ -1,5 +1,6 @@
-import type { LiveSnapshot, OverlayInstance, OverlayVisibility } from '@cdf/shared';
+import type { CustomFont, LiveSnapshot, OverlayInstance, OverlayVisibility } from '@cdf/shared';
 import { create } from 'zustand';
+import { applyCustomFontFaces } from '@/lib/font-faces';
 import { LiveConnection, type ConnectionPhase } from '@/lib/live-connection';
 
 interface LiveState {
@@ -24,6 +25,8 @@ interface LiveState {
   overlayStates: Record<string, OverlayVisibility>;
   /** Configuration by instance id. A configured-but-unknown id maps to null. */
   instances: Record<string, OverlayInstance | null>;
+  /** Fonts the operator uploaded. Global, but delivered on the same channel. */
+  fonts: CustomFont[];
   /**
    * False until the first visibility message has been applied. Lets the overlay appear in its
    * current state on load instead of animating in as though a director had just triggered it.
@@ -40,6 +43,7 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   snapshot: null,
   overlayStates: {},
   instances: {},
+  fonts: [],
   hasAnimatedIn: false,
 
   connect(instanceId) {
@@ -53,6 +57,9 @@ export const useLiveStore = create<LiveState>((set, get) => ({
             set({ snapshot: message.snapshot });
             break;
           case 'overlay':
+            // Registered as soon as they arrive, so the overlay is never asked to render text in a
+            // family the document does not know about yet.
+            applyCustomFontFaces(message.fonts);
             set((state) => ({
               overlayStates: {
                 ...state.overlayStates,
@@ -62,6 +69,7 @@ export const useLiveStore = create<LiveState>((set, get) => ({
                 ...state.instances,
                 [message.overlay.instanceId]: message.instance,
               },
+              fonts: message.fonts,
             }));
             break;
           case 'error':

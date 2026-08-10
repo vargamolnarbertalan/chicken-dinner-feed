@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ingestStatusSchema } from '../domain/ingest.js';
 import { matchStateSchema } from '../domain/match.js';
+import { customFontSchema } from '../config/fonts.js';
 import { overlayInstanceSchema } from '../config/overlay-instance.js';
 import { overlayVisibilitySchema } from '../domain/overlay.js';
 
@@ -57,6 +58,13 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
      * preview genuinely live.
      */
     instance: overlayInstanceSchema.nullable(),
+    /**
+     * Fonts the operator has uploaded, so a browser source can register the `@font-face` rules it
+     * needs. Global rather than per-instance, but delivered on this channel because it is the one
+     * that already reaches every open overlay the moment configuration changes — a font uploaded
+     * mid-setup should not need a reload to take effect.
+     */
+    fonts: z.array(customFontSchema),
   }),
   z.object({
     type: z.literal('error'),
