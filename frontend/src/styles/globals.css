@@ -53,6 +53,15 @@
   /* Overlay show/hide animation, configurable per instance in the admin. */
   --overlay-anim-duration: 420ms;
   --overlay-anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /*
+   * One design-canvas pixel, expressed as a real length (ADR-0011).
+   *
+   * The overlay is authored against a 1920×1080 grid; this converts it to whatever the browser
+   * source is actually running at. Both terms are divided so the scale is uniform and the aspect
+   * ratio is never distorted — at 1080p it resolves to 1px, at 1440p to 1.333px, at 4K to 2px.
+   */
+  --overlay-unit: min(100vw / 1920, 100vh / 1080);
 }
 
 .dark {

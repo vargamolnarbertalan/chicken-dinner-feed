@@ -28,6 +28,9 @@ export type { Team } from './domain/team.js';
 export { matchPhaseSchema, matchStateSchema } from './domain/match.js';
 export type { MatchPhase, MatchState } from './domain/match.js';
 
+export { overlayVisibilitySchema } from './domain/overlay.js';
+export type { OverlayVisibility } from './domain/overlay.js';
+
 export {
   ingestSourceKindSchema,
   ingestConnectionStateSchema,

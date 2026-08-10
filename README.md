@@ -4,20 +4,24 @@ Real-time bridge between the **PUBG Mobile PCOB API** and broadcast software. It
 telemetry, applies a configurable tournament scoring ruleset, and renders animated overlays that a
 broadcast tool can consume as browser sources.
 
-> **Status: scaffold.** Architecture is decided and the toolchain is wired end to end. Overlay
-> rendering, the admin UI and PCOB ingestion are not implemented yet — see
-> [`docs/progression.md`](docs/progression.md).
+> **Status: in progress.** The live pipeline, the leaderboard overlay and Stream Deck control work
+> end to end against a simulated match. The **admin UI, persistence and real PCOB ingestion** are
+> not built yet — see [`docs/progression.md`](docs/progression.md).
+>
+> Try it: `npm install && npm run build && npm start`, then open
+> <http://127.0.0.1:4317/overlay/main> and toggle it with
+> <http://127.0.0.1:4317/api/overlays/main/toggle>.
 
 ---
 
 ## What it is
 
-|             |                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| **Input**   | The PCOB client's local HTTP API on the observer PC (`127.0.0.1:10086`), refreshed every ~2 s  |
-| **Output**  | Browser-source overlay pages at 1080p / 1440p / 4K (leaderboard, health bars, points, elims)   |
-| **Control** | A local admin UI for colours, fonts, sizes, placement, show/hide animations, and live previews |
-| **Runs on** | The operator's Windows machine, entirely on localhost. No cloud, no database                   |
+|             |                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| **Input**   | The PCOB client's local HTTP API on the observer PC (`127.0.0.1:10086`), refreshed every ~2 s    |
+| **Output**  | Browser-source overlay pages at 1080p / 1440p / 4K (leaderboard, health bars, points, elims)     |
+| **Control** | Plain HTTP endpoints for Stream Deck / Bitfocus Companion, plus a local admin UI (not built yet) |
+| **Runs on** | The operator's Windows machine, entirely on localhost. No cloud, no database                     |
 
 The key constraint driving the design: **the PCOB API is a local Windows process**, not a remote
 service — see [`specs/PCOB-FINDINGS.md`](specs/PCOB-FINDINGS.md) and
@@ -119,19 +123,20 @@ validation, so it cannot drift from the implementation.
 All decisions and their trade-offs are recorded in [`docs/adr/`](docs/adr/README.md). The short
 version:
 
-| Decision                                                                                 | Why                                                                                  |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [Local Windows bundle](docs/adr/0001-local-windows-bundle-over-cloud-stack.md)           | The PCOB API only exists on the observer PC's localhost                              |
-| [Node + TypeScript + Fastify](docs/adr/0002-node-typescript-fastify-backend.md)          | One language, fast cold start, first-class WebSockets, OpenAPI from schemas          |
-| [React + Vite + Tailwind + shadcn](docs/adr/0003-react-vite-tailwind-shadcn-frontend.md) | As planned; Motion for reorder/enter/exit animation                                  |
-| [JSON files, no database](docs/adr/0004-json-file-persistence.md)                        | Only small config documents; operators can copy and back them up                     |
-| [Workspaces + shared contracts](docs/adr/0005-monorepo-with-shared-contracts.md)         | One Zod definition behind validation, OpenAPI, persistence and the client            |
-| [Ingestion adapter](docs/adr/0006-pcob-ingestion-adapter-boundary.md)                    | The PCOB schema is undocumented to us and changes on someone else's release schedule |
-| [WebSocket snapshots](docs/adr/0007-websocket-state-fanout.md)                           | Browser sources reload mid-match and must be correct instantly                       |
-| [Admin as a route](docs/adr/0008-admin-as-protected-frontend-route.md)                   | The preview must be the real overlay, not a lookalike                                |
-| [feat → develop → main](docs/adr/0009-git-workflow-and-release-process.md)               | As planned; releases are deliberate, tagged, and shipped as a bundle ZIP             |
-| [Poll PCOB over HTTP](docs/adr/0010-poll-the-pcob-http-api.md)                           | The API is an HTTP server on `127.0.0.1:10086`, not a push channel                   |
-| [Fixed design canvas](docs/adr/0011-resolution-independent-overlay-scaling.md)           | Contractual FullHD / 1440p / 4K support, identical proportions at all three          |
+| Decision                                                                                 | Why                                                                                     |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [Local Windows bundle](docs/adr/0001-local-windows-bundle-over-cloud-stack.md)           | The PCOB API only exists on the observer PC's localhost                                 |
+| [Node + TypeScript + Fastify](docs/adr/0002-node-typescript-fastify-backend.md)          | One language, fast cold start, first-class WebSockets, OpenAPI from schemas             |
+| [React + Vite + Tailwind + shadcn](docs/adr/0003-react-vite-tailwind-shadcn-frontend.md) | As planned; Motion for reorder/enter/exit animation                                     |
+| [JSON files, no database](docs/adr/0004-json-file-persistence.md)                        | Only small config documents; operators can copy and back them up                        |
+| [Workspaces + shared contracts](docs/adr/0005-monorepo-with-shared-contracts.md)         | One Zod definition behind validation, OpenAPI, persistence and the client               |
+| [Ingestion adapter](docs/adr/0006-pcob-ingestion-adapter-boundary.md)                    | The PCOB schema is undocumented to us and changes on someone else's release schedule    |
+| [WebSocket snapshots](docs/adr/0007-websocket-state-fanout.md)                           | Browser sources reload mid-match and must be correct instantly                          |
+| [Admin as a route](docs/adr/0008-admin-as-protected-frontend-route.md)                   | The preview must be the real overlay, not a lookalike                                   |
+| [feat → develop → main](docs/adr/0009-git-workflow-and-release-process.md)               | As planned; releases are deliberate, tagged, and shipped as a bundle ZIP                |
+| [Poll PCOB over HTTP](docs/adr/0010-poll-the-pcob-http-api.md)                           | The API is an HTTP server on `127.0.0.1:10086`, not a push channel                      |
+| [Fixed design canvas](docs/adr/0011-resolution-independent-overlay-scaling.md)           | Contractual FullHD / 1440p / 4K support, identical proportions at all three             |
+| [HTTP overlay control](docs/adr/0012-http-overlay-control-for-stream-decks.md)           | Directors press buttons, not web pages; visibility must survive a browser-source reload |
 
 ## Known blocker
 

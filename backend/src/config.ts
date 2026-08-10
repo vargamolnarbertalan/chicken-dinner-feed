@@ -32,6 +32,13 @@ const envSchema = z.object({
 
   /** See ADR-0006. `pcob` is not implemented until the API schema document is available. */
   INGEST_SOURCE: z.enum(['mock', 'pcob']).default('mock'),
+
+  /**
+   * Optional shared secret for the overlay control endpoints. Empty means no check, which is right
+   * while the server is on loopback. Only relevant if HOST is opened up so a stream deck on another
+   * machine can reach it.
+   */
+  CONTROL_TOKEN: z.string().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -58,6 +65,9 @@ export const config = {
   dataDir: path.resolve(packageRoot, env.DATA_DIR),
   staticDir: env.STATIC_DIR ? path.resolve(packageRoot, env.STATIC_DIR) : defaultStaticDir(),
   ingestSource: env.INGEST_SOURCE,
+  controlToken: env.CONTROL_TOKEN,
+  /** True when the server is reachable from outside this machine — see ADR-0012. */
+  isNetworkExposed: env.HOST !== '127.0.0.1' && env.HOST !== 'localhost',
 } as const;
 
 export type AppConfig = typeof config;

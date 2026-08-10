@@ -136,19 +136,41 @@ run by CI, per the project's manual-test policy.
 
 ---
 
-## Next — round 2, part 2
+## Done — round 2, part 2 (2026-08-10): the overlay is visible
 
-1. **Leaderboard overlay** — reproduce `specs/example.png`: rank, logo, short name, per-player health
-   bars coloured by live state, points, eliminations. Animate health, knocks, deaths and reordering.
-   Polished at 1080p; sanity-checked at 1440p and 4K. _(ADR-0003, 0011)_
-2. **Overlay WebSocket client** — reconnect with backoff, protocol-version check, hold last known
-   good state when the source drops. _(ADR-0007)_
-3. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
-   team roster and scoring ruleset as documents. Replaces the in-memory default roster. _(ADR-0004)_
-4. **Admin** — instance CRUD, appearance settings bound to CSS custom properties, show/hide
-   animation controls. Live preview is nice-to-have. _(ADR-0008)_
-5. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
-6. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+The first slice you can actually watch.
+
+- **Leaderboard overlay** reproducing `specs/example.png` — rank, logo slot, short name, per-player
+  health bars coloured by live state, points, eliminations, legend. Health drains over ~1.6 s
+  between the 2 s data points so it reads as continuous; colour changes snap, because a knock is an
+  event and fading it would look like lag. Rank changes animate as physical row movement.
+- **Resolution independence** implemented per [ADR-0011](adr/0011-resolution-independent-overlay-scaling.md):
+  a `--overlay-unit` custom property converts design-canvas pixels to real ones. Verified by
+  screenshot at 1080p and 4K — the panel occupies an identical 19% of width at both.
+- **Reconnecting WebSocket client** with exponential backoff and jitter, schema validation on every
+  message, and a visible error rather than partial rendering on a protocol mismatch. Written for a
+  page nobody is watching: it may outlive backend restarts and has no user to press refresh.
+- **Stream Deck control** ([ADR-0012](adr/0012-http-overlay-control-for-stream-decks.md)) — the new
+  requirement. Visibility is server-owned state, changed over plain HTTP and pushed per instance
+  over WebSocket.
+
+**Verified by running it:** control endpoints exercised as Companion would (`GET`), a full
+hide/show/show cycle over a live socket, and screenshots at 1080p, 4K and hidden. A repeated `show`
+correctly produces no message and no flicker; a page loaded while hidden renders nothing rather than
+flashing the overlay on air.
+
+---
+
+## Next — round 2, part 3
+
+1. **Persistence layer** — repository with atomic writes and schema validation; overlay instances,
+   team roster and scoring ruleset as documents. Replaces the in-memory default roster and turns
+   overlay ids into real entities. _(ADR-0004)_
+2. **Admin** — instance CRUD, appearance settings bound to CSS custom properties, show/hide
+   animation controls, scoring ruleset editing. Live preview is nice-to-have. _(ADR-0008)_
+3. **Team logos** — resolve and serve them, replacing the placeholder squares.
+4. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+5. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
 
 ### Backlog

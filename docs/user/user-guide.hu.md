@@ -4,9 +4,10 @@ _In English: [user-guide.en.md](user-guide.en.md)_
 
 Ez az útmutató a közvetítést kezelő operátornak készült. Programozói ismereteket nem feltételez.
 
-> **Ez a verzió még csak váz.** A telepítés és az indítás az itt leírtak szerint működik. Az overlay
-> és az admin felület még készül, ezért a _Hamarosan_ jelölésű részek azt írják le, ami tervezett,
-> nem azt, ami ma már kattintható.
+> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay és a Stream Deck
+> vezérlés az itt leírtak szerint működik. Az **admin felület még nincs kész**, ezért a 8. fejezet
+> azt írja le, ami tervezett — és amíg nincs meg, az overlay azonosítókat te választod, nem egy
+> felületen hozod létre őket.
 
 ---
 
@@ -119,9 +120,9 @@ Ha meccs közben szakad meg a kapcsolat, az overlay **az utoljára kapott adatot
 
 ## 6. Overlay hozzáadása a közvetítő szoftverhez
 
-_Hamarosan — a pontos lépések az első overlayjel véglegesednek._ A menet:
-
-1. Hozz létre egy overlay példányt az adminban, és másold ki a címét.
+1. Válassz az overlaynek egy rövid nevet — bármi lehet, például `main`. Ez lesz az **azonosítója**, a
+   címe pedig `http://127.0.0.1:4317/overlay/main`. (Ha majd elkészül az admin felület, ott hozod
+   létre a példányokat, nem magadnak kell azonosítót választanod.)
 2. OBS-ben: **Források → + → Böngésző**, illeszd be a címet, a szélességet és magasságot állítsd a
    vászon méretére. **1920 × 1080, 2560 × 1440 és 3840 × 2160 is támogatott** — az overlay magától
    skálázódik, és mindháromnál ugyanúgy néz ki, tehát felbontásonként nincs mit beállítani.
@@ -129,11 +130,56 @@ _Hamarosan — a pontos lépések az első overlayjel véglegesednek._ A menet:
    kapcsolatban maradjon.
 4. Az overlay háttere átlátszó, így közvetlenül ráilleszkedik a videóra.
 
-Ismételd meg minden overlay példánynál. Ugyanabból az overlay típusból több példány is futhat —
-például egy világos és egy sötét, vagy egy brandelt és egy generikus verzió —, ezeket ugyanaz az élő
-adat hajtja, de külön-külön állíthatók.
+Ismételd meg minden overlaynél, mindegyiknek más azonosítót adva. Az overlayeket ugyanaz az élő adat
+hajtja, de egymástól függetlenül jeleníthetők meg és rejthetők el.
 
-## 7. Overlayek beállítása
+## 7. Overlayek vezérlése Stream Deckről (Bitfocus Companion)
+
+Az overlayek hardveres gombról fel- és leanimálhatók. Az alkalmazás sima webcímekre válaszol, tehát
+bármi működik, ami képes webkérést küldeni — a Companion csak a legelterjedtebb ilyen.
+
+### A címek
+
+A `<id>` helyére az overlay példány azonosítója kerül (ugyanaz, ami a browser source címében is
+szerepel):
+
+| Cím                                              | Mit csinál               |
+| ------------------------------------------------ | ------------------------ |
+| `http://127.0.0.1:4317/api/overlays/<id>/show`   | Felanimálja az overlayt  |
+| `http://127.0.0.1:4317/api/overlays/<id>/hide`   | Leanimálja               |
+| `http://127.0.0.1:4317/api/overlays/<id>/toggle` | Átbillenti               |
+| `http://127.0.0.1:4317/api/overlays/<id>/state`  | Megmondja, épp látszik-e |
+
+### Companion gomb beállítása
+
+1. Hozz létre egy gombot, és adj neki egy akciót a **Generic HTTP** modulból.
+2. Válaszd a **GET** metódust, és illeszd be a fenti címek egyikét.
+3. Ennyi a beállítás. Általában a `toggle` gomb a leghasznosabb; ha többen kezelitek, biztonságosabb
+   külön `show` és `hide` gomb.
+
+Két dolog, amit érdemes tudni:
+
+- **A gombot kétszer megnyomni biztonságos.** A már látszó overlayen a „show" nem csinál semmit — nem
+  indítja újra az animációt, és nem villan meg az adásban.
+- **A browser source újratöltése megőrzi az állapotot.** Egy elrejtett overlay elrejtve marad
+  újratöltés után is, nem villan fel a képernyőn.
+
+### Ha a Companion másik gépen fut
+
+Alapból az alkalmazás csak a saját gépéről érhető el, tehát egy másik gépen futó Companion nem éri
+el. Ha engedni akarod:
+
+1. Nyisd meg a `backend\.env` fájlt Jegyzettömbben, és írd át a `HOST=127.0.0.1` sort erre:
+   `HOST=0.0.0.0`.
+2. A Companionban a `127.0.0.1` helyett az overlay-gép hálózati címét használd.
+
+⚠️ **Ezzel az admin felület is elérhetővé válik mindenki számára a hálózaton**, és az adminon nincs
+jelszó. Zárt közvetítői hálózaton ez általában rendben van. Ha szeretnél némi védelmet, állíts be egy
+`CONTROL_TOKEN=valami-amit-te-választasz` értéket a `backend\.env` fájlban, és a Companionban fűzd a
+címek végére: `?token=valami-amit-te-választasz`. Ez csak a show/hide gombokat védi, az admin
+felületet nem.
+
+## 8. Overlayek beállítása
 
 _Hamarosan._ A tervezett beállítások, overlay példányonként:
 
@@ -150,7 +196,7 @@ látod, ami adásba megy.
 pontozási szabályrendszernek meg kell egyeznie a te versenyed szabályaival. Közvetítés előtt
 ellenőrizd.
 
-## 8. A beállításaid
+## 9. A beállításaid
 
 A konfiguráció fájlokban tárolódik, az alkalmazás mappáján belüli **`backend\data`** könyvtárban.
 
@@ -159,7 +205,7 @@ A konfiguráció fájlokban tárolódik, az alkalmazás mappáján belüli **`ba
 - **Frissítéskor:** az új verziót csomagold ki egy _új_ mappába, majd indítás előtt másold bele a
   régi `backend\data` mappát.
 
-## 9. Hibaelhárítás
+## 10. Hibaelhárítás
 
 **„Port 4317 is already in use"**
 Valószínűleg már fut az alkalmazás. Keresd meg a másik konzolablakot, és zárd be. Ha a portot egy
@@ -182,7 +228,7 @@ helyszínen már nem javítható — lásd az 5. fejezetet.
 **Indításkor nem nyílt meg a böngésző**
 Ez nem baj. Nyiss egy böngészőt, és írd be: `http://127.0.0.1:4317/admin`.
 
-## 10. Segítségkérés
+## 11. Segítségkérés
 
 Hibabejelentéskor küldd el ezeket:
 
