@@ -38,6 +38,30 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
   const { store } = options;
 
   /**
+   * Accept a `POST` that declares JSON and sends nothing.
+   *
+   * These endpoints take everything from the URL, so a body is never needed — but a stream deck
+   * configured to `POST` will happily send `content-type: application/json` with an empty body, and
+   * the default parser rejects that as a bad request. On air that is a dead button, caused by a
+   * technicality the operator cannot see. Scoped to this plugin, so the config routes still reject
+   * an empty body where one is genuinely required.
+   */
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, body, done: (error: Error | null, result?: unknown) => void) => {
+      const raw = typeof body === 'string' ? body.trim() : '';
+      if (raw === '') return done(null, {});
+
+      try {
+        done(null, JSON.parse(raw));
+      } catch (cause) {
+        done(cause as Error);
+      }
+    },
+  );
+
+  /**
    * Optional shared secret, off by default.
    *
    * Loopback binding is the real control (ADR-0008). This exists for the one setup that needs

@@ -23,10 +23,16 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  });
+  const headers = new Headers(init?.headers);
+
+  // Only declare a JSON body when there actually is one. Declaring `application/json` on a bodyless
+  // POST makes the server reject it as an empty JSON body — which is what the show/hide calls are,
+  // since they take everything from the URL.
+  if (init?.body !== undefined && init.body !== null) {
+    headers.set('content-type', 'application/json');
+  }
+
+  const response = await fetch(`/api${path}`, { ...init, headers });
 
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
