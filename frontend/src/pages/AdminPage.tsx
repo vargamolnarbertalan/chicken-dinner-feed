@@ -252,14 +252,24 @@ export function AdminPage() {
       <main className="p-6">
         {tab === 'overlays' && overlays && (
           <div
-            className={`grid gap-6 ${
-              sidebarOpen
-                ? 'lg:grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)]'
-                : 'lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.6fr)]'
-            }`}
+            className="grid gap-6"
+            style={{
+              // Explicit lengths rather than `auto`, because `auto` cannot be interpolated — this is
+              // what makes the collapse animate instead of snap.
+              gridTemplateColumns: sidebarOpen
+                ? '17rem minmax(0, 1fr) minmax(0, 1fr)'
+                : '2.75rem minmax(0, 1fr) minmax(0, 1.6fr)',
+              transition: 'grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
           >
-            <aside className="grid content-start gap-3">
-              <div className="flex items-center gap-2">
+            <aside className="border-border relative border-r pr-5">
+              {/*
+               * The toggle sits outside the clipped container on purpose. Clipping the content is
+               * what lets it slide away cleanly, but `overflow: hidden` on an ancestor kills
+               * `position: sticky` — so the sticky control has to be a sibling of the clip, not a
+               * child of it.
+               */}
+              <div className="bg-background sticky top-4 z-10 flex items-center gap-2 pb-3">
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -278,100 +288,117 @@ export function AdminPage() {
                     <PanelLeftOpen className="size-4" aria-hidden />
                   )}
                 </button>
-                {sidebarOpen && <h2 className="text-sm font-medium">Instances</h2>}
+                <h2
+                  className="text-sm font-medium whitespace-nowrap transition-opacity duration-200"
+                  style={{ opacity: sidebarOpen ? 1 : 0 }}
+                  aria-hidden={!sidebarOpen}
+                >
+                  Instances
+                </h2>
               </div>
 
               {/*
-               * Collapsed, the column keeps only the toggle. Hiding it entirely would leave no way
-               * back, and moving it elsewhere would put it where nobody looks for it.
+               * Kept mounted and clipped rather than unmounted, so it slides rather than pops. Its
+               * inner width is fixed at the open width, so the contents do not reflow while the
+               * column is mid-animation.
+               *
+               * `inert` while collapsed: invisible controls must not be reachable by keyboard.
                */}
-              {sidebarOpen && (
-                <>
-                  <ul className="grid gap-1">
-                    {overlays.instances.map((instance) => (
-                      <li key={instance.id}>
+              <div className="overflow-hidden">
+                <div
+                  className="grid w-[15.25rem] content-start gap-3 transition-opacity duration-200"
+                  style={{ opacity: sidebarOpen ? 1 : 0 }}
+                  inert={!sidebarOpen}
+                >
+                  <>
+                    <ul className="grid gap-1">
+                      {overlays.instances.map((instance) => (
+                        <li key={instance.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedId(instance.id)}
+                            className={`flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm ${
+                              instance.id === selectedId ? 'bg-secondary' : 'hover:bg-secondary/60'
+                            }`}
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate">{instance.name}</span>
+                              <span className="text-muted-foreground block truncate font-mono text-xs">
+                                /overlay/{instance.id}
+                              </span>
+                            </span>
+                            <OnAirBadge visible={overlayStates[instance.id]?.visible} size="sm" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/*
+                     * The operator names the overlay; the id is derived. Asking for a URL-safe id and
+                     * rejecting "Szép tabella 2" is the wrong question — they are naming a thing, not
+                     * writing a URL. The derived address is shown so nothing is hidden from them.
+                     */}
+                    <div className="grid gap-2">
+                      <label className="grid gap-1 text-xs">
+                        <span className="text-muted-foreground">New overlay name</span>
+                        <input
+                          type="text"
+                          placeholder="Second leaderboard"
+                          className="border-border bg-background rounded border px-2 py-1.5 text-sm"
+                          value={newName}
+                          onChange={(event) => setNewName(event.target.value)}
+                        />
+                      </label>
+
+                      {newName.trim() && (
+                        <p className="text-muted-foreground text-xs">
+                          Address:{' '}
+                          {newInstanceId ? (
+                            <code className="font-mono">/overlay/{newInstanceId}</code>
+                          ) : (
+                            <span className="text-destructive">
+                              that name has no letters or digits to build an address from
+                            </span>
+                          )}
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => setSelectedId(instance.id)}
-                          className={`flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm ${
-                            instance.id === selectedId ? 'bg-secondary' : 'hover:bg-secondary/60'
-                          }`}
+                          className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
+                          disabled={!newInstanceId}
+                          onClick={() => void createOverlay(newInstanceId, newName.trim())}
+                          title="Create an overlay with the default appearance"
                         >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate">{instance.name}</span>
-                            <span className="text-muted-foreground block truncate font-mono text-xs">
-                              /overlay/{instance.id}
-                            </span>
-                          </span>
-                          <OnAirBadge visible={overlayStates[instance.id]?.visible} size="sm" />
+                          Create
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/*
-                   * The operator names the overlay; the id is derived. Asking for a URL-safe id and
-                   * rejecting "Szép tabella 2" is the wrong question — they are naming a thing, not
-                   * writing a URL. The derived address is shown so nothing is hidden from them.
-                   */}
-                  <div className="grid gap-2">
-                    <label className="grid gap-1 text-xs">
-                      <span className="text-muted-foreground">New overlay name</span>
-                      <input
-                        type="text"
-                        placeholder="Second leaderboard"
-                        className="border-border bg-background rounded border px-2 py-1.5 text-sm"
-                        value={newName}
-                        onChange={(event) => setNewName(event.target.value)}
-                      />
-                    </label>
-
-                    {newName.trim() && (
+                        <button
+                          type="button"
+                          className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
+                          disabled={!newInstanceId || !selected}
+                          onClick={() =>
+                            selected &&
+                            void createOverlay(newInstanceId, newName.trim(), selected.id)
+                          }
+                          title={
+                            selected
+                              ? `Create it with the appearance of “${selected.name}”`
+                              : 'Select an overlay to copy first'
+                          }
+                        >
+                          Duplicate
+                        </button>
+                      </div>
                       <p className="text-muted-foreground text-xs">
-                        Address:{' '}
-                        {newInstanceId ? (
-                          <code className="font-mono">/overlay/{newInstanceId}</code>
-                        ) : (
-                          <span className="text-destructive">
-                            that name has no letters or digits to build an address from
-                          </span>
-                        )}
+                        <strong>Create</strong> starts from the defaults. <strong>Duplicate</strong>{' '}
+                        copies the look of{' '}
+                        {selected ? `“${selected.name}”` : 'the selected overlay'}.
                       </p>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
-                        disabled={!newInstanceId}
-                        onClick={() => void createOverlay(newInstanceId, newName.trim())}
-                        title="Create an overlay with the default appearance"
-                      >
-                        Create
-                      </button>
-                      <button
-                        type="button"
-                        className="border-border rounded border px-3 py-1.5 text-xs disabled:opacity-40"
-                        disabled={!newInstanceId || !selected}
-                        onClick={() =>
-                          selected && void createOverlay(newInstanceId, newName.trim(), selected.id)
-                        }
-                        title={
-                          selected
-                            ? `Create it with the appearance of “${selected.name}”`
-                            : 'Select an overlay to copy first'
-                        }
-                      >
-                        Duplicate
-                      </button>
                     </div>
-                    <p className="text-muted-foreground text-xs">
-                      <strong>Create</strong> starts from the defaults. <strong>Duplicate</strong>{' '}
-                      copies the look of {selected ? `“${selected.name}”` : 'the selected overlay'}.
-                    </p>
-                  </div>
-                </>
-              )}
+                  </>
+                </div>
+              </div>
             </aside>
 
             {selected ? (
