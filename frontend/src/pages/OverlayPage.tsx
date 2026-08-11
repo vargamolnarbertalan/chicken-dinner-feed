@@ -1,6 +1,6 @@
 import { DEFAULT_OVERLAY_APPEARANCE } from '@cdf/shared';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { appearanceToAnimation, appearanceToPosition } from '@/components/overlay/appearance';
 import { LeaderboardOverlay } from '@/components/overlay/LeaderboardOverlay';
 import { u } from '@/components/overlay/overlay-scale';
@@ -18,7 +18,30 @@ export interface OverlayPageProps {
  * decision here: transparent background, no interaction, and nothing rendered until we actually
  * know what should be on screen.
  */
+/**
+ * A checkerboard drawn behind the panel when the page is embedded in the admin preview.
+ *
+ * An iframe cannot show the page behind it here: with no background of its own, the embedded
+ * document still paints a canvas, and its colour comes from `color-scheme` — white by default, with
+ * no value that means "transparent". A real browser source is composited transparently by the
+ * broadcast software itself, so this never applies on air; the marker only ever arrives from the
+ * admin, which appends it to the address.
+ */
+const PREVIEW_BACKDROP: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: -1,
+  backgroundColor: '#0a1420',
+  backgroundImage:
+    'linear-gradient(45deg, #16283c 25%, transparent 25%), linear-gradient(-45deg, #16283c 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #16283c 75%), linear-gradient(-45deg, transparent 75%, #16283c 75%)',
+  backgroundSize: '48px 48px',
+  backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0px',
+};
+
 export function OverlayPage({ instanceId }: OverlayPageProps) {
+  // Read once: the address does not change while the page is open.
+  const [isPreview] = useState(() => new URLSearchParams(window.location.search).has('preview'));
+
   const snapshot = useLiveStore((state) => state.snapshot);
   const overlay = useLiveStore((state) => state.overlayStates[instanceId]);
   const instance = useLiveStore((state) => state.instances[instanceId] ?? null);
@@ -73,25 +96,29 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
   const animation = appearanceToAnimation(appearance);
 
   return (
-    <div style={appearanceToPosition(appearance)}>
-      {/*
-       * `initial={false}` suppresses the animation on first paint only: an overlay that was already
-       * on air when the page loaded must simply be there, not slide in as though a director had
-       * just triggered it. Later show/hide transitions animate normally.
-       */}
-      <AnimatePresence initial={false}>
-        {overlay.visible && (
-          <motion.div
-            key="panel"
-            initial={animation.initial}
-            animate={animation.animate}
-            exit={animation.exit}
-            transition={animation.transition}
-          >
-            <LeaderboardOverlay match={snapshot.match} appearance={appearance} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <>
+      {isPreview && <div style={PREVIEW_BACKDROP} aria-hidden />}
+
+      <div style={appearanceToPosition(appearance)}>
+        {/*
+         * `initial={false}` suppresses the animation on first paint only: an overlay that was already
+         * on air when the page loaded must simply be there, not slide in as though a director had
+         * just triggered it. Later show/hide transitions animate normally.
+         */}
+        <AnimatePresence initial={false}>
+          {overlay.visible && (
+            <motion.div
+              key="panel"
+              initial={animation.initial}
+              animate={animation.animate}
+              exit={animation.exit}
+              transition={animation.transition}
+            >
+              <LeaderboardOverlay match={snapshot.match} appearance={appearance} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }

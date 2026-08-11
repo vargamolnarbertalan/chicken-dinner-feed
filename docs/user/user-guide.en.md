@@ -198,9 +198,17 @@ next to the show/hide button. That state is live: if someone presses a Stream De
 updates to match. Every action you take confirms itself with a short notification in the corner,
 which fades on its own or can be dismissed with the ×.
 
-The preview has two modes. **Full canvas** shows the whole 16∶9 frame — use it to judge placement.
-**Actual size** renders at true 1080p pixels — use it to judge colours and whether names are
-legible. The checkerboard stands in for your video, so you can see how translucent backgrounds look.
+The preview is the **overlay itself**, loaded from the same address your browser source uses. It
+plays the show/hide animation exactly as it will on air, including when someone presses a Stream
+Deck button — so it is the place to try animation directions and speeds.
+
+Because it is the real thing, it shows **saved** settings: adjust something, press Save, and watch
+the preview change. Anything you try this way is also on your live output, which is what the test
+window before a broadcast is for — the director can key the layer out while you work.
+
+Two modes: **Full canvas** shows the whole 16∶9 frame, for judging placement. **Actual size**
+renders at true 1080p pixels, for judging colours and whether names are legible. The checkerboard
+stands in for your video, so you can see how translucent backgrounds look.
 
 To make a second overlay — for example a light and a dark version driven by the same data — type an
 id, then press either **Create** (starts from the defaults) or **Duplicate** (copies the look of the

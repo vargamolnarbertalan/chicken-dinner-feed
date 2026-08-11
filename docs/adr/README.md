@@ -20,6 +20,7 @@ decision changes, write a new ADR and mark the old one `Superseded by ADR-XXXX`.
 | [0010](0010-poll-the-pcob-http-api.md)                 | Poll the PCOB HTTP API on `127.0.0.1:10086`                  | Accepted |
 | [0011](0011-resolution-independent-overlay-scaling.md) | Scale overlays from a fixed design canvas                    | Accepted |
 | [0012](0012-http-overlay-control-for-stream-decks.md)  | Overlay visibility is server state, driven by plain HTTP     | Accepted |
+| [0013](0013-preview-embeds-the-real-overlay.md)        | The admin preview embeds the real overlay page               | Accepted |
 
 ## Writing a new one
 
