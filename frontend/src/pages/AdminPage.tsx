@@ -484,13 +484,11 @@ export function AdminPage() {
 
                 <aside className="grid content-start gap-3">
                   <h2 className="text-sm font-medium">Preview</h2>
-                  <OverlayPreview
-                    match={snapshot?.match ?? null}
-                    appearance={selected.appearance}
-                  />
-                  <p className="text-muted-foreground max-w-[35rem] text-xs">
-                    This is the real overlay, driven by live match data. Changes appear here
-                    immediately, but only reach your broadcast when you press Save.
+                  <OverlayPreview instanceId={selected.id} />
+                  <p className="text-muted-foreground text-xs">
+                    This is the overlay itself, loaded from the same address your browser source
+                    uses — including its show/hide animation. It shows <strong>saved</strong>{' '}
+                    settings, because that is what is on air: press Save to see a change here.
                   </p>
                   <CopyableUrl
                     label="Browser source address"

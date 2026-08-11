@@ -266,7 +266,29 @@ broadcast.
 
 ---
 
-## Next — round 3, part 4
+## Done — round 3, part 4 (2026-08-10): the preview is the overlay
+
+- **The preview is now an `<iframe>` of `/overlay/<id>`** — the same address a browser source uses,
+  rendered at 1920×1080 and scaled optically. Identity by construction rather than by maintenance
+  ([ADR-0013](adr/0013-preview-embeds-the-real-overlay.md)).
+- **Show/hide animations now play in the preview**, including when triggered from a Stream Deck
+  rather than from the admin — which is what makes expanding the animation settings worth doing.
+- **Accepted cost:** the preview shows _saved_ settings, so editing no longer updates it as you
+  type. Rehearsal happens on air, which is what the pre-broadcast test window is for.
+- The overlay draws a chequerboard backdrop when its address carries `?preview=1`, because an
+  embedded document still paints a canvas and `color-scheme` has no transparent value.
+
+**Verified by running it:** an external `hide` (a plain HTTP call, as a Stream Deck makes) animated
+the panel out of the preview mid-flight and removed it once the exit completed.
+
+_Method note:_ a screenshot taken with Chromium's `--virtual-time-budget` showed the frame blank.
+That was an artefact of the virtual clock with iframes, not a defect — real-time capture through the
+DevTools protocol showed it rendering correctly. Worth remembering before chasing a bug that a
+measurement invented.
+
+---
+
+## Next — round 3, part 5
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean

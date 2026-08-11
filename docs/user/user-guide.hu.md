@@ -205,10 +205,17 @@ show/hide gomb mellett is. Ez az állapot élő: ha valaki megnyom egy Stream De
 követi. Minden művelet rövid értesítéssel visszaigazolja magát a sarokban, ami magától eltűnik, vagy
 az ×-szel bezárható.
 
-Az előnézetnek két módja van. A **Full canvas** a teljes 16∶9 képet mutatja — ezen az elhelyezést
-tudod megítélni. Az **Actual size** valódi 1080p pixelekben jelenít meg — ezen a színeket és azt,
-hogy olvashatók-e a nevek. A kockás háttér a videót helyettesíti, hogy lásd, hogyan mutatnak az
-átlátszó hátterek.
+Az előnézet **maga az overlay**, ugyanarról a címről betöltve, amit a browser source is használ.
+Pontosan úgy játssza le a fel- és leanimálást, ahogy adásban is fog — akkor is, ha valaki egy Stream
+Deck gombot nyom. Tehát itt tudod kipróbálni az animációs irányokat és sebességeket.
+
+Mivel a valódi dologról van szó, a **mentett** beállításokat mutatja: állíts valamin, nyomj Save-et,
+és nézd, ahogy változik. Amit így kipróbálsz, az az élő kimeneten is megjelenik — erre való a
+közvetítés előtti tesztidőszak, és a rendező addig ki tudja kulcsolni a réteget.
+
+Két mód: a **Full canvas** a teljes 16∶9 képet mutatja, elhelyezés megítélésére. Az **Actual size**
+valódi 1080p pixelekben jelenít meg, a színekhez és az olvashatósághoz. A kockás háttér a videót
+helyettesíti, hogy lásd, hogyan mutatnak az átlátszó hátterek.
 
 Második overlay létrehozásához — például egy világos és egy sötét változat ugyanabból az adatból —
 írj be egy azonosítót, majd nyomd meg vagy a **Create** (alapértelmezésből indul), vagy a

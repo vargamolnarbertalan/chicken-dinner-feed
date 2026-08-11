@@ -1,58 +1,41 @@
-import type { MatchState, OverlayAppearance } from '@cdf/shared';
-import { useState, type CSSProperties } from 'react';
-import { LeaderboardOverlay } from '@/components/overlay/LeaderboardOverlay';
+import { useRef, useState } from 'react';
+import { useElementWidth } from '@/hooks/useElementWidth';
 
 type PreviewMode = 'canvas' | 'actual';
 
-/** A checkerboard stands in for live video, so translucent backgrounds can be judged, not guessed. */
-const CHECKERBOARD: CSSProperties = {
-  backgroundColor: '#18181b',
-  backgroundImage:
-    'linear-gradient(45deg, #27272a 25%, transparent 25%), linear-gradient(-45deg, #27272a 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #27272a 75%), linear-gradient(-45deg, transparent 75%, #27272a 75%)',
-  backgroundSize: '16px 16px',
-  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-};
+/** The broadcast canvas the overlay is authored against (ADR-0011). */
+const CANVAS_WIDTH = 1920;
+const CANVAS_HEIGHT = 1080;
 
 export interface OverlayPreviewProps {
-  match: MatchState | null;
-  appearance: OverlayAppearance;
+  instanceId: string;
 }
 
 /**
- * Live preview: the **real** overlay component, driven by the real match state.
+ * The overlay itself, embedded.
  *
- * This is the whole reason the admin is a route in the same app rather than a separate one
- * (ADR-0008) — a lookalike preview would drift from what actually goes on air.
+ * Not a rendering of the same components — **the actual page**, loaded from the same address a
+ * broadcast browser source uses. That makes it identical by construction rather than by
+ * maintenance: it holds its own WebSocket connection, its own visibility state, its own fonts and
+ * its own animations, so a show/hide triggered from anywhere — this screen, a Stream Deck, a `curl`
+ * — plays here exactly as it plays on air. Every overlay feature added later appears here for free.
  *
- * Two modes, because one cannot do both jobs. The panel occupies under a fifth of the broadcast
- * canvas, so a preview that shows the whole 16∶9 frame renders it small — fine for checking
- * placement, useless for judging a colour or whether a name is legible. **Actual size** renders at
- * true 1080p pixels so those decisions can be made.
+ * The cost, accepted deliberately: this shows **saved** settings, because that is what is on air.
+ * Editing appearance no longer updates the preview as you type; you save and watch. Rehearsing on
+ * air is the intended workflow — that is what the test window before a broadcast is for, and the
+ * director can key the layer out meanwhile.
  *
- * In canvas mode the scale comes from **container query units**: `100cqw / 1920` is one design pixel
- * expressed against whatever width the preview happens to have. That means the preview grows when
- * the sidebar is collapsed, with no measuring, no resize listener and no re-render — the same trick
- * as the viewport-based unit on a real broadcast surface, pointed at a box instead (ADR-0011).
+ * The frame is rendered at true 1920×1080 and scaled optically, rather than rendered small. Layout
+ * rounding therefore happens at broadcast resolution, so what you judge here is what the canvas
+ * produces.
  */
-export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
+export function OverlayPreview({ instanceId }: OverlayPreviewProps) {
   const [mode, setMode] = useState<PreviewMode>('canvas');
+  const boxRef = useRef<HTMLDivElement>(null);
+  const boxWidth = useElementWidth(boxRef);
 
   const isCanvas = mode === 'canvas';
-  const baseUnit = isCanvas ? 'calc(100cqw / 1920)' : '1px';
-
-  const position: CSSProperties = isCanvas
-    ? {
-        position: 'absolute',
-        top:
-          appearance.offsetY === null
-            ? '50%'
-            : `calc(${appearance.offsetY} * var(--overlay-base-unit))`,
-        transform: appearance.offsetY === null ? 'translateY(-50%)' : undefined,
-        ...(appearance.anchor === 'left'
-          ? { left: `calc(${appearance.offsetX} * var(--overlay-base-unit))` }
-          : { right: `calc(${appearance.offsetX} * var(--overlay-base-unit))` }),
-      }
-    : { padding: 16 };
+  const scale = isCanvas && boxWidth > 0 ? boxWidth / CANVAS_WIDTH : 1;
 
   return (
     <div className="grid gap-2">
@@ -77,32 +60,37 @@ export function OverlayPreview({ match, appearance }: OverlayPreviewProps) {
       </div>
 
       <div
-        className="border-border relative w-full overflow-auto rounded border"
+        ref={boxRef}
+        className="border-border relative w-full rounded border"
         style={{
-          containerType: 'inline-size',
-          ...(isCanvas ? { aspectRatio: '16 / 9' } : { maxHeight: 520 }),
-          ...CHECKERBOARD,
+          backgroundColor: '#0a1420',
+          // Canvas mode fits the whole frame; actual size shows a window onto it and scrolls.
+          ...(isCanvas
+            ? { aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, overflow: 'hidden' }
+            : { height: 520, overflow: 'auto' }),
         }}
       >
-        <div
-          style={
-            {
-              // Only the base is overridden; the operator's size setting still multiplies on top.
-              '--overlay-base-unit': baseUnit,
-              ...(isCanvas ? { position: 'absolute', inset: 0 } : {}),
-            } as CSSProperties
-          }
-        >
-          {match ? (
-            <div style={position}>
-              <LeaderboardOverlay match={match} appearance={appearance} />
-            </div>
-          ) : (
-            <p className="text-muted-foreground grid h-40 place-items-center text-xs">
-              Waiting for match data…
-            </p>
-          )}
-        </div>
+        <iframe
+          key={instanceId}
+          // `preview` asks the overlay to draw its own backdrop — see the note in OverlayPage.
+          src={`/overlay/${instanceId}?preview=1`}
+          title={`Live preview of the ${instanceId} overlay`}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          // The preview is for looking at. Letting clicks through would also mean scroll events
+          // landing inside the frame instead of scrolling the box in actual-size mode.
+          className="pointer-events-none block border-0"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            // The frame keeps its 1920×1080 layout box after scaling, which would otherwise
+            // reserve space for the unscaled size in the scrolling mode.
+            position: isCanvas ? 'absolute' : 'static',
+            top: 0,
+            left: 0,
+            backgroundColor: 'transparent',
+          }}
+        />
       </div>
 
       <p className="text-muted-foreground text-xs">
