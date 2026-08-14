@@ -5,13 +5,14 @@ import type {
   ScoringRuleset,
   TeamRosterDocument,
 } from '@cdf/shared';
-import { PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
 import { FontManager } from '@/features/admin/FontManager';
 import { ImportIniButton } from '@/features/admin/ImportIniButton';
+import { InstanceToolbar } from '@/features/admin/InstanceToolbar';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
 import { OnAirBadge } from '@/features/admin/OnAirBadge';
 import { OverlayPreview } from '@/features/admin/OverlayPreview';
@@ -19,7 +20,9 @@ import { ScoringEditor } from '@/features/admin/ScoringEditor';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useElementHeight } from '@/hooks/useElementSize';
 import { applyCustomFontFaces } from '@/lib/font-faces';
+import { isDeepEqual } from '@/lib/deep-equal';
 import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
@@ -57,6 +60,12 @@ export function AdminPage() {
 
   const [tab, setTab] = useState<Tab>('overlays');
   const [overlays, setOverlays] = useState<OverlayInstancesDocument | null>(null);
+  /**
+   * What the server last confirmed, kept beside the draft so an edit that is undone stops counting
+   * as a change. Comparing against the live channel instead would tie the Save button to the socket
+   * being connected.
+   */
+  const [savedOverlays, setSavedOverlays] = useState<OverlayInstance[]>([]);
   const [teams, setTeams] = useState<TeamRosterDocument | null>(null);
   const [scoring, setScoring] = useState<ScoringRuleset | null>(null);
   const [fonts, setFonts] = useState<CustomFont[]>([]);
@@ -72,6 +81,14 @@ export function AdminPage() {
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'collapsed',
   );
 
+  /*
+   * The sticky header and nav overlap anything else that sticks, so the control column has to sit
+   * below them. Measured rather than hard-coded: the header wraps on a narrow window, and a fixed
+   * offset would leave a gap on wide screens and a clipped panel on narrow ones.
+   */
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const chromeHeight = useElementHeight(chromeRef);
+
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? 'open' : 'collapsed');
   }, [sidebarOpen]);
@@ -85,6 +102,7 @@ export function AdminPage() {
     try {
       const document = await api.getOverlays();
       setOverlays(document);
+      setSavedOverlays(document.instances);
       return document;
     } catch (error) {
       toast.error('Could not load the overlays', describe(error));
@@ -102,6 +120,7 @@ export function AdminPage() {
           api.getFonts(),
         ]);
         setOverlays(overlayDocument);
+        setSavedOverlays(overlayDocument.instances);
         setTeams(teamDocument);
         setScoring(ruleset);
         setFonts(fontDocument.fonts);
@@ -122,6 +141,9 @@ export function AdminPage() {
   const selectedVisible = selected ? overlayStates[selected.id]?.visible : undefined;
   const newInstanceId = toInstanceId(newName);
 
+  const savedSelected = savedOverlays.find((instance) => instance.id === selectedId) ?? null;
+  const isDirty = selected !== null && !isDeepEqual(selected, savedSelected);
+
   const patchSelected = (changes: Partial<OverlayInstance>) => {
     if (!overlays || !selected) return;
     setOverlays({
@@ -135,6 +157,9 @@ export function AdminPage() {
   const saveInstance = async (instance: OverlayInstance) => {
     try {
       await api.updateOverlay(instance);
+      setSavedOverlays((previous) =>
+        previous.map((entry) => (entry.id === instance.id ? instance : entry)),
+      );
       toast.success(
         `Saved “${instance.name}”`,
         'Every open browser source has already picked up the new look.',
@@ -228,55 +253,61 @@ export function AdminPage() {
        * The gold rule under the header echoes the accent strip on the overlay itself, so the tool
        * and what it puts on screen read as the same product.
        */}
-      <header className="flex flex-wrap items-center gap-4 border-b border-b-[var(--brand-gold)]/70 bg-[var(--brand-navy)] px-6 py-3">
-        <img
-          src="/images/app-logo-128.png"
-          alt=""
-          width={44}
-          height={44}
-          className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
-        />
-        <div className="mr-auto">
-          <h1 className="text-lg font-semibold tracking-tight">
-            <span className="text-[var(--brand-gold)]">Chicken</span> Dinner Feed
-          </h1>
-          <p className="text-muted-foreground text-xs tracking-wide uppercase">Overlay control</p>
-        </div>
-
-        {connection && (
-          <div className="flex items-center gap-2" title={connection.hint}>
-            <span className={`size-2 rounded-full ${connection.tone}`} />
-            <span className="text-sm">{connection.label}</span>
-            <span className="text-muted-foreground hidden text-xs sm:inline">
-              — {connection.hint}
-            </span>
+      {/*
+       * Header and tabs travel together and stay put: the connection indicator is the thing an
+       * operator glances at mid-broadcast, and it is no use only at the top of a long form.
+       */}
+      <div ref={chromeRef} className="bg-background sticky top-0 z-30">
+        <header className="flex flex-wrap items-center gap-4 border-b border-b-[var(--brand-gold)]/70 bg-[var(--brand-navy)] px-6 py-3">
+          <img
+            src="/images/app-logo-128.png"
+            alt=""
+            width={44}
+            height={44}
+            className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+          />
+          <div className="mr-auto">
+            <h1 className="text-lg font-semibold tracking-tight">
+              <span className="text-[var(--brand-gold)]">Chicken</span> Dinner Feed
+            </h1>
+            <p className="text-muted-foreground text-xs tracking-wide uppercase">Overlay control</p>
           </div>
-        )}
-      </header>
 
-      <nav className="border-border flex gap-1 border-b px-6">
-        {(
-          [
-            ['overlays', 'Overlays'],
-            ['teams', 'Teams'],
-            ['scoring', 'Scoring'],
-            ['fonts', 'Fonts'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setTab(value)}
-            className={`border-b-2 px-3 py-2 text-sm transition-colors ${
-              tab === value
-                ? 'border-[var(--brand-gold)] text-[var(--brand-gold)]'
-                : 'text-muted-foreground hover:text-foreground border-transparent'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+          {connection && (
+            <div className="flex items-center gap-2" title={connection.hint}>
+              <span className={`size-2 rounded-full ${connection.tone}`} />
+              <span className="text-sm">{connection.label}</span>
+              <span className="text-muted-foreground hidden text-xs sm:inline">
+                — {connection.hint}
+              </span>
+            </div>
+          )}
+        </header>
+
+        <nav className="border-border flex gap-1 border-b px-6">
+          {(
+            [
+              ['overlays', 'Overlays'],
+              ['teams', 'Teams'],
+              ['scoring', 'Scoring'],
+              ['fonts', 'Fonts'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={`border-b-2 px-3 py-2 text-sm transition-colors ${
+                tab === value
+                  ? 'border-[var(--brand-gold)] text-[var(--brand-gold)]'
+                  : 'text-muted-foreground hover:text-foreground border-transparent'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       <main className="p-6">
         {tab === 'overlays' && overlays && (
@@ -433,48 +464,6 @@ export function AdminPage() {
             {selected ? (
               <>
                 <section className="grid content-start gap-5">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="text"
-                      aria-label="Overlay name"
-                      className="border-border bg-background rounded border px-2 py-1.5 text-sm"
-                      value={selected.name}
-                      onChange={(event) => patchSelected({ name: event.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="bg-primary text-primary-foreground rounded px-3 py-1.5 text-sm"
-                      onClick={() => void saveInstance(selected)}
-                    >
-                      Save
-                    </button>
-
-                    <div className="border-border flex items-center gap-2 rounded border px-2 py-1">
-                      <OnAirBadge visible={selectedVisible} />
-                      <button
-                        type="button"
-                        className="hover:bg-secondary rounded px-2 py-1 text-sm"
-                        onClick={() => void toggleVisibility(selected)}
-                      >
-                        {selectedVisible === true
-                          ? 'Hide it'
-                          : selectedVisible === false
-                            ? 'Show it'
-                            : 'Show / hide'}
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="text-destructive hover:bg-destructive/10 ml-auto grid size-8 place-items-center rounded transition-colors"
-                      onClick={() => setPendingDelete(selected)}
-                      aria-label={`Delete “${selected.name}”`}
-                      title={`Delete “${selected.name}”`}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </button>
-                  </div>
-
                   <AppearanceEditor
                     appearance={selected.appearance}
                     customFonts={fonts}
@@ -482,14 +471,37 @@ export function AdminPage() {
                   />
                 </section>
 
-                <aside className="grid content-start gap-3">
-                  <h2 className="text-sm font-medium">Preview</h2>
+                {/*
+                 * Toolbar, preview and address travel together and stick below the chrome, so an
+                 * animation adjusted at the bottom of the form can still be watched and saved
+                 * without scrolling back up. It scrolls internally on a short window rather than
+                 * being cut off.
+                 */}
+                <aside
+                  className="grid content-start gap-3 self-start overflow-y-auto lg:sticky"
+                  style={{
+                    top: `calc(${chromeHeight}px + 1rem)`,
+                    maxHeight: `calc(100dvh - ${chromeHeight}px - 2rem)`,
+                  }}
+                >
+                  <InstanceToolbar
+                    instance={selected}
+                    visible={selectedVisible}
+                    isDirty={isDirty}
+                    onRename={(name) => patchSelected({ name })}
+                    onSave={() => void saveInstance(selected)}
+                    onToggleVisibility={() => void toggleVisibility(selected)}
+                    onDelete={() => setPendingDelete(selected)}
+                  />
+
                   <OverlayPreview instanceId={selected.id} />
+
                   <p className="text-muted-foreground text-xs">
                     This is the overlay itself, loaded from the same address your browser source
                     uses — including its show/hide animation. It shows <strong>saved</strong>{' '}
                     settings, because that is what is on air: press Save to see a change here.
                   </p>
+
                   <CopyableUrl
                     label="Browser source address"
                     url={`${window.location.origin}/overlay/${selected.id}`}
