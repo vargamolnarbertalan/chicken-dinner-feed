@@ -315,7 +315,29 @@ stays at zero until the panel has finished.
 
 ---
 
-## Next — round 3, part 6
+## Done — round 3, part 6 (2026-08-10): the admin stays reachable while scrolling
+
+- **Header and tabs are sticky.** The connection indicator is what an operator glances at
+  mid-broadcast, and it was no use only at the top of a long form.
+- **Toolbar, preview and browser-source address became one sticky column.** Adjusting an animation
+  at the bottom of the appearance editor now shows the result and offers Save without scrolling
+  back. The sticky offset is measured from the chrome rather than hard-coded, because the header
+  wraps on a narrow window. The column scrolls internally on a short viewport instead of being cut
+  off.
+- **Save is disabled until something changes**, and pulses while there are unsaved changes —
+  including going quiet again when an edit is undone, which is why the comparison is structural
+  rather than `JSON.stringify` (key order would make an unchanged object read as changed).
+- The pulse is a **CSS** animation, so the existing reduced-motion rule neutralises it with no extra
+  branch; and the state is said in words beside the button, because state carried only by motion or
+  colour is invisible to anyone who cannot perceive it.
+
+**Verified in a browser:** after scrolling 2000 px the header sits at `top: 0` and the control
+column stays near the top; editing the name enables the button, sets the pulse and shows "Unsaved
+changes"; reverting the edit returns all three to their resting state.
+
+---
+
+## Next — round 3, part 7
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean

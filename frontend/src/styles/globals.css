@@ -139,6 +139,27 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * Draws attention to the Save button while there are unsaved changes.
+ *
+ * A CSS animation rather than a JS one, so the reduced-motion rule below neutralises it for
+ * anybody who has asked for less movement — without this component needing to know about that.
+ * The wording beside the button carries the same information for anyone who cannot see the pulse.
+ */
+@keyframes cdf-attention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(248 213 26 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(248 213 26 / 0);
+  }
+}
+
+.cdf-attention {
+  animation: cdf-attention 2s ease-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
