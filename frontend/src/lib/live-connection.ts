@@ -11,6 +11,14 @@ export interface LiveConnectionHandlers {
 export interface LiveConnectionOptions extends LiveConnectionHandlers {
   /** Overlay instance this client renders. Omitted by the admin and other observers. */
   instanceId?: string;
+  /**
+   * Declares this as the admin's preview rather than a broadcast browser source.
+   *
+   * Changes nothing about what is received. The server uses it to report at `/feedback` how many
+   * browser sources are actually rendering an overlay — a count the preview would otherwise inflate
+   * to exactly the wrong answer, since the operator asking is asking about OBS.
+   */
+  isPreview?: boolean;
   /** Injectable for tests; defaults to the same origin the page was served from. */
   url?: string;
 }
@@ -18,10 +26,14 @@ export interface LiveConnectionOptions extends LiveConnectionHandlers {
 const BASE_RETRY_MS = 500;
 const MAX_RETRY_MS = 10_000;
 
-function defaultUrl(instanceId?: string): string {
+function defaultUrl(instanceId?: string, isPreview?: boolean): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const query = instanceId ? `?instance=${encodeURIComponent(instanceId)}` : '';
-  return `${protocol}//${window.location.host}/ws/live${query}`;
+  const query = new URLSearchParams();
+  if (instanceId) query.set('instance', instanceId);
+  if (isPreview) query.set('preview', '1');
+
+  const search = query.size > 0 ? `?${query}` : '';
+  return `${protocol}//${window.location.host}/ws/live${search}`;
 }
 
 /**
@@ -64,7 +76,9 @@ export class LiveConnection {
   private open(): void {
     this.options.onPhase('connecting');
 
-    const socket = new WebSocket(this.options.url ?? defaultUrl(this.options.instanceId));
+    const socket = new WebSocket(
+      this.options.url ?? defaultUrl(this.options.instanceId, this.options.isPreview),
+    );
     this.socket = socket;
 
     socket.addEventListener('open', () => {

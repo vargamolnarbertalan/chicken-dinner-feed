@@ -160,6 +160,47 @@ Two things worth knowing:
 - **Reloading a browser source keeps the current state.** An overlay that is hidden stays hidden
   when its browser source reloads; it will not flash on screen.
 
+### Making buttons show what is happening: `/feedback`
+
+A button that only sends commands cannot tell you whether it worked. Open
+
+```
+http://127.0.0.1:4317/feedback
+```
+
+and the app answers with one block of text describing everything at once: every overlay, whether it
+is on air, its colours and animation settings, whether the game data is arriving, and the current
+match leader. Companion can read a single value out of that and colour a button with it.
+
+**In Companion:** add a **Generic HTTP** _variable_ (not an action) polling that address, then use a
+JSON path in a feedback rule.
+
+| What you want the button to show | JSON path                          | It gives you     |
+| -------------------------------- | ---------------------------------- | ---------------- |
+| Is this overlay on air?          | `overlays.main.isVisible`          | `true` / `false` |
+| Is game data arriving?           | `data.isReceivingData`             | `true` / `false` |
+| Has the data gone quiet?         | `data.isStale`                     | `true` / `false` |
+| Is anything actually showing it? | `overlays.main.hasConnectedSource` | `true` / `false` |
+| Who is leading?                  | `match.leader.shortName`           | e.g. `MGLZ`      |
+| Teams still standing             | `match.standingTeamCount`          | e.g. `12`        |
+
+Replace `main` with your own overlay id — the same one that appears in the browser-source address.
+
+Three of these are worth a button on their own:
+
+- **`hasConnectedSource`** counts the browser sources rendering that overlay. An overlay can be "on
+  air" with nothing connected to display it, which looks exactly like a working setup until you cut
+  to it. Your own preview in the admin page is deliberately **not** counted, so this answers the
+  question you are actually asking, which is about OBS.
+- **`data.isStale`** means the app is still talking to the game but nothing new has arrived —
+  usually the room host has dropped. The overlay holds its last good state rather than blanking, so
+  without this you would not notice.
+- **`feedbackVersion`** is there so a future version of the app can tell you the format changed,
+  rather than your buttons quietly going wrong.
+
+Every address the app answers on is listed inside the response too, under `actions` — so if you lose
+this guide, `/feedback` tells you what else you can call.
+
 ### If Companion runs on a different computer
 
 By default the app only listens to the machine it is running on, so a Companion on another computer
@@ -168,10 +209,15 @@ cannot reach it. To allow it:
 1. Open `backend\.env` in Notepad and change `HOST=127.0.0.1` to `HOST=0.0.0.0`.
 2. In Companion, use the overlay machine's network address instead of `127.0.0.1`.
 
+The addresses inside `/feedback` follow whatever address you used to ask, so if you open it as
+`http://192.168.1.50:4317/feedback`, everything it hands back is already written for that machine and
+can be copied straight into a button.
+
 ⚠️ **This also makes the admin page reachable by anyone on the same network**, and the admin has no
 password. On a closed production network that is usually fine. If you want a little protection, set
 `CONTROL_TOKEN=something-you-choose` in `backend\.env` and append `?token=something-you-choose` to
-the addresses in Companion. That protects the show/hide buttons only, not the admin page.
+the addresses in Companion — **including `/feedback`**, which is protected by the same token. That
+protects the show/hide buttons and the feedback page, not the admin page.
 
 ## 8. Configuring overlays
 

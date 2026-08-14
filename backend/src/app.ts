@@ -18,6 +18,7 @@ import { ConfigStore } from './persistence/config-store.js';
 import { FontStore, MAX_FONT_BYTES } from './persistence/font-store.js';
 import { LogoStore, MAX_LOGO_BYTES } from './persistence/logo-store.js';
 import { configRoutes } from './routes/config.js';
+import { feedbackRoutes } from './routes/feedback.js';
 import { fontRoutes } from './routes/fonts.js';
 import { logoRoutes } from './routes/logos.js';
 import { healthRoutes } from './routes/health.js';
@@ -151,6 +152,16 @@ export async function buildApp(): Promise<AppContext> {
     isConfigured: (instanceId) => configStore.findInstance(instanceId) !== null,
   });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
+
+  // Deliberately not under /api: this is the address an operator types into a Companion button.
+  // Registered before the static plugin so its exact route wins over the SPA wildcard.
+  await app.register(feedbackRoutes, {
+    store: configStore,
+    overlayControl,
+    matchStore: store,
+    hub,
+  });
+
   await app.register(logoRoutes, { prefix: '/api', logos: logoStore, config: configStore });
   await app.register(fontRoutes, { prefix: '/api', fonts: fontStore, config: configStore });
 

@@ -41,6 +41,13 @@ export type { IngestSourceKind, IngestConnectionState, IngestStatus } from './do
 export { liveSnapshotSchema, serverMessageSchema } from './protocol/live.js';
 export type { LiveSnapshot, ServerMessage } from './protocol/live.js';
 
+export {
+  FEEDBACK_VERSION,
+  overlayFeedbackSchema,
+  feedbackDocumentSchema,
+} from './protocol/feedback.js';
+export type { OverlayFeedback, FeedbackDocument } from './protocol/feedback.js';
+
 export { scoringRulesetSchema, DEFAULT_SCORING_RULESET } from './config/scoring.js';
 export type { ScoringRuleset } from './config/scoring.js';
 

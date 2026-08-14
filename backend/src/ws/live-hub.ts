@@ -17,6 +17,24 @@ export interface LiveClient {
 /** `WebSocket.OPEN`. Sending to a socket in any other state throws. */
 const SOCKET_OPEN = 1;
 
+/** What the hub remembers about a connected client. */
+interface ClientMeta {
+  /** The overlay instance this client renders, or null for the admin and other observers. */
+  instanceId: string | null;
+  /**
+   * Whether this is the admin's preview rather than a browser source in a production.
+   *
+   * Both render the same page over the same channel, so nothing else can tell them apart — and the
+   * distinction matters: an operator asking "is anything actually showing this overlay?" is asking
+   * about OBS, and would be misled by their own preview answering yes.
+   */
+  isPreview: boolean;
+}
+
+export interface AddClientOptions {
+  isPreview?: boolean;
+}
+
 export interface LiveHubOptions {
   store: MatchStore;
   /** Optional: without it the hub serves match data only and no visibility messages are sent. */
@@ -49,8 +67,7 @@ export interface LiveHubOptions {
  *    than after the next change, which might be seconds away or never.
  */
 export class LiveHub {
-  /** Value is the overlay instance the client renders, or null for the admin and other observers. */
-  private readonly clients = new Map<LiveClient, string | null>();
+  private readonly clients = new Map<LiveClient, ClientMeta>();
   private readonly store: MatchStore;
   private readonly overlayControl: OverlayControlStore | undefined;
   private readonly resolveInstance: ((instanceId: string) => OverlayInstance | null) | undefined;
@@ -100,8 +117,12 @@ export class LiveHub {
     this.unsubscribeOverlayControl = null;
   }
 
-  addClient(client: LiveClient, instanceId: string | null = null): void {
-    this.clients.set(client, instanceId);
+  addClient(
+    client: LiveClient,
+    instanceId: string | null = null,
+    options: AddClientOptions = {},
+  ): void {
+    this.clients.set(client, { instanceId, isPreview: options.isPreview ?? false });
 
     const snapshot = this.lastSnapshot ?? this.buildSnapshot(this.store.project());
     this.sendTo(client, { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, snapshot });
@@ -131,16 +152,18 @@ export class LiveHub {
     if (!this.overlayControl) return;
 
     const message = this.overlayMessage(instanceId);
-    for (const [client, clientInstance] of this.clients) {
-      // Observers (clientInstance === null) hear about every instance: the admin has to reflect
-      // what is on air even when the change came from a stream deck rather than from itself.
-      if (clientInstance === instanceId || clientInstance === null) this.sendTo(client, message);
+    for (const [client, meta] of this.clients) {
+      // Observers (instanceId === null) hear about every instance: the admin has to reflect what is
+      // on air even when the change came from a stream deck rather than from itself.
+      if (meta.instanceId === instanceId || meta.instanceId === null) this.sendTo(client, message);
     }
   }
 
   /** Every configured instance — used after a bulk config change. */
   refreshAllOverlayStates(): void {
-    const fromClients = [...this.clients.values()].filter((id): id is string => id !== null);
+    const fromClients = [...this.clients.values()]
+      .map((meta) => meta.instanceId)
+      .filter((id): id is string => id !== null);
     for (const instanceId of new Set([...(this.listInstanceIds?.() ?? []), ...fromClients])) {
       this.sendOverlayState(instanceId);
     }
@@ -166,6 +189,20 @@ export class LiveHub {
 
   get clientCount(): number {
     return this.clients.size;
+  }
+
+  /**
+   * Browser sources currently rendering an instance, excluding the admin's own preview.
+   *
+   * Reported at `/feedback` so a director can tell "hidden" from "nothing is connected to show it".
+   * The two look identical on air, and only one of them is fixed by pressing the button again.
+   */
+  sourceCountFor(instanceId: string): number {
+    let count = 0;
+    for (const meta of this.clients.values()) {
+      if (meta.instanceId === instanceId && !meta.isPreview) count += 1;
+    }
+    return count;
   }
 
   /** Coalescing entry point. Call this from anything that might have changed the state. */
