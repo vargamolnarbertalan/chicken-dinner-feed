@@ -61,6 +61,13 @@ export function InstanceToolbar({
           onClick={onSave}
           disabled={!isDirty}
           /*
+           * The wording lives in the accessible name rather than on screen. `disabled` already
+           * exposes the state to assistive technology, so nothing is left resting on the pulse
+           * alone — but the label spells it out, and a hover explains it to everyone else.
+           */
+          aria-label={isDirty ? 'Save — there are unsaved changes' : 'Save — nothing has changed'}
+          title={isDirty ? 'There are unsaved changes' : 'Nothing has changed since the last save'}
+          /*
            * The pulse is a CSS animation on purpose: the reduced-motion rule in globals.css already
            * neutralises those on admin surfaces, so an operator who has asked for less movement
            * gets a still button without any extra branch here.
@@ -73,19 +80,6 @@ export function InstanceToolbar({
         >
           Save
         </button>
-
-        {/*
-         * Said in words as well as shown by the pulse. State conveyed only by movement or colour is
-         * invisible to anyone who cannot perceive it, and this one decides whether what you are
-         * looking at is on air yet.
-         */}
-        <span className="text-xs" role="status" aria-live="polite">
-          {isDirty ? (
-            <span className="text-[var(--brand-gold)]">Unsaved changes</span>
-          ) : (
-            <span className="text-muted-foreground">Saved</span>
-          )}
-        </span>
 
         <div className="border-border ml-auto flex items-center gap-2 rounded border px-2 py-1">
           <OnAirBadge visible={visible} />

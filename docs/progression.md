@@ -328,8 +328,12 @@ stays at zero until the panel has finished.
   including going quiet again when an edit is undone, which is why the comparison is structural
   rather than `JSON.stringify` (key order would make an unchanged object read as changed).
 - The pulse is a **CSS** animation, so the existing reduced-motion rule neutralises it with no extra
-  branch; and the state is said in words beside the button, because state carried only by motion or
-  colour is invisible to anyone who cannot perceive it.
+  branch. The visible wording beside the button was dropped at the operator's request; the state
+  lives in the button's accessible name and its `disabled` attribute instead, both of which
+  assistive technology reads.
+- The ripple is **two animations, not one**: the ring travels on a `linear` curve and the scale
+  breathes on an ease-in-out. A single eased keyframe set expanded the ring inside the first third
+  of the cycle and left the rest dead, which reads as a blink rather than a pulse.
 
 **Verified in a browser:** after scrolling 2000 px the header sits at `top: 0` and the control
 column stays near the top; editing the name enables the button, sets the pulse and shows "Unsaved

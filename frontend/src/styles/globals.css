@@ -142,22 +142,43 @@
 /*
  * Draws attention to the Save button while there are unsaved changes.
  *
- * A CSS animation rather than a JS one, so the reduced-motion rule below neutralises it for
- * anybody who has asked for less movement — without this component needing to know about that.
- * The wording beside the button carries the same information for anyone who cannot see the pulse.
+ * A CSS animation rather than a JS one, so the reduced-motion rule below neutralises it for anybody
+ * who has asked for less movement — without this component needing to know about that.
+ *
+ * Two animations rather than one, because they want different curves. The ring must travel evenly
+ * to read as a ripple, so it is `linear`; a single eased keyframe set expanded it inside the first
+ * third of the cycle and the rest was dead air, which looks like a blink. The scale breathes on an
+ * ease-in-out so the button feels alive between ripples.
+ *
+ * Only `box-shadow` and `transform` are animated, so nothing around the button moves.
  */
-@keyframes cdf-attention {
+@keyframes cdf-ripple {
+  0% {
+    box-shadow:
+      0 0 0 0 rgb(248 213 26 / 0.9),
+      0 0 0 0 rgb(248 213 26 / 0.35);
+  }
+  100% {
+    box-shadow:
+      0 0 0 14px rgb(248 213 26 / 0),
+      0 0 0 26px rgb(248 213 26 / 0);
+  }
+}
+
+@keyframes cdf-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgb(248 213 26 / 0.5);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 6px rgb(248 213 26 / 0);
+    transform: scale(1.06);
   }
 }
 
 .cdf-attention {
-  animation: cdf-attention 2s ease-out infinite;
+  animation:
+    cdf-ripple 1.4s linear infinite,
+    cdf-breathe 1.4s ease-in-out infinite;
 }
 
 @layer base {
