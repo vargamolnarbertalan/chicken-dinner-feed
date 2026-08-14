@@ -195,7 +195,22 @@ Válassz ki balra egy overlayt, majd állítsd:
 - **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
   félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
   megmaradjon az átlátszóság.
-- **Show / hide animation** — irány, sebesség, lefutás.
+- **Show / hide animation** — hogyan érkezik és távozik az overlay:
+  - **Fade** — helyben jelenik meg.
+  - **Wipe** — a panel pontosan a helyén marad, és a választott él felől tárul fel. A szöveg nem
+    mozdul, ezért nyugodtabb hatású, mint a slide.
+  - **Slide** — a teljes panel becsúszik a választott él felől.
+  - **Zoom** — kicsit kisebbről nő a helyére.
+  - A **Cross-fade as well** bármelyikre ráteszi az áttűnést is. Kikapcsolva tiszta wipe, slide vagy
+    zoom marad, átlátszóság-változás nélkül.
+  - A **Duration** 0,1 és 5 másodperc között állítható.
+- **Rows** — a sorok opcionálisan egyenként úsznak be, **miután** a panel megérkezett; nagy
+  ranglistán ez jól mutat. A sorok közti szünet állítható, és az admin kiírja, mennyi idő alatt telik
+  meg a teljes lista — valójában ez a szám számít. A sorok az elejétől kezdve elfoglalják a helyüket,
+  így a panel közben nem méreteződik át.
+  A **Reverse it on the way out** szándékosan alapból ki van kapcsolva: ha a rendezőnek el kell
+  tűnnie a grafikának, akkor tűnjön el — a fordított lépcsőzés a teljes feltöltési időt még egyszer
+  hozzáadja, mielőtt tiszta lenne a kép.
 
 ⚠️ **A változtatások csak a Save gomb megnyomásakor kerülnek adásba.** Az előnézet gépelés közben
 frissül.

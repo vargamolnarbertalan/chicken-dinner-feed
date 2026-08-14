@@ -12,13 +12,6 @@ export interface OverlayPageProps {
 }
 
 /**
- * A single overlay instance, rendered for consumption as a broadcast browser source.
- *
- * Nobody is looking at this page in a browser — it is composited over live video. That shapes every
- * decision here: transparent background, no interaction, and nothing rendered until we actually
- * know what should be on screen.
- */
-/**
  * A checkerboard drawn behind the panel when the page is embedded in the admin preview.
  *
  * An iframe cannot show the page behind it here: with no background of its own, the embedded
@@ -38,6 +31,13 @@ const PREVIEW_BACKDROP: CSSProperties = {
   backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0px',
 };
 
+/**
+ * A single overlay instance, rendered for consumption as a broadcast browser source.
+ *
+ * Nobody is looking at this page in a browser — it is composited over live video. That shapes every
+ * decision here: transparent background, no interaction, and nothing rendered until we actually
+ * know what should be on screen.
+ */
 export function OverlayPage({ instanceId }: OverlayPageProps) {
   // Read once: the address does not change while the page is open.
   const [isPreview] = useState(() => new URLSearchParams(window.location.search).has('preview'));
@@ -109,12 +109,16 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
           {overlay.visible && (
             <motion.div
               key="panel"
-              initial={animation.initial}
-              animate={animation.animate}
-              exit={animation.exit}
-              transition={animation.transition}
+              variants={animation.variants}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
             >
-              <LeaderboardOverlay match={snapshot.match} appearance={appearance} />
+              <LeaderboardOverlay
+                match={snapshot.match}
+                appearance={appearance}
+                animateRows={animation.rowsEnabled}
+              />
             </motion.div>
           )}
         </AnimatePresence>

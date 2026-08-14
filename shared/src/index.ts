@@ -47,6 +47,9 @@ export type { ScoringRuleset } from './config/scoring.js';
 export {
   overlayColorsSchema,
   overlayAnimationSchema,
+  overlayAnimationTypeSchema,
+  overlayAnimationDirectionSchema,
+  overlayRowAnimationSchema,
   overlayAppearanceSchema,
   overlayInstanceIdSchema,
   overlayInstanceSchema,
@@ -57,6 +60,9 @@ export {
 export type {
   OverlayColors,
   OverlayAnimation,
+  OverlayAnimationType,
+  OverlayAnimationDirection,
+  OverlayRowAnimation,
   OverlayAppearance,
   OverlayInstance,
   OverlayInstancesDocument,

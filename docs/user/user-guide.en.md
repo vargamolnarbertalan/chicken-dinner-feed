@@ -189,7 +189,21 @@ Select an overlay on the left, then adjust:
 - **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
   The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
   keep them see-through.
-- **Show / hide animation** — direction, speed and easing.
+- **Show / hide animation** — how the overlay arrives and leaves:
+  - **Fade** — appears in place.
+  - **Wipe** — the panel stays exactly where it is and is revealed from the edge you choose. The
+    text does not move, which is why this reads as calmer than a slide.
+  - **Slide** — the whole panel travels in from the edge you choose.
+  - **Zoom** — grows into place from slightly smaller.
+  - **Cross-fade as well** adds a fade on top of any of those. Turning it off leaves a plain wipe,
+    slide or zoom, with no change in transparency.
+  - **Duration** runs from 0.1 to 5 seconds.
+- **Rows** — optionally, the rows fade in one after another _after_ the panel has arrived, which
+  reads well on a big leaderboard. The gap between rows is adjustable; the admin tells you how long
+  the whole list will take to fill, which is the number that actually matters. The rows hold their
+  place from the start, so the panel never resizes while filling.
+  **Reverse it on the way out** is off by default on purpose: when a director needs a graphic gone,
+  it should go, and reversing adds the whole fill time again before the screen clears.
 
 ⚠️ **Changes only reach your broadcast when you press Save.** The preview updates as you type.
 
