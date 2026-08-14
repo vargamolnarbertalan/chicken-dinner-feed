@@ -1,8 +1,8 @@
 import { overlayInstanceIdSchema, overlayVisibilitySchema } from '@cdf/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { config } from '../config.js';
 import type { OverlayControlStore } from '../state/overlay-control-store.js';
+import { CONTROL_TOKEN_HEADER, controlTokenRejection } from './control-token.js';
 
 export interface OverlayControlRoutesOptions {
   store: OverlayControlStore;
@@ -75,20 +75,6 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
     },
   );
 
-  /**
-   * Optional shared secret, off by default.
-   *
-   * Loopback binding is the real control (ADR-0008). This exists for the one setup that needs
-   * more: Companion running on a different machine, which requires binding to the network and
-   * therefore exposes these endpoints to anyone on the venue LAN. It is a speed bump against
-   * accidents and curious people on the same network, not authentication.
-   */
-  function rejectIfTokenInvalid(provided: string | undefined, header: unknown): string | null {
-    if (!config.controlToken) return null;
-    const supplied = provided ?? (typeof header === 'string' ? header : undefined);
-    return supplied === config.controlToken ? null : 'Invalid or missing control token.';
-  }
-
   const responseSchema = {
     200: overlayVisibilitySchema,
     401: z.object({ error: z.string() }),
@@ -111,9 +97,9 @@ export const overlayControlRoutes: FastifyPluginAsyncZod<OverlayControlRoutesOpt
         response: responseSchema,
       },
       handler: async (request, reply) => {
-        const rejection = rejectIfTokenInvalid(
+        const rejection = controlTokenRejection(
           request.query.token,
-          request.headers['x-control-token'],
+          request.headers[CONTROL_TOKEN_HEADER],
         );
         if (rejection) {
           await reply.code(401).send({ error: rejection });

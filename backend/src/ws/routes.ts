@@ -19,12 +19,14 @@ export const liveRoutes: FastifyPluginAsync<LiveRoutesOptions> = async (app, opt
 
     // The overlay identifies itself in the URL rather than in a first message, so the server can
     // answer with the right visibility state in the same breath as the first snapshot.
-    const instanceId =
-      typeof (request.query as { instance?: unknown } | undefined)?.instance === 'string'
-        ? (request.query as { instance: string }).instance || null
-        : null;
+    const query = request.query as { instance?: unknown; preview?: unknown } | undefined;
+    const instanceId = typeof query?.instance === 'string' ? query.instance || null : null;
 
-    hub.addClient(client, instanceId);
+    // The admin's preview declares itself, so it can be left out of the browser-source count
+    // reported at /feedback. Purely informational — it changes nothing about what is sent.
+    const isPreview = query?.preview !== undefined;
+
+    hub.addClient(client, instanceId, { isPreview });
     request.log.debug({ clients: hub.clientCount, instanceId }, 'Live client connected');
 
     socket.on('close', () => {

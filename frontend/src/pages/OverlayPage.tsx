@@ -57,7 +57,7 @@ export function OverlayPage({ instanceId }: OverlayPageProps) {
     };
   }, []);
 
-  useEffect(() => connect(instanceId), [connect, instanceId]);
+  useEffect(() => connect(instanceId, { isPreview }), [connect, instanceId, isPreview]);
 
   // Falls back to the id until the configuration arrives, so a tab is never nameless — and an
   // unconfigured overlay is still identifiable by the address it was opened with.

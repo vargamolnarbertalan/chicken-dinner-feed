@@ -33,7 +33,7 @@ interface LiveState {
    */
   hasAnimatedIn: boolean;
 
-  connect(instanceId?: string): () => void;
+  connect(instanceId?: string, options?: { isPreview?: boolean }): () => void;
   markAnimatedIn(): void;
 }
 
@@ -46,9 +46,10 @@ export const useLiveStore = create<LiveState>((set, get) => ({
   fonts: [],
   hasAnimatedIn: false,
 
-  connect(instanceId) {
+  connect(instanceId, options) {
     const connection = new LiveConnection({
       instanceId,
+      isPreview: options?.isPreview ?? false,
       onPhase: (phase) => set({ connection: phase }),
       onProtocolMismatch: (serverVersion) => set({ protocolMismatch: serverVersion }),
       onMessage: (message) => {

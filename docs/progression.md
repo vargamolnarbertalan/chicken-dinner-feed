@@ -341,7 +341,40 @@ changes"; reverting the edit returns all three to their resting state.
 
 ---
 
-## Next — round 3, part 7
+## Done — round 3, part 7 (2026-08-14): `/feedback` for stream-deck buttons
+
+`GET /feedback` returns one document a Companion button can read state out of: every overlay's
+properties and visibility, data-feed health, match progress, and every address the app answers on.
+_(ADR-0014)_
+
+- **Overlays are keyed by id, not listed.** An array index silently repoints a button at a different
+  overlay when an unrelated one is deleted — nothing fails, the button just becomes wrong.
+- **The payload is a projection defined separately from the persisted config**, so the config schema
+  stays free to change without breaking a stream deck built before a tournament. The cost is a
+  second schema that must be kept in step; it is a deliberate trade against Hyrum's Law, given the
+  consumer is hand-configured and rarely revisited.
+- **Every condition worth a feedback has a boolean** — `isVisible`, `isReceivingData`, `isStale`,
+  `hasConnectedSource`, `isLive` — rather than making an operator type a string comparison correctly
+  from memory. Timestamps are published twice, as an epoch stamp and as seconds-ago.
+- **`connectedSources` is the one genuinely new diagnostic**: it separates "hidden" from "showing
+  into nothing because OBS was never pointed at it", which look identical on air. The admin's own
+  preview is excluded — it connects over the same channel as a browser source, and counting it would
+  always answer yes to the question the operator is asking. The preview now declares itself with
+  `preview=1` on its WebSocket address, as it already did on its page address.
+- **The same `CONTROL_TOKEN` guards it**, via one shared `controlTokenRejection` so the two surfaces
+  cannot drift. The token is not embedded in the URLs the document hands out.
+- URLs are built from the request's `Host`, so a response fetched from another machine is already
+  written for that machine — validated against a conservative pattern rather than reflected.
+- `APP_VERSION` became one constant; `/api/health` and `/feedback` were about to disagree.
+
+**Verified against a running server:** the document parses, `hide` flips `isVisible` and populates
+`secondsSinceChange`, two live browser sources count as 2 while a preview alongside them counts as
+0, and with `CONTROL_TOKEN` set the endpoint answers 401 without it and 200 with it by either query
+parameter or header.
+
+---
+
+## Next — round 3, part 8
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean

@@ -164,4 +164,36 @@ describe('LiveHub', () => {
     expect(healthy.sent.length).toBe(healthyBefore + 1);
     expect(hub.clientCount).toBe(1);
   });
+
+  describe('sourceCountFor', () => {
+    it('counts only the browser sources rendering that instance', () => {
+      hub.addClient(new FakeClient(), 'main');
+      hub.addClient(new FakeClient(), 'main');
+      hub.addClient(new FakeClient(), 'lower');
+      hub.addClient(new FakeClient(), null); // an observer, e.g. the admin
+
+      expect(hub.sourceCountFor('main')).toBe(2);
+      expect(hub.sourceCountFor('lower')).toBe(1);
+      expect(hub.sourceCountFor('nobody')).toBe(0);
+    });
+
+    it('excludes the admin preview, which would otherwise answer the question wrongly', () => {
+      // "Is anything showing this overlay?" is a question about OBS. The operator asking it has the
+      // admin open in front of them, so counting their own preview would always answer yes.
+      hub.addClient(new FakeClient(), 'main', { isPreview: true });
+
+      expect(hub.sourceCountFor('main')).toBe(0);
+      expect(hub.clientCount).toBe(1);
+    });
+
+    it('drops back to zero once the source disconnects', () => {
+      const source = new FakeClient();
+      hub.addClient(source, 'main');
+      expect(hub.sourceCountFor('main')).toBe(1);
+
+      hub.removeClient(source);
+
+      expect(hub.sourceCountFor('main')).toBe(0);
+    });
+  });
 });

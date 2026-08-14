@@ -164,6 +164,48 @@ Két dolog, amit érdemes tudni:
 - **A browser source újratöltése megőrzi az állapotot.** Egy elrejtett overlay elrejtve marad
   újratöltés után is, nem villan fel a képernyőn.
 
+### Hogy a gombok mutassák is, mi történik: `/feedback`
+
+Az a gomb, amelyik csak parancsot küld, nem tudja megmondani, hogy sikerült-e. Nyisd meg ezt a címet:
+
+```
+http://127.0.0.1:4317/feedback
+```
+
+Az alkalmazás egyetlen szövegblokkban válaszol mindenről: minden overlay, hogy adásban van-e, a
+színei és animációs beállításai, hogy érkezik-e a játékadat, és az aktuális éllovas. A Companion
+ebből egyetlen értéket ki tud olvasni, és be tudja vele színezni a gombot.
+
+**Companionban:** vegyél fel egy **Generic HTTP** _változót_ (nem action-t), ami ezt a címet
+lekérdezi, majd egy feedback szabályban használj JSON útvonalat.
+
+| Mit mutasson a gomb                | JSON útvonal                       | Mit ad vissza    |
+| ---------------------------------- | ---------------------------------- | ---------------- |
+| Adásban van ez az overlay?         | `overlays.main.isVisible`          | `true` / `false` |
+| Érkezik játékadat?                 | `data.isReceivingData`             | `true` / `false` |
+| Elhallgatott az adat?              | `data.isStale`                     | `true` / `false` |
+| Meg is jeleníti egyáltalán valami? | `overlays.main.hasConnectedSource` | `true` / `false` |
+| Ki vezet?                          | `match.leader.shortName`           | pl. `MGLZ`       |
+| Hány csapat van még talpon         | `match.standingTeamCount`          | pl. `12`         |
+
+A `main` helyére a saját overlay-azonosítód kerül — ugyanaz, ami a browser source címében is
+szerepel.
+
+Ezek közül háromra külön is érdemes gombot tenni:
+
+- A **`hasConnectedSource`** azt számolja, hány browser source jeleníti meg az adott overlayt. Egy
+  overlay lehet úgy is „adásban”, hogy közben semmi nincs rákötve — ez pontosan úgy néz ki, mint egy
+  működő beállítás, egészen addig, amíg rá nem vágsz. A saját adminos previewd szándékosan **nem**
+  számít bele, így ez tényleg arra a kérdésre válaszol, amit felteszel: mi a helyzet az OBS-ben.
+- A **`data.isStale`** azt jelenti, hogy az alkalmazás még beszél a játékkal, de már nem érkezik új
+  adat — ilyenkor általában a szoba hosztja szállt ki. Az overlay ilyenkor megtartja az utolsó jó
+  állapotát ahelyett, hogy kiürülne, tehát enélkül észre sem vennéd.
+- A **`feedbackVersion`** azért van ott, hogy az alkalmazás egy későbbi verziója jelezni tudja, ha
+  változott a formátum — ahelyett, hogy a gombjaid csendben rosszul működnének.
+
+A válaszban az `actions` alatt minden cím szerepel, amit az alkalmazás kiszolgál — tehát ha ez az
+útmutató elveszik, a `/feedback` megmondja, mit lehet még hívni.
+
 ### Ha a Companion másik gépen fut
 
 Alapból az alkalmazás csak a saját gépéről érhető el, tehát egy másik gépen futó Companion nem éri
@@ -173,11 +215,15 @@ el. Ha engedni akarod:
    `HOST=0.0.0.0`.
 2. A Companionban a `127.0.0.1` helyett az overlay-gép hálózati címét használd.
 
+A `/feedback` válaszában szereplő címek ahhoz igazodnak, ahogy lekérdezted: ha
+`http://192.168.1.50:4317/feedback` címen nyitod meg, akkor minden, amit visszaad, már arra a gépre
+van megírva, és egyenesen bemásolható egy gombba.
+
 ⚠️ **Ezzel az admin felület is elérhetővé válik mindenki számára a hálózaton**, és az adminon nincs
 jelszó. Zárt közvetítői hálózaton ez általában rendben van. Ha szeretnél némi védelmet, állíts be egy
 `CONTROL_TOKEN=valami-amit-te-választasz` értéket a `backend\.env` fájlban, és a Companionban fűzd a
-címek végére: `?token=valami-amit-te-választasz`. Ez csak a show/hide gombokat védi, az admin
-felületet nem.
+címek végére: `?token=valami-amit-te-választasz` — **a `/feedback` végére is**, mert azt ugyanez a
+token védi. Ez a show/hide gombokat és a feedback oldalt védi, az admin felületet nem.
 
 ## 8. Overlayek beállítása
 
