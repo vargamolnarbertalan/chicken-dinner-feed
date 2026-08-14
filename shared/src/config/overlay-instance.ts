@@ -22,16 +22,57 @@ export const overlayColorsSchema = z.object({
 export type OverlayColors = z.infer<typeof overlayColorsSchema>;
 
 /**
- * Show/hide animation.
+ * How the overlay arrives and leaves.
  *
- * Easing is a named choice rather than a raw cubic-bezier: an operator picking "smooth" or "snappy"
- * before a broadcast is making a judgement they can make, whereas four control-point numbers is a
- * question they cannot usefully answer.
+ * `type` is what the motion *is*; `direction` is only meaningful for the two types that have one.
+ * Keeping them separate rather than flattening into a single list of "slide-left, slide-right,
+ * wipe-left…" means adding a type later does not multiply the options by four.
  */
+export const overlayAnimationTypeSchema = z.enum(['fade', 'wipe', 'slide', 'zoom-fade']);
+export type OverlayAnimationType = z.infer<typeof overlayAnimationTypeSchema>;
+
+/** Which edge the motion comes from. Ignored by `fade` and `zoom-fade`. */
+export const overlayAnimationDirectionSchema = z.enum(['top', 'bottom', 'left', 'right']);
+export type OverlayAnimationDirection = z.infer<typeof overlayAnimationDirectionSchema>;
+
+/**
+ * Rows appearing one after another once the panel itself has arrived.
+ *
+ * The rows occupy their space from the start and only change opacity, so the panel does not resize
+ * while they fill in — a growing panel would drag the layout around on air.
+ */
+export const overlayRowAnimationSchema = z.object({
+  enabled: z.boolean(),
+  /** Gap between consecutive rows. */
+  staggerMs: z.number().int().min(10).max(500),
+  /**
+   * Whether hiding reverses the stagger.
+   *
+   * Off by default: when a director needs a graphic gone, it should go. Sixteen rows at 100 ms
+   * would put more than a second between the key press and an empty screen.
+   */
+  reverseOnHide: z.boolean(),
+});
+export type OverlayRowAnimation = z.infer<typeof overlayRowAnimationSchema>;
+
 export const overlayAnimationSchema = z.object({
-  direction: z.enum(['left', 'right', 'up', 'down', 'fade']),
-  durationMs: z.number().int().min(0).max(3000),
+  type: overlayAnimationTypeSchema,
+  direction: overlayAnimationDirectionSchema,
+  durationMs: z.number().int().min(100).max(5000),
+  /**
+   * Named rather than a raw cubic-bezier: an operator picking "smooth" or "snappy" before a
+   * broadcast is making a judgement they can make, whereas four control points is a question they
+   * cannot usefully answer.
+   */
   easing: z.enum(['smooth', 'snappy', 'linear']),
+  /**
+   * Cross-fade on top of the chosen motion.
+   *
+   * Applies uniformly, including to `zoom-fade` — switching it off there leaves a pure zoom. One
+   * rule for every type is easier to predict than a per-type exception.
+   */
+  withFade: z.boolean(),
+  rows: overlayRowAnimationSchema,
 });
 export type OverlayAnimation = z.infer<typeof overlayAnimationSchema>;
 
@@ -104,9 +145,12 @@ export const DEFAULT_OVERLAY_APPEARANCE: OverlayAppearance = {
     playerDead: '#52525b',
   },
   animation: {
+    type: 'slide',
     direction: 'left',
     durationMs: 420,
     easing: 'smooth',
+    withFade: true,
+    rows: { enabled: false, staggerMs: 60, reverseOnHide: false },
   },
   showLegend: true,
   maxTeams: 16,

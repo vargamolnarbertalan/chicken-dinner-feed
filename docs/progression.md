@@ -288,7 +288,34 @@ measurement invented.
 
 ---
 
-## Next — round 3, part 5
+## Done — round 3, part 5 (2026-08-10): animation options
+
+- **Four types** — fade, wipe, slide, zoom. Wipe is a mask (`clip-path: inset()`), so the panel
+  stays put and its text does not shift while it is revealed; slide moves the whole panel. Type and
+  direction are stored separately, so adding a fifth type does not multiply the list by four.
+- **Cross-fade is now a switch**, applied uniformly — switching it off on zoom leaves a pure zoom.
+  One rule for every type beats a per-type exception.
+- **Duration** 100–5000 ms in 50 ms steps; **row stagger** 10–500 ms in 5 ms steps.
+- **Row animation** — rows fade in one after another once the panel has arrived, orchestrated by
+  Motion's `when: 'beforeChildren'` plus `staggerChildren` rather than per-row delays. Rows hold
+  their space and only change opacity, so the panel never resizes mid-animation.
+- Reversing on hide is **its own switch, off by default**: sixteen rows at 100 ms would put more
+  than a second between a director's key press and an empty screen.
+
+**The migration is the part that mattered.** Changing the animation shape would have made four
+existing overlays fail validation and stop the app on start. `schemaVersion` finally earns its
+keep — documents are migrated _before_ validation and the upgrade is written back once. A first
+attempt snapped durations to the slider's 50 ms grid, turning 880 ms into 900; corrected, because a
+migration changes a document's shape, not an operator's settings.
+
+**Verified by running it:** the real v1 config loaded and upgraded with every setting intact; each
+of the four types sampled mid-flight in a browser (wipe showing `inset(0% 17% 0% 0%)`, zoom at
+`scale(0.986)` with opacity untouched); and the row stagger observed as a clean staircase that
+stays at zero until the panel has finished.
+
+---
+
+## Next — round 3, part 6
 
 1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean

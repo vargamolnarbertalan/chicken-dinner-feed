@@ -1,4 +1,11 @@
-import type { CustomFont, OverlayAppearance, OverlayColors } from '@cdf/shared';
+import type {
+  CustomFont,
+  OverlayAnimation,
+  OverlayAnimationDirection,
+  OverlayAnimationType,
+  OverlayAppearance,
+  OverlayColors,
+} from '@cdf/shared';
 import { fontFamilyValue } from '@cdf/shared';
 import { ColorField } from './ColorField';
 
@@ -21,6 +28,19 @@ export function AppearanceEditor({ appearance, customFonts, onChange }: Appearan
   const patch = (changes: Partial<OverlayAppearance>) => onChange({ ...appearance, ...changes });
   const patchColor = (key: keyof OverlayColors, value: string) =>
     patch({ colors: { ...appearance.colors, [key]: value } });
+
+  const animation = appearance.animation;
+  const patchAnimation = (changes: Partial<OverlayAnimation>) =>
+    patch({ animation: { ...animation, ...changes } });
+  const patchRows = (changes: Partial<OverlayAnimation['rows']>) =>
+    patchAnimation({ rows: { ...animation.rows, ...changes } });
+
+  const hasDirection = animation.type === 'wipe' || animation.type === 'slide';
+  const plainName = animation.type === 'zoom-fade' ? 'zoom' : animation.type;
+  const fadeHint =
+    animation.type === 'fade' ? '— already a fade' : `— off leaves a plain ${plainName}`;
+  // How long the whole list takes to fill, which is what an operator is actually choosing.
+  const rowSweepSeconds = ((appearance.maxTeams * animation.rows.staggerMs) / 1000).toFixed(1);
 
   return (
     <div className="grid gap-6">
@@ -236,39 +256,52 @@ export function AppearanceEditor({ appearance, customFonts, onChange }: Appearan
         <h3 className="text-sm font-medium">Show / hide animation</h3>
         <div className="grid grid-cols-2 gap-3">
           <label className="grid gap-1 text-xs">
-            <span className="text-muted-foreground">Direction</span>
+            <span className="text-muted-foreground">Type</span>
             <select
               className="border-border bg-background rounded border px-2 py-1.5 text-sm"
-              value={appearance.animation.direction}
+              value={animation.type}
               onChange={(event) =>
-                patch({
-                  animation: {
-                    ...appearance.animation,
-                    direction: event.target.value as OverlayAppearance['animation']['direction'],
-                  },
-                })
+                patchAnimation({ type: event.target.value as OverlayAnimationType })
               }
             >
-              <option value="left">Slide from the left</option>
-              <option value="right">Slide from the right</option>
-              <option value="up">Slide from the top</option>
-              <option value="down">Slide from the bottom</option>
               <option value="fade">Fade</option>
+              <option value="wipe">Wipe &mdash; revealed from an edge, panel stays put</option>
+              <option value="slide">Slide &mdash; the panel travels in</option>
+              <option value="zoom-fade">Zoom</option>
             </select>
           </label>
+
+          {/*
+           * Only two of the four types have an edge to come from. Showing the control for the
+           * others would be a control that does nothing.
+           */}
+          {hasDirection ? (
+            <label className="grid gap-1 text-xs">
+              <span className="text-muted-foreground">From</span>
+              <select
+                className="border-border bg-background rounded border px-2 py-1.5 text-sm"
+                value={animation.direction}
+                onChange={(event) =>
+                  patchAnimation({ direction: event.target.value as OverlayAnimationDirection })
+                }
+              >
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+              </select>
+            </label>
+          ) : (
+            <span />
+          )}
 
           <label className="grid gap-1 text-xs">
             <span className="text-muted-foreground">Easing</span>
             <select
               className="border-border bg-background rounded border px-2 py-1.5 text-sm"
-              value={appearance.animation.easing}
+              value={animation.easing}
               onChange={(event) =>
-                patch({
-                  animation: {
-                    ...appearance.animation,
-                    easing: event.target.value as OverlayAppearance['animation']['easing'],
-                  },
-                })
+                patchAnimation({ easing: event.target.value as OverlayAnimation['easing'] })
               }
             >
               <option value="smooth">Smooth</option>
@@ -277,24 +310,87 @@ export function AppearanceEditor({ appearance, customFonts, onChange }: Appearan
             </select>
           </label>
 
-          <label className="col-span-2 grid gap-1 text-xs">
+          <label className="grid gap-1 text-xs">
             <span className="text-muted-foreground">
-              Duration — {appearance.animation.durationMs} ms
+              Duration &mdash; {animation.durationMs} ms
             </span>
             <input
               type="range"
-              min={0}
-              max={1500}
-              step={20}
-              value={appearance.animation.durationMs}
-              onChange={(event) =>
-                patch({
-                  animation: { ...appearance.animation, durationMs: Number(event.target.value) },
-                })
-              }
+              min={100}
+              max={5000}
+              step={50}
+              value={animation.durationMs}
+              onChange={(event) => patchAnimation({ durationMs: Number(event.target.value) })}
             />
           </label>
+
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={animation.withFade}
+              disabled={animation.type === 'fade'}
+              onChange={(event) => patchAnimation({ withFade: event.target.checked })}
+            />
+            Cross-fade as well
+            <span className="text-muted-foreground text-xs">{fadeHint}</span>
+          </label>
         </div>
+      </section>
+
+      <section className="grid gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Rows</h3>
+          <p className="text-muted-foreground text-xs">
+            Once the panel has arrived, the rows can fade in one after another. They hold their
+            place from the start, so the panel does not resize while they fill in.
+          </p>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={animation.rows.enabled}
+            onChange={(event) => patchRows({ enabled: event.target.checked })}
+          />
+          Bring the rows in one by one
+        </label>
+
+        {animation.rows.enabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1 text-xs">
+              <span className="text-muted-foreground">
+                Gap between rows &mdash; {animation.rows.staggerMs} ms
+              </span>
+              <input
+                type="range"
+                min={10}
+                max={500}
+                step={5}
+                value={animation.rows.staggerMs}
+                onChange={(event) => patchRows({ staggerMs: Number(event.target.value) })}
+              />
+              <span className="text-muted-foreground">
+                {appearance.maxTeams} rows fill in over {rowSweepSeconds} s
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={animation.rows.reverseOnHide}
+                onChange={(event) => patchRows({ reverseOnHide: event.target.checked })}
+              />
+              <span>
+                Reverse it on the way out
+                <span className="text-muted-foreground block text-xs">
+                  Off, the rows leave with the panel and the graphic clears at once. On, clearing
+                  takes a further {rowSweepSeconds} s.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
       </section>
     </div>
   );

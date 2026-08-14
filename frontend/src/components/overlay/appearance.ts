@@ -1,4 +1,5 @@
 import type { OverlayAnimation, OverlayAppearance } from '@cdf/shared';
+import type { Variants } from 'motion/react';
 import type { CSSProperties } from 'react';
 
 /**
@@ -60,40 +61,120 @@ const EASING: Record<OverlayAnimation['easing'], [number, number, number, number
   linear: 'linear',
 };
 
+type Target = Record<string, string | number>;
+
+/**
+ * The hidden end of each motion.
+ *
+ * Slide offsets are percentages of the panel's own size, so it always travels fully off screen
+ * whatever the resolution or the operator's scale setting.
+ *
+ * Wipe is a mask rather than movement: `inset()` clips from one edge, so the panel stays exactly
+ * where it is and its text does not shift while it is revealed. That is what distinguishes it from
+ * slide, and it is the reading broadcast people expect.
+ */
+function hiddenTarget(animation: OverlayAnimation): Target {
+  switch (animation.type) {
+    case 'fade':
+      return {};
+
+    case 'zoom-fade':
+      return { scale: 0.92 };
+
+    case 'slide':
+      switch (animation.direction) {
+        case 'left':
+          return { x: '-115%' };
+        case 'right':
+          return { x: '115%' };
+        case 'top':
+          return { y: '-115%' };
+        case 'bottom':
+          return { y: '115%' };
+      }
+      break;
+
+    case 'wipe':
+      // inset(top right bottom left) — each case clips everything away from the opposite side, so
+      // the reveal grows out of the named edge.
+      switch (animation.direction) {
+        case 'left':
+          return { clipPath: 'inset(0% 100% 0% 0%)' };
+        case 'right':
+          return { clipPath: 'inset(0% 0% 0% 100%)' };
+        case 'top':
+          return { clipPath: 'inset(0% 0% 100% 0%)' };
+        case 'bottom':
+          return { clipPath: 'inset(100% 0% 0% 0%)' };
+      }
+  }
+
+  return {};
+}
+
+function shownTarget(animation: OverlayAnimation): Target {
+  switch (animation.type) {
+    case 'fade':
+      return {};
+    case 'zoom-fade':
+      return { scale: 1 };
+    case 'slide':
+      return { x: 0, y: 0 };
+    case 'wipe':
+      return { clipPath: 'inset(0% 0% 0% 0%)' };
+  }
+}
+
 export interface AnimationVariants {
-  initial: Record<string, string | number>;
-  animate: Record<string, string | number>;
-  exit: Record<string, string | number>;
-  transition: { duration: number; ease: [number, number, number, number] | 'linear' };
+  /** Passed straight to the panel's `motion.div`; the row variants live beside them. */
+  variants: Variants;
+  rowsEnabled: boolean;
 }
 
 /**
- * Show/hide motion for the configured direction.
+ * Turn an instance's animation settings into the two ends of the transition.
  *
- * Offsets are percentages of the panel's own size, so the panel always travels fully off-screen
- * regardless of resolution or the operator's scale setting.
+ * The fade is added on top of whatever the type does, uniformly — including `zoom-fade`, where
+ * switching it off leaves a pure zoom. One rule for every type is easier to predict than a per-type
+ * exception, even if the name then over-promises slightly.
+ *
+ * Each variant carries its own transition, because entering and leaving are not mirror images. On
+ * the way in the panel arrives first and the rows follow (`beforeChildren`); on the way out — when
+ * the reverse is switched on — the rows leave first and the panel follows them (`afterChildren`),
+ * bottom-up, so the list empties the way it filled. A single shared transition would apply the exit
+ * ordering to the entrance as well.
  */
 export function appearanceToAnimation(appearance: OverlayAppearance): AnimationVariants {
-  const { direction, durationMs, easing } = appearance.animation;
-
-  const hidden: Record<string, string | number> =
-    direction === 'fade'
-      ? { opacity: 0 }
-      : direction === 'left'
-        ? { x: '-115%', opacity: 0 }
-        : direction === 'right'
-          ? { x: '115%', opacity: 0 }
-          : direction === 'up'
-            ? { y: '-115%', opacity: 0 }
-            : { y: '115%', opacity: 0 };
-
-  const shown: Record<string, string | number> =
-    direction === 'fade' ? { opacity: 1 } : { x: 0, y: 0, opacity: 1 };
+  const { animation } = appearance;
+  const fade = animation.withFade || animation.type === 'fade';
+  const base = { duration: animation.durationMs / 1000, ease: EASING[animation.easing] };
+  const stagger = animation.rows.staggerMs / 1000;
+  const rowsEnabled = animation.rows.enabled;
 
   return {
-    initial: hidden,
-    animate: shown,
-    exit: hidden,
-    transition: { duration: durationMs / 1000, ease: EASING[easing] },
+    rowsEnabled,
+    variants: {
+      visible: {
+        ...shownTarget(animation),
+        ...(fade ? { opacity: 1 } : {}),
+        transition: rowsEnabled
+          ? { ...base, when: 'beforeChildren', staggerChildren: stagger }
+          : base,
+      },
+      hidden: {
+        ...hiddenTarget(animation),
+        ...(fade ? { opacity: 0 } : {}),
+        transition:
+          rowsEnabled && animation.rows.reverseOnHide
+            ? { ...base, when: 'afterChildren', staggerChildren: stagger, staggerDirection: -1 }
+            : base,
+      },
+    },
   };
 }
+
+/** Rows only ever change opacity, so they keep their space and the panel never resizes. */
+export const ROW_VARIANTS = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+} as const;

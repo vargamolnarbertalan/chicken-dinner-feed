@@ -9,6 +9,14 @@ export interface JsonDocumentOptions<T> {
   schema: ZodType<T>;
   /** Used when the file does not exist yet. Written to disk on first load. */
   createDefault: () => T;
+  /**
+   * Brings an older document up to the current shape, before validation.
+   *
+   * Runs on the raw parsed JSON rather than on a validated value, because a document written by a
+   * previous version by definition does not satisfy the current schema — validating first would
+   * reject exactly the files this exists to rescue (ADR-0004).
+   */
+  migrate?: (raw: unknown) => unknown;
   /** Injected so a corrupt file is reported through the app's logger, not console. */
   onWarn?: (message: string, detail: unknown) => void;
 }
@@ -50,7 +58,7 @@ export class JsonDocument<T> {
   }
 
   async load(): Promise<T> {
-    const { filePath, schema, createDefault, onWarn } = this.options;
+    const { filePath, schema, createDefault, migrate, onWarn } = this.options;
 
     if (!existsSync(filePath)) {
       const seeded = createDefault();
@@ -69,7 +77,8 @@ export class JsonDocument<T> {
       );
     }
 
-    const result = schema.safeParse(parsed);
+    const migrated = migrate ? migrate(parsed) : parsed;
+    const result = schema.safeParse(migrated);
     if (!result.success) {
       onWarn?.(`${filePath} does not match the expected format`, result.error.issues);
       throw new Error(
@@ -79,6 +88,13 @@ export class JsonDocument<T> {
     }
 
     this.cached = result.data;
+
+    // Persist the upgrade so the migration runs once rather than on every start, and so what is on
+    // disk matches what the app is using.
+    if (JSON.stringify(migrated) !== raw.trim()) {
+      await this.write(result.data);
+    }
+
     return result.data;
   }
 

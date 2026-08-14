@@ -18,6 +18,7 @@ import {
   teamRosterDocumentSchema,
 } from '@cdf/shared';
 import { JsonDocument } from './json-document.js';
+import { migrateOverlayInstances, migrateSchemaVersionOnly } from './migrations.js';
 
 export type ConfigChange = 'instances' | 'teams' | 'scoring' | 'fonts';
 export type ConfigListener = (change: ConfigChange) => void;
@@ -53,6 +54,7 @@ export class ConfigStore {
       filePath: path.join(dataDir, 'overlay-instances.json'),
       schema: overlayInstancesDocumentSchema,
       createDefault: () => DEFAULT_OVERLAY_INSTANCES,
+      migrate: migrateOverlayInstances,
       onWarn,
     });
 
@@ -60,6 +62,7 @@ export class ConfigStore {
       filePath: path.join(dataDir, 'team-roster.json'),
       schema: teamRosterDocumentSchema,
       createDefault: () => DEFAULT_TEAM_ROSTER,
+      migrate: migrateSchemaVersionOnly,
       onWarn,
     });
 
@@ -67,6 +70,7 @@ export class ConfigStore {
       filePath: path.join(dataDir, 'scoring-ruleset.json'),
       schema: scoringRulesetSchema,
       createDefault: () => DEFAULT_SCORING_RULESET,
+      migrate: migrateSchemaVersionOnly,
       onWarn,
     });
 
@@ -74,6 +78,7 @@ export class ConfigStore {
       filePath: path.join(dataDir, 'custom-fonts.json'),
       schema: customFontsDocumentSchema,
       createDefault: () => DEFAULT_CUSTOM_FONTS,
+      migrate: migrateSchemaVersionOnly,
       onWarn,
     });
   }
