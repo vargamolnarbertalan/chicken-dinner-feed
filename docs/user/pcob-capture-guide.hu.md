@@ -96,10 +96,39 @@ A kicsomagolt csomag gyökerében pontosan két mappa van:
    > méretkülönbség árulkodó: **0,2 MB** (csak indító) vs **97,2 MB** (a valódi kliens). A guideline
    > kimondja, hogy az előbbi nem működik — a méret ezt meg is erősíti.
 
-4. **Ha hiányzó DLL-re panaszkodik**, telepítsd:
-   - [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
-   - [DirectX End-User Runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35) — ez
-     kell az `x3daudio1_7`-hez
+4. **Telepítsd a legacy DirectX 9 runtime-ot — tiszta Windows 11-en ez nem opcionális.**
+
+   A guideline ezt „ha hiányzó DLL hibát kapsz" feltételként írja. A gyakorlatban **garantáltan
+   kapni fogod**: a Windows 11 DirectX 12-t szállít, de a régi D3DX / XAudio / X3DAudio DLL-eket
+   soha nem telepíti. Egy friss gépen ellenőrizve **egyik sem** volt fent — se `x3daudio1_7.dll`,
+   se `d3dx9_43.dll`, se `xinput1_3.dll`, se `xactengine3_7.dll`.
+
+   A tipikus hibaüzenet:
+
+   ```
+   Error code [126]: Failed to load x3daudio1_7.dll, the file is missing or corrupt!
+   ```
+
+   **A megoldás — és a buktató benne:**
+
+   1. Töltsd le a hivatalos offline csomagot:
+      [`directx_Jun2010_redist.exe`](https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe)
+      (~96 MB)
+   2. Futtasd. **Ez nem telepít, csak kicsomagol** — megkérdezi, hova, kipakol, és kilép. Sokan itt
+      hiszik azt, hogy elszállt.
+   3. Menj a kicsomagolt mappába, és futtasd a **`DXSETUP.exe`**-t. **Ez telepít ténylegesen.**
+   4. Ellenőrzés: `Test-Path C:\Windows\System32\x3daudio1_7.dll` → `True`
+
+   > ⚠️ **Ne tölts le egyedi DLL-t „dll-letöltő" oldalakról.** Erre a hibaüzenetre azok jönnek ki
+   > elsőként a keresőben, és rendszeresen malware-t szállítanak.
+   >
+   > ⚠️ **A `winget install Microsoft.DirectX` nem elég.** Kipróbálva: „Successfully installed"-ot
+   > ír, a `winget list`-ben meg is jelenik, de **egyetlen DLL-t sem telepít** — a csomag a webes
+   > telepítő, ami csendes módban kilép. Az offline csomagot használd.
+
+   Ha `.dll` hiba a Visual C++-ra utal, akkor kell ez is:
+   [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
+
 5. **Email + jelszóval lépj be**, ne vendégként. Ha az observer fióknak még nincs PUBG Mobile
    identitása: indítsd el a játékot telefonon, válaszd a **Guest login**-t, majd csatolj hozzá
    emailt és jelszót.

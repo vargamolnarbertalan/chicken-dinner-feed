@@ -98,10 +98,39 @@ The unpacked package root contains exactly two folders:
    > difference gives it away: **0.2 MB** (a launcher) versus **97.2 MB** (the real client). The
    > guideline says the former will not work, and the size confirms it.
 
-4. **If you get a missing-DLL error**, install:
-   - [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
-   - [DirectX End-User Runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35) — this
-     is the one for `x3daudio1_7`
+4. **Install the legacy DirectX 9 runtime — on a clean Windows 11 this is not optional.**
+
+   The guideline frames it as "if you get a missing-DLL error". In practice you **will**: Windows 11
+   ships DirectX 12 but never installs the old D3DX / XAudio / X3DAudio DLLs. Checked on a fresh
+   machine, **none** of them were present — no `x3daudio1_7.dll`, no `d3dx9_43.dll`, no
+   `xinput1_3.dll`, no `xactengine3_7.dll`.
+
+   The error looks like this:
+
+   ```
+   Error code [126]: Failed to load x3daudio1_7.dll, the file is missing or corrupt!
+   ```
+
+   **The fix, and the trap inside it:**
+
+   1. Download the official offline package:
+      [`directx_Jun2010_redist.exe`](https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe)
+      (~96 MB)
+   2. Run it. **It does not install — it only extracts.** It asks for a folder, unpacks, and exits.
+      This is where people conclude it failed.
+   3. Go into that folder and run **`DXSETUP.exe`**. **That is what actually installs.**
+   4. Verify: `Test-Path C:\Windows\System32\x3daudio1_7.dll` → `True`
+
+   > ⚠️ **Do not download individual DLLs from "dll download" sites.** They are the top search
+   > results for this error and routinely serve malware.
+   >
+   > ⚠️ **`winget install Microsoft.DirectX` is not enough.** Tried it: it reports "Successfully
+   > installed" and shows up in `winget list`, but installs **no DLLs at all** — the package is the
+   > web installer, which exits silently in a non-interactive shell. Use the offline package.
+
+   If a `.dll` error points at Visual C++ instead, you also need
+   [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
+
 5. **Log in with email and password**, not as a guest. If the observer account has no PUBG Mobile
    identity yet: start the game on a phone, choose **Guest login**, then attach an email and
    password to it.
