@@ -10,10 +10,15 @@ This document keeps **only** what affects how we build the app. Operator-facing 
 (hotkeys, camera controls, OB etiquette) are summarised at the end for the broadcast crew,
 but they carry no engineering requirements.
 
-> Status: **partial**. The client thread revealed the API's host and port, but the authoritative
-> schema document is still access-restricted and the **live** data path remains unconfirmed — see
-> [Open questions](#open-questions). Everything marked _(unverified)_ must be confirmed before we
-> write ingestion code against it.
+> **The wire format now lives in [`PCOB-API.md`](PCOB-API.md).** Two API documents arrived on
+> 2026-08-17 and answered most of what this document could only guess at: the endpoint list, the
+> payload shape, the `liveState` enum, the identity fields and the match identifier. Where this
+> document and that one disagree, **`PCOB-API.md` is correct** — the notes below marked
+> ⚠️ **superseded** are kept only so the reasoning that led there stays legible.
+>
+> This document remains the authority on everything that is _not_ wire format: the access chain, the
+> operational failure modes, team identity via the ini, broadcast constraints, and the client's
+> product requirements.
 
 ---
 
@@ -55,22 +60,26 @@ What this settles:
 | **Format**        | JSON (the observer is told to save the response as JSON)                                                                                        |
 | **Auth**          | None mentioned — a plain local endpoint                                                                                                         |
 
-What this does **not** settle, and it matters:
+⚠️ **Superseded 2026-08-17** — everything below in this subsection was answered by the two new API
+documents. See [`PCOB-API.md`](PCOB-API.md) for the endpoint list, the payload and the field
+semantics. Two corrections in particular:
+
+- **`gettotalplayerlist` is the _live_ endpoint**, not a post-match one. The guess below — that live
+  data must come from some other route — was wrong. The observer's post-match use of it is a habit,
+  not a limitation. What is genuinely post-match-only is the `PlayerAfterMatchAPI` _field group_
+  inside the same response (§2.3, which stands).
+- **The host is not necessarily loopback.** The guideline gives `http://<hostip>:10086/<geturl>`
+  where `hostip` is the OB PC's address, so the API is LAN-reachable. The configurable base URL in
+  [ADR-0010](../docs/adr/0010-poll-the-pcob-http-api.md) is therefore required, not a nicety.
+
+_Original text, kept for the record:_
 
 - **`gettotalplayerlist` is described as a post-match endpoint.** Combined with the fact that
   `PlayerAfterMatchAPI` fields read `0` until the match ends (§2.3), the most likely reading is that
   this endpoint serves the **final/total player list**, and that live in-match data comes from a
-  different endpoint on the same server. The client says as much: _"A dinamikus tabella része nem
-  tudom még pontosan hogyan működik"_ — they do not yet know how the dynamic table works either.
-- **No endpoint index is known.** Other routes on port 10086 are unknown but very likely to exist.
-- **The JSON shape is unknown.** Field names, nesting, and whether the `PlayerBaseInfo` /
-  `PlayerRealTimeAPI` / `PlayerAfterMatchAPI` grouping from §2 appears literally in the payload.
-
-**Concrete next action, cheap and high value:** the moment anyone has a PCOB client running with
-"API Enable" ticked and `launch.bat` open, probe the server — `GET /`, `GET /gettotalplayerlist`,
-and a handful of guessed sibling routes — and capture one real response body. A single captured
-payload would close most of the remaining open questions at once. This does not need the restricted
-schema document.
+  different endpoint on the same server.
+- **No endpoint index is known.**
+- **The JSON shape is unknown.**
 
 ### 1.2 The access chain before any data exists
 
@@ -102,14 +111,14 @@ changed. So our effective input rate is **~0.5 Hz, event-driven, not a smooth st
 
 ### 2.1 `PlayerBaseInfo` — changes almost every tick
 
-| Field              | Notes for us                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `Location`         | Position. Not needed for the leaderboard overlay; needed later for a minimap overlay.                                     |
-| `Health`           | Current HP. **Drives the health-bar column height in the overlay.**                                                       |
-| `HealthMax`        | Denominator for the health percentage. Do not hardcode 100.                                                               |
-| `LiveState`        | Alive / knocked / dead discriminator. **Drives the three colours in the ALIVE column.** Exact enum values _(unverified)_. |
-| `KillNum`          | Eliminations. **Drives the ELIMS column.**                                                                                |
-| `KillNumBeforeDie` | Kills the player had before dying — needed so a dead player's elims don't reset.                                          |
+| Field              | Notes for us                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Location`         | Position. Not needed for the leaderboard overlay; needed later for a minimap overlay.                                                                                           |
+| `Health`           | Current HP. **Drives the health-bar column height in the overlay.**                                                                                                             |
+| `HealthMax`        | Denominator for the health percentage. Do not hardcode 100.                                                                                                                     |
+| `LiveState`        | Alive / knocked / dead discriminator. **Drives the three colours in the ALIVE column.** Enum values now confirmed — [`PCOB-API.md` §3](PCOB-API.md#livestate-the-enum-finally). |
+| `KillNum`          | Eliminations. **Drives the ELIMS column.**                                                                                                                                      |
+| `KillNumBeforeDie` | Kills the player had before dying — needed so a dead player's elims don't reset.                                                                                                |
 
 > Cadence note: this category "usually will be updated in each 2 sec since player locations change
 > frequently". Because `Location` churns constantly, **every** push will likely carry a full
@@ -135,8 +144,12 @@ populated after it ends. Any overlay binding to them mid-match would silently di
 Our contract layer should model these as "not yet available" rather than as numeric `0`.
 
 > Note the naming asymmetry: `Knockouts` and `Assists` are **after-match only**. A live "knocks"
-> column is therefore **not** directly available — it would have to be derived from `LiveState`
-> transitions ourselves.
+> column is therefore not available from _this_ field.
+>
+> ⚠️ **Partially superseded 2026-08-17.** It is available from elsewhere: `getkillinfo` streams
+> knock and kill events live, with `ResultHealthStatus` = 1 for a knock and 2 for a kill
+> ([`PCOB-API.md` §5](PCOB-API.md#5-the-remaining-live-endpoints)). Deriving knocks from `LiveState`
+> transitions is no longer the only route.
 
 ### 2.4 What the example overlay needs vs. what the API gives
 
@@ -156,6 +169,13 @@ eliminations.
 need a configurable scoring ruleset (placement points table + points per kill) as a first-class
 feature, not an afterthought.
 
+⚠️ **One row corrected 2026-08-17.** _Points_ are still ours — the API supplies no points table and
+cannot, since it is per-tournament. **Placement is not.** `rank` is documented as the team's
+placement, `0` while still playing
+([`PCOB-API.md` §6](PCOB-API.md#rank-changes-what-we-thought)). Our elimination-order tracking
+becomes the fallback rather than the only source — pending one capture confirming that `rank`
+populates during the match rather than only after it.
+
 ## 3. Team identity — the `TeamLogoAndColor.ini` mechanism
 
 The PCOB client renders team logos and colours by reading a **local ini file** on each OB PC
@@ -164,7 +184,8 @@ overlay, but it matters for two reasons.
 
 1. **The team number is our join key.** The ini maps `TeamNo=1..25` to a `TeamName`, and the
    guideline states in the hotkey section that "the team number will be also shown in the output
-   data". So `TeamNo` is very likely the identifier we correlate teams on _(unverified)_.
+   data". **Confirmed 2026-08-17:** the payload carries `teamId`, and that is what we correlate on
+   ([`PCOB-API.md` §3](PCOB-API.md#3-gettotalplayerlist)).
 2. **Logo asset requirements are already defined**, and we should reuse the same convention so an
    operator can point our app at the same folder they already maintain:
    - `001.png` … `016.png` (up to `025.png`) at **256×256**
@@ -263,46 +284,50 @@ they already perform manually, and is likely worth more than its cost. Recorded 
 
 ## Open questions
 
-Updated 2026-08-09 after the client thread. Transport, host and port are now **answered** (§1.1);
-what remains is the payload and the live path.
+Updated 2026-08-17 after the two API documents in `specs/new/`.
 
 ### Answered
 
-- ~~Transport~~ — HTTP over loopback.
-- ~~Host and port~~ — `127.0.0.1:10086`.
-- ~~Response format~~ — JSON.
+- ~~Transport~~ — HTTP, `GET`, JSON.
+- ~~Host and port~~ — port 10086 on the **OB PC**, which may or may not be loopback.
+- ~~The live data path~~ — `gettotalplayerlist` **is** the live endpoint.
+- ~~The endpoint index~~ — thirteen routes documented; see [`PCOB-API.md` §1](PCOB-API.md#1-transport).
+- ~~The JSON payload shape~~ — [`PCOB-API.md` §3–5](PCOB-API.md#3-gettotalplayerlist), with the
+  caveat in [§2](PCOB-API.md#2-the-two-shape-problem-read-this-before-writing-a-parser).
+- ~~`LiveState` enum~~ — seven values, 0–6, including a `Disconnected` we did not model.
+- ~~Identity fields~~ — `teamId` for teams; `playerKey` for players, with `uID` and `playerOpenId`
+  alongside it.
+- ~~Match identifier~~ — `GameID`, in `getteaminfolist` (documented in 3.0.0, not yet seen on the
+  wire).
+- ~~Match start / end signalling~~ (question 4) — `isingame`, plus `FightingStartTime` and
+  `FinishedStartTime`. Not an inference from `PlayerAfterMatchAPI` going non-zero.
+- ~~Live knock counts~~ — available from `getkillinfo`, not only from `LiveState` transitions.
 
 ### Still open
 
-1. **🟠 The live data path is unconfirmed.** `gettotalplayerlist` is described as a **post-match**
-   endpoint. We do not know which route serves in-match state, or whether the same route simply
-   returns live values while a match is running. The client does not know either.
-   **Resolvable without the schema document** by probing port 10086 against a running PCOB client.
-2. **🟠 The JSON payload shape is unknown.** Field names, nesting, whether the
-   `PlayerBaseInfo` / `PlayerRealTimeAPI` / `PlayerAfterMatchAPI` grouping appears literally, and:
-   - **Enum values** for `LiveState` (alive / knocked / dead / disconnected?).
-   - **Identity fields**: how players and teams are keyed (`TeamNo`? `uId`? player name?).
-   - Whether a match/round identifier is present.
-     **One captured real response would answer all of this.**
-3. **🔴 The API schema document is still not readable.**
-   `https://docs.google.com/spreadsheets/d/1__DWeOyhrNs4PdXs9EoWwXdylU-CMICOQ-yNpw3Ag34/edit?gid=0`
-   returns **HTTP 401** (CSV export, gviz and htmlview all tried). Access has been requested by the
-   client as of 2026-08-09. It would answer questions 1 and 2 authoritatively, including endpoints
-   nobody has thought to probe.
-4. Does the API signal match start / match end, or must we infer it from `PlayerAfterMatchAPI`
-   becoming non-zero?
-5. Is `KillNum` reset per match, and does it include knockdowns that a teammate finished?
-6. What polling interval is safe? The guideline warns about server overload from too many PCOB
-   clients with "API Enable" ticked; it says nothing about request rate against the local endpoint.
-   Since the upstream refreshes every ~2 s, polling faster than that gains nothing — see
-   [ADR-0010](../docs/adr/0010-poll-the-pcob-http-api.md).
-7. The _PCOB update note_ and _account application guide_ Google Docs remain unverified for
+Wire-format questions have moved to
+[`PCOB-API.md` §8](PCOB-API.md#8-what-is-still-missing), which is now the list to work from. All of
+them close with **one captured response from a live match** — the same action this document has
+recommended since 2026-08-09, now much better targeted.
+
+What remains here, outside the wire format:
+
+1. Is `killNum` reset per match, and does it count a knockdown a teammate finished? Answered by a
+   capture, but only by watching one across a match boundary.
+2. **🔴 The API schema spreadsheet still returns HTTP 401** (re-checked 2026-08-17, CSV export and
+   gviz). Access was requested by the client on 2026-08-09. It is now **largely redundant** — the two
+   PDFs cover what we needed it for.
+3. What polling interval is safe? Unchanged: the upstream refreshes every ~2 s, so polling faster
+   gains nothing — see [ADR-0010](../docs/adr/0010-poll-the-pcob-http-api.md).
+4. The _PCOB update note_ and _account application guide_ Google Docs remain unverified for
    engineering content — likely operator-only, low priority.
 
 **Mitigation while blocked:** the ingestion layer sits behind an adapter interface with a
 **mock/replay source** as the first implementation, so the overlay, scoring and admin can be built
 and demoed end-to-end without the real API. See
-[ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md).
+[ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md). That boundary is now doing exactly
+the job it was designed for: the corrections above changed our understanding substantially, and
+none of them touched a line of overlay, scoring or admin code.
 
 ---
 
