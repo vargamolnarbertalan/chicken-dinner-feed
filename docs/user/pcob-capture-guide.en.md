@@ -139,6 +139,12 @@ Even with no match running, the probe pass hits all thirteen documented routes a
 each returns. **Send that folder over even if it looks empty.** An empty-but-shaped response still
 reveals the envelope key, which is the thing we are least sure about.
 
+> ⚠️ **This test does NOT prove the whitelist works.** Whitelisting governs whether the game server
+> sends data to the client; the local HTTP server started by `launch.bat` comes up and answers
+> regardless. So a Level 1 run can be green from end to end and the account still not be
+> whitelisted. **Only a real match shows that** — which is the main reason not to leave it until the
+> first live broadcast.
+
 ---
 
 ## 6. Create a room

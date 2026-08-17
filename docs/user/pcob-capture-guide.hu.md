@@ -138,6 +138,12 @@ Meccs nélkül is végigmegy mind a tizenhárom dokumentált útvonalon, és elm
 **Küldd át a mappát akkor is, ha üresnek tűnik.** Egy üres, de formával bíró válasz is elárulja a
 boríték kulcsát — épp azt, amiben a legkevésbé vagyunk biztosak.
 
+> ⚠️ **Ez a teszt NEM igazolja a whitelistet.** A whitelist azt szabályozza, hogy a játékszerver
+> küld-e adatot a kliensnek; a `launch.bat` helyi HTTP szervere ettől függetlenül elindul és
+> válaszol. Vagyis a végig zöld 1-es szint mellett is kiderülhet később, hogy a fiók nincs
+> whitelistelve. **Ezt csak egy valódi meccs mutatja meg** — és ez a legfőbb ok, amiért nem szabad
+> az első éles adást megvárni vele.
+
 ---
 
 ## 6. Szoba létrehozása
