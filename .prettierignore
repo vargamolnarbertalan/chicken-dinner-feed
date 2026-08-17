@@ -3,6 +3,10 @@ dist/
 build/
 coverage/
 release/
+# The PCOB client, if unpacked here for testing. ~47 GB -- excluded explicitly rather
+# than relying on the node_modules/ rule happening to cover most of it.
+pcob/
+
 specs/*.pdf
 specs/*.png
 frontend/src/components/ui/
