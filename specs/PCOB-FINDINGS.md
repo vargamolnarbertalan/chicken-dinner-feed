@@ -205,6 +205,29 @@ Colour fields are documented as **not functional in v1.1.0** — copy-paste them
 A newer addition allows `KillInfoPath=<logo path>` between `TeamLogoPath` and `TeamColorR` to show
 team logos in kill messages.
 
+### Corrected 2026-08-17 against the real v4.3.0 file
+
+The PCOB client writes this file itself on first login, with a self-documenting header. Three
+corrections to the above, all read out of the generated file rather than the guideline:
+
+1. **The path is known directly.** No need for the guideline's §13 dance of running `Client.bat` and
+   searching for `iniconfigpath`:
+
+   ```
+   %LOCALAPPDATA%\ShadowTrackerExtra\Saved\TeamLogoAndColor.ini
+   ```
+
+2. **The colours _do_ work in 4.3.0**, and the alpha channel is the switch. The generated header
+   states: _"TeamColorR, TeamColorG, TeamColorB, TeamColorA for team color RGBA setting. **Use
+   ingame setting when TeamColorA equals to 0**."_ So `TeamColorA=0` means "leave it to the game",
+   and a non-zero alpha applies the operator's colour. The "not functional in v1.1.0" note is stale.
+3. **Team names may not contain `=` or `,`** — the header says so explicitly. This is a real
+   validation rule for the importer, since the format is comma-delimited with `=` pairs and a name
+   containing either would corrupt the line.
+
+**For the importer backlog item** this is good news: the file is at a fixed, predictable path, it
+exists on every OB machine after first login, and it carries its own field documentation.
+
 **Opportunity:** since the ini is a flat, well-formed text file listing team number → name → logo
 path, our admin could _import_ an existing `TeamLogoAndColor.ini` to bootstrap the team roster in
 one click instead of making the operator retype 16–25 teams. Cheap to build, high operator value.

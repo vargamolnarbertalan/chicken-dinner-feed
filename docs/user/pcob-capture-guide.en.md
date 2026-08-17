@@ -42,6 +42,23 @@ No, and yes.
 So the minimum setup is **one Windows PC** (observer, and where our app runs) **plus one phone**
 (host). The players can be on any phones.
 
+### "Do I log in on the phone with the same account as on the PC?"
+
+**No — and you cannot.** The two accounts play different roles and must be **in the room at the same
+time**:
+
+| Where              | Role                             | What it needs                          |
+| ------------------ | -------------------------------- | -------------------------------------- |
+| PC — ShadowTracker | **Observer** — joins and watches | this is the **whitelisted** one        |
+| Phone              | **Host** — creates the room      | this one holds the **tournament card** |
+
+One PUBG Mobile account cannot be signed in on two devices at once; the second would kick the first
+off. Since the host has to be present _while_ the observer joins, that makes them physically **two
+separate accounts**. The guideline says as much: _"DO NOT use PC OB to be the host"_ — if the PC OB
+is the host and it crashes, the whole match crashes with it.
+
+**The host can also be one of the players**, so it does not need an account of its own.
+
 ---
 
 ## 2. Three levels of test — do the cheap one first
@@ -178,6 +195,25 @@ open this in Notepad and read it out by hand.
 4. **Do two accounts, not one.** If one fails on the day there is no time to request another.
 
 Until this is done, everything below will run but produce no data.
+
+### "What is the OPENID for, if the account is already whitelisted?"
+
+**The OPENID _is_ the whitelist identifier** — it is not a separate step. It is what you sent, and
+what the publisher added to the allowed list. If the account is already whitelisted, **this section
+is done; skip it.**
+
+One use remains, and it matters: **checking that you are signed in as the right account.** Open this
+file and take the **third field**:
+
+```
+%LOCALAPPDATA%\ShadowTrackerExtra\Saved	oken.txt
+```
+
+Compare it against the OPENID you originally sent for whitelisting. If they differ, you are logged
+in as the wrong account — which is exactly the fault that later presents as "everything runs but no
+data arrives", with nothing visibly wrong.
+
+> The same kind of identifier appears in the API payload as `playerOpenId`, for players.
 
 ---
 

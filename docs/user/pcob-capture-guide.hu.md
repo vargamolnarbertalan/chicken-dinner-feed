@@ -42,6 +42,23 @@ Nem is, meg igen is.
 A minimális felállás tehát **egy Windows PC** (observer, és ahol az appunk fut) **plusz egy telefon**
 (hoszt). A játékosok bármilyen telefonon lehetnek.
 
+### „Ugyanazzal a fiókkal lépjek be telefonon is?"
+
+**Nem — és nem is lehet.** A két fiók két szerepet tölt be, és **egyszerre kell bent lenniük a
+szobában**:
+
+| Hol                | Szerep                            | Mit igényel                        |
+| ------------------ | --------------------------------- | ---------------------------------- |
+| PC — ShadowTracker | **Observer** — csatlakozik és néz | ez a fiók legyen **whitelistelve** |
+| Telefon            | **Host** — létrehozza a szobát    | erre kell a **tournament kártya**  |
+
+Egy PUBG Mobile fiók nem lehet egyszerre két eszközön bejelentkezve; a második kirúgná az elsőt.
+Mivel a hostnak bent kell lennie _miközben_ az observer csatlakozik, ez fizikailag **két külön
+fiókot** jelent. A guideline ezt külön is kimondja: _„DO NOT use PC OB to be the host"_ — ha a PC OB
+a host és összeomlik, az egész meccs vele omlik.
+
+**A host egyben játékos is lehet**, tehát nem kell neki külön fiók.
+
 ---
 
 ## 2. Három tesztszint — az olcsóval kezdd
@@ -176,6 +193,24 @@ nyisd meg ezt a fájlt Jegyzettömbben, és olvasd ki kézzel.
 4. **Két fiókkal csináld, ne eggyel.** Ha az egyik a helyszínen bedől, újat kérni már nincs idő.
 
 Amíg ez nincs meg, minden lentebbi lépés lefut, de adat nem jön.
+
+### „Mire kell az OPENID, ha a fiók már whitelistelt?"
+
+**Az OPENID _maga_ a whitelist azonosítója** — nem külön lépés. Ezt küldted el, és a kiadó ezt vette
+fel az engedélyezett listára. Ha a fiók már whitelistelt, **ez a szakasz kész, ugorhatod.**
+
+Egy dolgot ér még, és az fontos: **annak ellenőrzését, hogy a megfelelő fiókkal vagy-e bejelentkezve.**
+Nyisd meg ezt a fájlt, és vedd a **3. mezőt**:
+
+```
+%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt
+```
+
+Hasonlítsd össze azzal az OPENID-vel, amit annak idején whitelistelésre küldtél. Ha nem egyezik,
+rossz fiókkal vagy bent — és ez pontosan az a hiba, ami később úgy jelentkezik, hogy „minden fut, de
+nincs adat", miközben látszólag semmi sem rossz.
+
+> Ugyanez az azonosító-fajta szerepel az API-válaszban is, `playerOpenId` néven, a játékosokra.
 
 ---
 
