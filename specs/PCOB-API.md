@@ -2,7 +2,8 @@
 
 What the PCOB local HTTP API actually returns, and what we have to do about it.
 
-Sources, in decreasing authority for **wire format**:
+Sources. **Where two of them conflict, the newer wins** — the operator's rule, applied throughout and
+worked through in [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser):
 
 | #   | Source                                                                               | What it is                                                                                                          |
 | --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
@@ -13,9 +14,14 @@ Sources, in decreasing authority for **wire format**:
 
 Each field below carries an evidence marker:
 
-- **wire** — appears in a concrete JSON sample (source A). Trust the spelling.
-- **doc** — listed in the 3.0.0 dictionary (source B) but never seen on the wire. Name is plausible, not verified.
-- **conflict** — A and B disagree. Read the note.
+- **wire** — appears in a concrete JSON sample. The only proof a field exists at all — but the sample
+  is 1.5.0, so its **spelling is the legacy one** where 3.0.0 renamed it.
+- **doc** — listed in the 3.0.0 dictionary only. Newer, therefore the expected spelling, but never
+  seen on the wire, so its existence is unproven.
+- **conflict** — the two disagree. Read the note.
+
+Neither marker alone is sufficient, which is the whole problem: the document that proves a field
+exists is not the one that gives its current name.
 
 > **Status: good enough to write the adapter against, not good enough to trust blind.** One captured
 > response from a live match closes every remaining question in [§8](#8-what-is-still-missing). Until
@@ -72,23 +78,51 @@ in the whole integration, so it gets its own section.
 | Blue circle flag                           | `isOutsideBlueCircle`       | `isOutSideBlueCircle`                        |
 | `teamName`, `bHasDied`, `killNumBeforeDie` | present                     | **absent**                                   |
 
-**The reading that makes both documents true:** source B is a _data dictionary_ — it names the
-members of each data set conceptually, which is exactly how source C also talks (`Location` as a
-member of `PlayerBaseInfo`). Source A is the _wire format_, where `location` is transmitted as three
-scalars. Under that reading nothing actually contradicts; B is simply not a schema.
+### Resolution: the newer section wins
 
-This reading is supported but **not proven**. The wire sample is old enough that it predates every
-field added in 2.x and 3.0, so it cannot tell us how `killNumBeforeDie` or `teamName` are spelled on
-the wire — only that they were not there in 1.5.0.
+**Operator decision, 2026-08-17: where two documents conflict, the newer one is taken as correct.**
+Applied here — and note that the conflict is _inside one PDF_, between its 3.0.0 header section and
+its 1.5.0-era Interface Guideline, so the rule is applied between sections by the same logic.
 
-**Consequence for the adapter:** field lookup must be tolerant — case-insensitive, alias-aware
-(`survivalTime` | `surviceTime`), and indifferent to extra keys. See [§7](#7-what-this-changes-in-our-code).
+**Source B (3.0.0) is therefore primary. Source A's names become legacy aliases.**
+
+| Field            | Expected (3.0.0)      | Accepted as legacy       |
+| ---------------- | --------------------- | ------------------------ |
+| Envelope         | `TotalPlayerList`     | `playerInfoList`         |
+| Player id        | `uId`                 | `uID`                    |
+| Survival time    | `survivalTime`        | `surviceTime`            |
+| Blue circle flag | `isOutsideBlueCircle` | `isOutSideBlueCircle`    |
+| Position         | `location`            | `posX` / `posY` / `posZ` |
+
+Because [§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) looks fields up
+through an alias list, this ordering costs nothing if it turns out to be backwards — both spellings
+are read either way. What it decides is which name we treat as expected and which we log as a legacy
+fallback, so a capture that disagrees shows up as a warning naming the field rather than as silence.
+
+**One place where the rule gives the weaker answer, stated honestly:** for position, source A is
+strictly more useful. It gives three concrete scalars in cm; source B gives the name `location` and
+never says what shape it has — object, array, or string. So for position we read `location` first and
+fall back to `posX/posY/posZ`, and if `location` ever turns up we will have to discover its shape at
+runtime. This costs nothing today: the leaderboard does not use position at all. It would matter for
+a minimap.
+
+**What no rule can settle:** whether `teamName`, `bHasDied` and `killNumBeforeDie` are on the wire at
+all. Source A predates them, so its silence is not evidence of absence, and source B is not a wire
+sample. `killNumBeforeDie` is the one that matters — it keeps a dead player's elimination count from
+resetting — so the adapter must treat it as optional and fall back to the last `killNum` seen while
+the player was alive.
+
+**Consequence for the adapter:** field lookup must be tolerant — case-insensitive, alias-aware,
+indifferent to extra keys, and tolerant of absent ones. See [§7](#7-what-this-changes-in-our-code).
 
 ---
 
 ## 3. `gettotalplayerlist`
 
-Wire sample (source A, abridged, exactly as printed):
+Wire sample (source A, abridged, exactly as printed). Per
+[§2](#2-the-two-shape-problem-read-this-before-writing-a-parser) the names below are now the
+**legacy** spellings — they are shown because they are the only concrete sample that exists, not
+because they are the ones to expect first:
 
 ```jsonc
 {
@@ -323,6 +357,13 @@ the PCOB client version moves independently of us
 
 So: look fields up case-insensitively through an alias list, ignore unknown keys entirely, then
 validate the object **we** built with Zod. A new upstream field must never blank an overlay.
+
+Concretely, one lookup helper per field with an ordered alias list — 3.0.0 name first, legacy second
+per [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser) — that logs **once per field per
+session** when it falls through to a legacy name or finds nothing. Logging once matters: at one poll
+per second, a warning per miss would produce 3,600 identical lines an hour and bury the real one.
+
+That log line is what turns the first real capture into an answer instead of an investigation.
 
 ### 7.2 Player slot has to be derived — the API does not have one
 
