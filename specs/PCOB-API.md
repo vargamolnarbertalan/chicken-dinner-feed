@@ -319,12 +319,15 @@ Two consequences:
 `PCOB-FINDINGS.md` §2.4 recorded that placement is _"our logic, not from API"_. That is now wrong:
 `rank` is documented as **the team's placement, `0` while still playing**.
 
-This does not mean we delete our elimination-order tracking. It means:
+**Decided 2026-08-17 — `rank` is primary, our elimination order is the automatic fallback.** We do
+not delete the existing tracking; it becomes the safety net. Concretely:
 
-- Treat `rank` as the **primary** source of placement once a capture confirms it behaves as
-  documented live (rather than, say, only populating after the match like the after-match block does).
-- Keep the elimination-order derivation as the **fallback**, since it is the only thing that works if
-  `rank` turns out to be post-match-only.
+- Take placement from `rank` whenever it is non-zero.
+- **Fall back automatically**, per team, when a team we believe is eliminated still reports `rank: 0`
+  after a grace period. That is the signature of `rank` turning out to be post-match-only, and it
+  must not stop points being awarded mid-broadcast.
+- Log the switch once. If it fires on every match, `rank` is post-match-only in practice and this
+  section is wrong.
 - Note the source says _">1 is the ranking"_. Almost certainly `>=1` — a first place has to be
   expressible. Do not encode `>1` literally.
 
@@ -346,6 +349,19 @@ agreeing, and it makes "primary source, with the elimination-order fallback" the
 ## 7. What this changes in our code
 
 Nothing here is implemented yet; this is the work list the report produces.
+
+### 7.0 Decisions taken — 2026-08-17
+
+Four questions the documents raised but could not answer, settled by the operator so the adapter work
+starts with none of them open.
+
+| #   | Question                                   | Decision                                                                                                                   |
+| --- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Which document wins on conflict            | **The newer one** — [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser)                                       |
+| 2   | `liveState: 6` (Disconnected)              | **Add a fifth `disconnected` state** — [§7.3](#73-livestate-6-disconnected-is-a-state-of-its-own)                          |
+| 3   | Player slot, which the API does not supply | **First-sight arrival order, frozen by `playerKey`** — [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) |
+| 4   | Placement: `rank` or our elimination order | **`rank` primary, ours as automatic fallback** — [§6](#rank-changes-what-we-thought)                                       |
+| 5   | New match (`GameID` change)                | **Reset internally, hold the previous table on screen until new data arrives** — [§7.6](#76-match-boundaries)              |
 
 ### 7.1 Parse tolerantly at the boundary, validate strictly after mapping
 
@@ -370,29 +386,45 @@ That log line is what turns the first real capture into an answer instead of an 
 Our `Player.slot: 1..4` fixes each player to one bar in the ALIVE column. **No field in any of these
 documents supplies it.**
 
-It must be assigned by us and then frozen for the match — for example, ascending `playerKey` within a
-`teamId`, decided on first sight. If it is recomputed per poll, a player leaving the list for one tick
-reshuffles their teammates' bars on air.
+**Decided 2026-08-17 — assign on first sight in arrival order, then freeze the mapping by
+`playerKey`.**
 
-Array order is the tempting alternative — the players probably arrive in a sensible order — but
-nothing in any of these documents says the order is stable, and betting the overlay's visual
-stability on an undocumented property is exactly the kind of thing that holds until it does not. Use
-it, if at all, only as the tie-break that decides the initial assignment.
+The two halves do different jobs. _Arrival order_ decides the initial layout, on the reasoning that
+the order the API happens to emit is most likely the in-game team order, so the bars match what the
+caster sees on their own screen. _Freezing by `playerKey`_ is what makes it stable afterwards: once
+a player owns slot 3, they own it for the match.
 
-This whole scheme rests on `playerKey` being stable for the duration of a match, which is likewise
-undocumented — see gap 5 in [§8](#8-what-is-still-missing).
+The consequence to get right is the empty slot. When a player is missing from one response, their
+slot stays **empty** rather than collapsing — teammates must not slide up a row and then back down
+two seconds later. That is the failure this decision exists to prevent, and it is invisible until it
+happens on air.
 
-### 7.3 `liveState: 6` (Disconnected) needs a product decision
+Slot assignment is per match: it is recomputed from scratch when the match resets
+([§7.6](#76-match-boundaries)).
 
-Our `PlayerLiveState` is `alive | knocked | dead | unknown`. A disconnected player is none of those:
-they are not dead, they can come back, but they are not standing either. Three options, and this is
-the operator's call, not mine:
+This whole scheme rests on `playerKey` being stable for the duration of a match, which is
+undocumented — see gap 5 in [§8](#8-what-is-still-missing). If a capture shows it is not, the
+fallback is `uID`, and failing that `playerName` within a team.
 
-1. Map to `unknown` — no protocol change, but `unknown` currently means _"we have not heard about
-   them"_, which is a different thing.
-2. Map to `dead` — simple, and wrong the moment someone reconnects.
-3. Add `disconnected` as a fifth value — the honest model. Costs a `PROTOCOL_VERSION` bump and a
-   colour decision in the overlay.
+### 7.3 `liveState: 6` (Disconnected) is a state of its own
+
+**Decided 2026-08-17 — add `disconnected` as a fifth `PlayerLiveState`.**
+
+Our enum was `alive | knocked | dead | unknown`. A disconnected player is none of those: not dead,
+can return, but not standing either. Mapping them to `dead` would make the table resurrect someone on
+reconnect, and could mis-award placement points; mapping them to `unknown` would conflate "gone" with
+"never heard of".
+
+Costs, both accepted:
+
+- A **`PROTOCOL_VERSION` bump** — the value crosses the WebSocket to overlays.
+- A **fourth appearance in the ALIVE column**. It has to read as distinct from dead at broadcast
+  distance without adding a colour to a palette the operator already configures — an outline or
+  dashed treatment on the existing dead colour rather than a new `--overlay-player-*` token.
+
+Open sub-question for whoever builds it: does a disconnected player count toward
+`standingPlayerCount`? They are not eliminated, so on the current definition — _"players not yet
+eliminated"_ — yes. Keep that, and let the distinct bar carry the nuance.
 
 ### 7.4 Configuration the adapter needs
 
@@ -405,6 +437,28 @@ must be a full host, not just a port — the API is documented as LAN-reachable 
 Disagreement is expected inside the skew window and is not an error — but a persistent disagreement
 is a real signal worth logging.
 
+### 7.6 Match boundaries
+
+**Decided 2026-08-17 — on a new `GameID`, reset internally but keep the previous standings on screen
+until the new match produces data.**
+
+What resets: elimination order, slot assignments, kill baselines, the match id. What does _not_ reset
+is what the overlay is currently rendering — the last good projection stays on air until the first
+response for the new `GameID` arrives.
+
+The reason is narrow and worth stating: between two matches of a tournament the director may well
+still have the leaderboard keyed up while talent recaps the round just played. Blanking it the
+instant the lobby rolls over would take the graphic out from under them, for the sake of a table
+nobody is waiting for yet.
+
+Two things this decision does not settle, both for whoever implements it:
+
+- **What if `GameID` is absent?** It comes from `getteaminfolist` and only source B documents it
+  (gap 2 in [§8](#8-what-is-still-missing)). Without it, the fallback signal is `isingame` going
+  false and then true again.
+- **A `GameID` that flaps** — from a reconnect rather than a real new match — must not reset
+  anything. Require the new id to be stable across a couple of polls before acting on it.
+
 ---
 
 ## 8. What is still missing
@@ -414,11 +468,10 @@ is a real signal worth logging.
 | 1   | **One captured response from a live match.** Settles the envelope key (`playerInfoList` vs `TotalPlayerList`), exact casing, and whether `killNumBeforeDie` / `teamName` / `bHasDied` are actually on the wire.                      | 🟠       | A rehearsal room is enough. Does not need a tournament.      |
 | 2   | **Does `getteaminfolist` carry the `GameID` / timing block?** Only source B claims it. If it does not, our match identifier and end-of-match signal both disappear.                                                                  | 🟠       | Same capture.                                                |
 | 3   | **Does `rank` populate live, or only after the match?** Decides whether it is our placement source or a cross-check.                                                                                                                 | 🟠       | Same capture — one player eliminated mid-match answers it.   |
-| 4   | **Behaviour between matches.** Does `gettotalplayerlist` hold the previous match's data, empty out, or fail? Decides how we detect a new match rather than showing stale standings.                                                  | 🟡       | Same capture, observed across a match boundary.              |
+| 4   | **Behaviour between matches.** Does `gettotalplayerlist` hold the previous match's data, empty out, or fail? [§7.6](#76-match-boundaries) assumes a `GameID` change is detectable; this confirms it.                                 | 🟡       | Same capture, observed across a match boundary.              |
 | 5   | **Is `playerKey` stable for a whole match?** Undocumented. [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) rests on it: if it changes between polls, slot assignments break and the ALIVE bars reshuffle on air. | 🟠       | Same capture — compare two responses a few seconds apart.    |
-| 6   | **`liveState: 6` handling** — [§7.3](#73-livestate-6-disconnected-needs-a-product-decision).                                                                                                                                         | 🟡       | A decision, not a capture.                                   |
-| 7   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17, CSV export and gviz).                                                                                                                       | 🟢       | Now largely redundant — these two PDFs cover what we needed. |
-| 8   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).    | 🟢       | Not needed for the leaderboard.                              |
+| 6   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17, CSV export and gviz).                                                                                                                       | 🟢       | Now largely redundant — these two PDFs cover what we needed. |
+| 7   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).    | 🟢       | Not needed for the leaderboard.                              |
 
 **None of these blocks starting the adapter**, and 1–5 are all answered by the same single capture —
 one PCOB client, one rehearsal room, two responses a few seconds apart, saved to disk. The
