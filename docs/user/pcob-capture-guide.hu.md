@@ -65,22 +65,36 @@ se más ember, és már ez is megválaszolhatja a legnagyobb kérdést: `TotalPl
 
 Azon a Windows gépen, amelyik az observer lesz.
 
-1. **Töltsd le a három fájlt** az Esport1 Drive-linkjéről, és csomagold ki.
-2. **Tedd fel a patchet.** A `.pak` fájl ide megy:
-   ```
-   %LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks
-   ```
-   (Másold be az Intéző címsorába — magától feloldódik.)
-3. **A klienst a helyes helyről indítsd.** Menj ide:
+> **A lentiek a v4.3.0 csomag tényleges tartalmán alapulnak**
+> (`Win64_Release4.3.0_No14_4.3.0.20920_Shipping_OB_Shelled`), nem a guideline általános leírásán. A
+> kettő **több ponton eltér** — ahol igen, ott a csomag az igazság, és jelezzük.
+
+A kicsomagolt csomag gyökerében pontosan két mappa van:
+
+```
+<csomag>\
+  ObToolsNew\        <- az API szerver (node.exe + ob.js + launch.bat)
+  WindowsNoEditor\   <- maga a kliens
+```
+
+1. **Csomagold ki** a `.7z`-t. ~47 GB, 6500 fájl — legyen elég hely.
+
+2. **Patch:** a guideline azt írja, tegyél egy külön letöltött `.pak`-ot a
+   `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks` mappába. **Ebben a csomagban nincs ilyen `.pak`**
+   (csak a motor saját CEF-erőforrásai). Vagy a 4.3.0 már tartalmazza, vagy külön kell kérni —
+   **kérdezd meg Zsófit**, ne találgass.
+
+3. **A klienst a helyes helyről indítsd:**
 
    ```
-   .\WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64
+   <csomag>\WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64\ShadowTrackerExtra.exe
    ```
 
-   jobb klikk a `ShadowTrackerExtra.exe`-n → **Futtatás rendszergazdaként**.
+   jobb klikk → **Futtatás rendszergazdaként**.
 
-   > ⚠️ Van egy másik `ShadowTrackerExtra.exe` közvetlenül a `\WindowsNoEditor` alatt is. A guideline
-   > kifejezetten kimondja, hogy **az nem fog működni**. A `Binaries\Win64` alattit használd.
+   > ⚠️ Van egy másik `ShadowTrackerExtra.exe` közvetlenül a `\WindowsNoEditor` alatt is. A
+   > méretkülönbség árulkodó: **0,2 MB** (csak indító) vs **97,2 MB** (a valódi kliens). A guideline
+   > kimondja, hogy az előbbi nem működik — a méret ezt meg is erősíti.
 
 4. **Ha hiányzó DLL-re panaszkodik**, telepítsd:
    - [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
@@ -104,8 +118,31 @@ Azon a Windows gépen, amelyik az observer lesz.
 
 Ez az a lépés, aminek átfutási ideje van. Kezdd el abban a percben, amikor a kliens elindul.
 
-1. Futtasd a `.bat` fájlt, amit az Esport1 a kliens mellé adott.
-2. Olvasd ki az **OPENID** számsort.
+A csomagban **két** ilyen `.bat` van, és nem ugyanazt csinálják:
+
+| Fájl                      | Hol                                                  | Mit csinál                                                |
+| ------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| `SearchOpenID.bat`        | `WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64\` | Elindítja a klienst a login-képernyőre `-log` kapcsolóval |
+| `get_facebook_openid.bat` | `ObToolsNew\`                                        | **Kiírja az OPENID-t** a bejelentkezés után               |
+
+A sorrend tehát: előbb lépj be a kliensbe (`SearchOpenID.bat` vagy a rendes indítás), **utána**
+futtasd a `get_facebook_openid.bat`-ot.
+
+A második fájl belsejéből kiderül, honnan olvas — és ez a leggyorsabb út, ha a `.bat` nem indul:
+
+```
+%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt
+```
+
+Ez egy vesszővel tagolt sor, és az **OPENID a harmadik mező**. Ha a `.bat` valamiért nem működik,
+nyisd meg ezt a fájlt Jegyzettömbben, és olvasd ki kézzel.
+
+> A fájl **most nem létezik** — a kliens még soha nem lépett be ezen a gépen. Az első sikeres
+> belépés hozza létre. Ez egyben a legegyszerűbb ellenőrzés is arra, hogy a belépés tényleg
+> megtörtént-e.
+
+1. Lépj be a kliensbe.
+2. Futtasd a `ObToolsNew\get_facebook_openid.bat`-ot, és olvasd ki az **OPENID** számsort.
 3. Küldd el Zsófinak, ő továbbítja a kiadónak whitelistelésre.
 4. **Két fiókkal csináld, ne eggyel.** Ha az egyik a helyszínen bedől, újat kérni már nincs idő.
 
@@ -120,10 +157,21 @@ Tíz perc, szoba nem kell. Csináld meg, amint a kliens fent van.
 1. Indítsd el a PCOB klienst, lépj be.
 2. **Pipáld be az „API Enable"** gombot.
 3. Nyiss egy parancssort, és futtasd:
+
    ```
-   WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat
+   <csomag>\ObToolsNew\launch.bat
    ```
+
+   > ⚠️ **A guideline rossz útvonalat ír.** Ott ez szerepel:
+   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. Ilyen mappa **nincs** a 4.3.0
+   > csomagban — az `ObToolsNew` közvetlenül a **csomag gyökerében** van.
+
    **Ezt az ablakot hagyd nyitva.** Ha bezárod, az API leáll.
+
+   > ⚠️ **Az ablak üres marad, és ez normális.** A `launch.bat` egyetlen sora `node.exe ob.js`, az
+   > `ob.js` pedig átirányítja a saját kimenetét fájlba. Tehát **nem fogsz semmilyen üzenetet látni**
+   > benne, akkor sem, ha minden tökéletesen működik. Ne ebből próbáld eldönteni, hogy él-e — arra a 4. lépés való.
+
 4. Ugyanezen a gépen, böngészőben nyisd meg:
    ```
    http://127.0.0.1:10086/isingame
@@ -222,6 +270,24 @@ címén figyel, tehát ez működik — de az adott gép tűzfalán engedni kell
 
 Ha végzett, **zippeld be a kimeneti mappát** (az Asztalra kerül, `pcob-capture_<dátum>` néven), és
 küldd át. Csak nyers JSON van benne: játékosnevek és -azonosítók, ezen túl semmilyen személyes adat.
+
+### Van egy második adatforrás is, ingyen
+
+Az `ob.js` **magától naplóz minden kérést és minden válasz teljes törzsét** ide:
+
+```
+<csomag>\ObToolsNew\log\log-ÉÉÉÉHHNN.txt
+```
+
+Ez akkor is keletkezik, ha a capture szkriptet el sem indítod — a `launch.bat` elindításának
+pillanatától gyűlik. Két következménye van:
+
+- **Ha elfelejted futtatni a capture-t, az adat akkor is megvan.** A meccs után küldd át ezt a
+  fájlt; nehezebb feldolgozni, mint a rendezett mappát, de mindent tartalmaz.
+- **Gyorsan hízik**, és minden lekérdezés minden válaszát tárolja. Hosszú verseny után érdemes
+  ránézni a méretére, és a `log/` mappát időnként üríteni.
+
+Ha a szkript valamiért nem indul el a helyszínen, ez a mentőöv.
 
 ---
 

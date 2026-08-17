@@ -66,22 +66,37 @@ called `TotalPlayerList` or `playerInfoList`.
 
 On the Windows PC that will be the observer.
 
-1. **Download the three files** from Esport1's Drive link and extract them.
-2. **Apply the patch.** Put the `.pak` file into:
-   ```
-   %LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks
-   ```
-   (Paste that into the Explorer address bar — it expands on its own.)
-3. **Start the client from the right place.** Go to
+> **What follows is based on the actual contents of the v4.3.0 package**
+> (`Win64_Release4.3.0_No14_4.3.0.20920_Shipping_OB_Shelled`), not on the guideline's generic
+> description. **They differ in several places** — where they do, the package is right, and it is
+> called out.
+
+The unpacked package root contains exactly two folders:
+
+```
+<package>\
+  ObToolsNew\        <- the API server (node.exe + ob.js + launch.bat)
+  WindowsNoEditor\   <- the client itself
+```
+
+1. **Extract** the `.7z`. It is ~47 GB across 6,500 files — check you have the room.
+
+2. **The patch.** The guideline says to drop a separately downloaded `.pak` into
+   `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks`. **There is no such `.pak` in this package**
+   (only the engine's own CEF resources). Either 4.3.0 already includes it or it has to be requested
+   separately — **ask Zsófi** rather than guessing.
+
+3. **Start the client from the right place:**
 
    ```
-   .\WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64
+   <package>\WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64\ShadowTrackerExtra.exe
    ```
 
-   right-click `ShadowTrackerExtra.exe` → **Run as administrator**.
+   right-click → **Run as administrator**.
 
-   > ⚠️ There is a second `ShadowTrackerExtra.exe` directly under `\WindowsNoEditor`. The guideline
-   > is explicit that **it will not work**. Use the one in `Binaries\Win64`.
+   > ⚠️ There is a second `ShadowTrackerExtra.exe` directly under `\WindowsNoEditor`. The size
+   > difference gives it away: **0.2 MB** (a launcher) versus **97.2 MB** (the real client). The
+   > guideline says the former will not work, and the size confirms it.
 
 4. **If you get a missing-DLL error**, install:
    - [Microsoft Visual C++ 2010 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
@@ -105,8 +120,31 @@ On the Windows PC that will be the observer.
 
 This is the step with the lead time. Start it the moment the client runs.
 
-1. Run the `.bat` file Esport1 provided with the client.
-2. Read the **OPENID** number it prints.
+The package ships **two** such `.bat` files, and they do different things:
+
+| File                      | Where                                                | What it does                                          |
+| ------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| `SearchOpenID.bat`        | `WindowsNoEditor\ShadowTrackerExtra\Binaries\Win64\` | Launches the client onto the login screen with `-log` |
+| `get_facebook_openid.bat` | `ObToolsNew\`                                        | **Prints the OPENID**, after you have logged in       |
+
+So the order is: log into the client first, **then** run `get_facebook_openid.bat`.
+
+Reading that second file shows where it gets the number from — which is the fastest route if the
+`.bat` misbehaves:
+
+```
+%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt
+```
+
+A single comma-separated line, with the **OPENID as the third field**. If the `.bat` will not run,
+open this in Notepad and read it out by hand.
+
+> The file **does not exist yet** — the client has never logged in on this machine. The first
+> successful login creates it, which also makes it the simplest check that the login actually
+> worked.
+
+1. Log into the client.
+2. Run `ObToolsNew\get_facebook_openid.bat` and read the **OPENID** number.
 3. Send it to Zsófi, who forwards it to the publisher for whitelisting.
 4. **Do two accounts, not one.** If one fails on the day there is no time to request another.
 
@@ -121,10 +159,22 @@ Ten minutes, no room needed. Do this as soon as the client is installed.
 1. Start the PCOB client and log in.
 2. **Tick "API Enable"** in the client.
 3. Open a command prompt and run:
+
    ```
-   WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat
+   <package>\ObToolsNew\launch.bat
    ```
+
+   > ⚠️ **The guideline prints the wrong path.** It gives
+   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. No such folder exists in the 4.3.0
+   > package — `ObToolsNew` sits directly in the **package root**.
+
    **Leave that window open.** Closing it stops the API.
+
+   > ⚠️ **The window stays blank, and that is normal.** `launch.bat` is one line — `node.exe ob.js`
+   > — and `ob.js` redirects its own output to a file. You will see **no messages at all**, even
+   > when everything is working perfectly. Do not judge liveness from this window; step 4 is what
+   > tells you.
+
 4. In a browser on the same PC, open:
    ```
    http://127.0.0.1:10086/isingame
@@ -224,6 +274,24 @@ listens on the OB PC's own address, so this works — but that PC's firewall has
 When it finishes, **zip the output folder** (it lands on the Desktop, named `pcob-capture_<date>`)
 and send it over. It contains raw JSON only: in-game player names and ids, nothing personal beyond
 that.
+
+### There is a second data source, for free
+
+`ob.js` **logs every request and every full response body** by itself, to:
+
+```
+<package>\ObToolsNew\log\log-YYYYMMDD.txt
+```
+
+It accumulates from the moment `launch.bat` starts, whether or not the capture script ever runs. Two
+consequences:
+
+- **If you forget to run the capture, the data still exists.** Send this file after the match; it is
+  harder to work with than the tidy folder, but it contains everything.
+- **It grows fast**, storing every response to every request. After a long event, check its size and
+  clear the `log/` folder periodically.
+
+If the script will not start at the venue, this is the safety net.
 
 ---
 

@@ -93,9 +93,13 @@ Ezt jó előre el kell intézni, nem a helyszínen.
 2. **A meccs kezdete előtt pipáld be az "API Enable" gombot a PCOB kliensben.** Ha ez kimarad, az
    alkalmazás _nincs adat_ állapotot mutat, hiába működik egyébként minden. Messze ez a leggyakoribb
    oka annak, ha látszólag nem működik az overlay.
-3. **Indítsd el a PCOB API-t.** Futtasd parancssorból a
-   `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat` fájlt. Ez saját konzolablakot nyit —
+3. **Indítsd el a PCOB API-t.** Futtasd parancssorból az `ObToolsNew\launch.bat` fájlt. Ez a
+   **kicsomagolt PCOB-csomag gyökerében** van, _nem_ a `WinClient_OB_live\WinClient_OB\` útvonalon,
+   amit a gyártói guideline ír (a v4.3.0 csomagon ellenőrizve). Saját konzolablakot nyit —
    **azt az ablakot is nyitva kell hagyni**, különben nem keletkezik adat.
+
+   > Az ablak **üresen marad**, és ez normális: a `launch.bat` egyetlen sora `node.exe ob.js`, az
+   > pedig fájlba naplóz. Ne ebből próbáld eldönteni, hogy működik-e.
 
 Két dolog, amit érdemes tudni, mert ezek nem az alkalmazás hibái:
 

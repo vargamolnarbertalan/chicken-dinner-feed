@@ -3,14 +3,22 @@
 What the PCOB local HTTP API actually returns, and what we have to do about it.
 
 Sources. **Where two of them conflict, the newer wins** — the operator's rule, applied throughout and
-worked through in [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser):
+worked through in [§2](#2-the-two-shape-problem-solved-by-reading-the-server):
 
-| #   | Source                                                                               | What it is                                                                                                          |
-| --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| A   | `specs/new/[updated] PC OB API List.pdf` — _Interface Guideline_ section (pp. 11–19) | Concrete JSON samples of real responses. **The only evidence of actual wire format we have.** Content is 1.5.0-era. |
-| B   | `specs/new/[updated] PC OB API List.pdf` — header section (pp. 1–5)                  | A data dictionary for version 3.0.0. Field _meanings_ and the newer additions. Not a wire sample.                   |
-| C   | `specs/new/PCOB API updated rules  2023.2.6.pdf`                                     | How and when each group of fields updates. No field format.                                                         |
-| D   | `specs/_PCOB Guideline (Last updated 6th Jan 2026).pdf`                              | Operator guideline. Distilled in [`PCOB-FINDINGS.md`](PCOB-FINDINGS.md).                                            |
+| #     | Source                                                                               | What it is                                                                                                          |
+| ----- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| A     | `specs/new/[updated] PC OB API List.pdf` — _Interface Guideline_ section (pp. 11–19) | Concrete JSON samples of real responses. **The only evidence of actual wire format we have.** Content is 1.5.0-era. |
+| B     | `specs/new/[updated] PC OB API List.pdf` — header section (pp. 1–5)                  | A data dictionary for version 3.0.0. Field _meanings_ and the newer additions. Not a wire sample.                   |
+| C     | `specs/new/PCOB API updated rules  2023.2.6.pdf`                                     | How and when each group of fields updates. No field format.                                                         |
+| D     | `specs/_PCOB Guideline (Last updated 6th Jan 2026).pdf`                              | Operator guideline. Distilled in [`PCOB-FINDINGS.md`](PCOB-FINDINGS.md).                                            |
+| **E** | **`ObToolsNew/ob.js` in the v4.3.0 client package**                                  | **The API server's own source. 1093 lines of plain Node. Outranks every document above.**                           |
+
+> **Source E changes the status of this file.** From 2026-08-17 the answers below are read out of
+> the running implementation, not inferred from vendor prose. Where a PDF and the source disagree,
+> **the source wins** — it is what actually answers the requests.
+>
+> The package is ~47 GB, so it is gitignored rather than vendored; every claim drawn from it is
+> quoted inline with a line number, so the reasoning survives without the payload.
 
 Each field below carries an evidence marker:
 
@@ -35,39 +43,73 @@ exists is not the one that gives its current name.
 GET http://<hostip>:10086/<geturl>
 ```
 
-`hostip` is **the OB client PC's address** — the guideline says so explicitly, not "localhost". So the
-API is reachable across the venue LAN, not only over loopback. [ADR-0010](../docs/adr/0010-poll-the-pcob-http-api.md)
-already specifies a configurable base URL defaulting to `http://127.0.0.1:10086`; that default is
-right, and the configurability is now confirmed as necessary rather than speculative.
+**Confirmed in source.** `ob.js` ends with:
 
-No authentication. JSON responses. All routes are `GET`, including the one named `setcircleinfo`
-(which reads circle state despite the verb — see [§5](#5-the-remaining-live-endpoints)).
+```js
+httpserver.listen(10086); // no host argument
+```
+
+Node binds to **all interfaces** when no host is given, so the API is genuinely LAN-reachable, not
+loopback-only. [ADR-0010](../docs/adr/0010-poll-the-pcob-http-api.md)'s configurable base URL
+defaulting to `http://127.0.0.1:10086` is exactly right.
+
+No authentication of any kind — there is no auth code in the file.
+
+### How routing works, and why it matters
+
+```js
+// ob.js line 1080
+let clientRequestPath = url.parse(request.url).pathname;
+let handle = app[clientRequestPath.substring(1, clientRequestPath.length)];
+if (handle) {
+  handle(request, response);
+} else {
+  console.log('[Error]: handle not found');
+}
+```
+
+Two consequences the PDFs never mention:
+
+1. **The route table is just the `app` object.** Every `app.<name> = function` is a reachable route.
+   There are **62**, not the thirteen the guideline lists.
+2. **An unknown route never responds.** It logs and falls off the end — no 404, no body, the socket
+   is simply left open until the client gives up. **Any request we make must carry a timeout**, or a
+   typo in a route name hangs the adapter instead of erroring.
+
+Routes come in `set*` / `get*` pairs: the game client POSTs to the `set*` half, we GET from the
+`get*` half. `setcircleinfo` reads despite its name because it is the `get` side of a pair whose
+naming was never tidied.
 
 ### Endpoints
 
-The guideline's own sentence — _"for now we have below data set you can access"_ — lists six. That
-sentence is 1.5.0-era; the same PDF documents seven more added in 2.5.0–3.0.0 that are presumably
-also reachable but are **not** in that list.
+Of the 62, these are the ones that matter to us. The guideline's list of six was 1.5.0-era.
 
-| Route                                                                                      | Purpose                                              | We need it                           |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------ |
-| `gettotalplayerlist`                                                                       | Every player's live state                            | **Yes — the primary feed**           |
-| `getteaminfolist`                                                                          | Per-team totals, and (3.0.0) match timing + `GameID` | **Yes**                              |
-| `isingame`                                                                                 | `{"isInGame": true}`                                 | **Yes — match phase**                |
-| `getkillinfo`                                                                              | Kill / knock-down feed                               | Later (kill feed, live knock counts) |
-| `getgameglobalinfo`                                                                        | Circle and flight path                               | Later (minimap)                      |
-| `setcircleinfo`                                                                            | Current circle timer state                           | Later                                |
-| `getobservingplayer`                                                                       | Which player each OB client is watching              | Later (highlight the observed team)  |
-| `getplayerweapondetailinfo`                                                                | Per-weapon accuracy breakdown                        | Post-match export                    |
-| `gettdmresultinfo`                                                                         | Team-deathmatch results                              | Not our format                       |
-| `getairdropboxinfo`, `getteambackpackinfo`, `getplayersaminfo`, `getplayerssightusageinfo` | Loadout / item detail                                | No                                   |
+| Route                                                                                      | Purpose                                      | We need it                           |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------- | ------------------------------------ |
+| **`getallinfo`**                                                                           | **Everything at once, including `GameID`**   | **Yes — make this the primary feed** |
+| `gettotalplayerlist`                                                                       | Every player's live state                    | Yes — the documented subset          |
+| `getteaminfolist`                                                                          | Per-team totals. **Does not carry `GameID`** | Yes                                  |
+| `isingame`                                                                                 | `{"isInGame": true}`                         | **Yes — match phase**                |
+| `getkillinfo`                                                                              | Kill / knock-down feed                       | Later (kill feed, live knock counts) |
+| `getgameglobalinfo`                                                                        | Circle and flight path                       | Later (minimap)                      |
+| `setcircleinfo`                                                                            | Current circle timer state                   | Later                                |
+| `getobservingplayer`                                                                       | Which player each OB client is watching      | Later (highlight the observed team)  |
+| `getplayerweapondetailinfo`                                                                | Per-weapon accuracy breakdown                | Post-match export                    |
+| `gettdmresultinfo`                                                                         | Team-deathmatch results                      | Not our format                       |
+| `getairdropboxinfo`, `getteambackpackinfo`, `getplayersaminfo`, `getplayerssightusageinfo` | Loadout / item detail                        | No                                   |
 
 ---
 
-## 2. The two-shape problem — read this before writing a parser
+## 2. The two-shape problem — solved by reading the server
 
-The same PDF describes `gettotalplayerlist` **twice, differently**. This is the single largest risk
-in the whole integration, so it gets its own section.
+> **Resolved 2026-08-17 by reading the source.** The v4.3.0 client package contains
+> `ObToolsNew/ob.js` — 1093 lines of plain, unobfuscated Node. **It _is_ the API server.**
+> `launch.bat` contains exactly one line: `node.exe ob.js`.
+>
+> Source E outranks every PDF here. What follows is no longer inference.
+
+The same PDF describes `gettotalplayerlist` **twice, differently** — and it turns out both
+descriptions were accurate, because they document **two different hops**.
 
 |                                            | Source B (3.0.0 dictionary) | Source A (wire sample)                       |
 | ------------------------------------------ | --------------------------- | -------------------------------------------- |
@@ -78,49 +120,76 @@ in the whole integration, so it gets its own section.
 | Blue circle flag                           | `isOutsideBlueCircle`       | `isOutSideBlueCircle`                        |
 | `teamName`, `bHasDied`, `killNumBeforeDie` | present                     | **absent**                                   |
 
-### Resolution: the newer section wins
+### The resolution, in six lines of source
 
-**Operator decision, 2026-08-17: where two documents conflict, the newer one is taken as correct.**
-Applied here — and note that the conflict is _inside one PDF_, between its 3.0.0 header section and
-its 1.5.0-era Interface Guideline, so the rule is applied between sections by the same logic.
+```js
+// ObToolsNew/ob.js, line 366
+app.gettotalplayerlist = function (request, response) {
+  let ret = {};
+  ret.playerInfoList = []; //          <- the key WE receive
+  if (app.allInfo) {
+    if (app.allInfo['TotalPlayerList']) {
+      //  <- the key the GAME sent in
+      ret.playerInfoList = app.allInfo['TotalPlayerList']; // contents passed through untouched
+    }
+  }
+  // ...
+};
+```
 
-**Source B (3.0.0) is therefore primary. Source A's names become legacy aliases.**
+There are two hops, and each document describes one of them:
 
-| Field            | Expected (3.0.0)      | Accepted as legacy       |
-| ---------------- | --------------------- | ------------------------ |
-| Envelope         | `TotalPlayerList`     | `playerInfoList`         |
-| Player id        | `uId`                 | `uID`                    |
-| Survival time    | `survivalTime`        | `surviceTime`            |
-| Blue circle flag | `isOutsideBlueCircle` | `isOutSideBlueCircle`    |
-| Position         | `location`            | `posX` / `posY` / `posZ` |
+```
+   PUBG Mobile game client                ob.js                        us
+   ───────────────────────  POST  ───────────────────  GET  ───────────────
+        TotalPlayerList      ──▶     app.allInfo        ──▶   playerInfoList
+        (source B, 3.0.0)                                     (source A, guideline)
+```
 
-Because [§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) looks fields up
-through an alias list, this ordering costs nothing if it turns out to be backwards — both spellings
-are read either way. What it decides is which name we treat as expected and which we log as a legacy
-fallback, so a capture that disagrees shows up as a warning naming the field rather than as silence.
+So the answer is a **hybrid neither PDF states**, and both were right about their own half:
 
-**One place where the rule gives the weaker answer, stated honestly:** for position, source A is
-strictly more useful. It gives three concrete scalars in cm; source B gives the name `location` and
-never says what shape it has — object, array, or string. So for position we read `location` first and
-fall back to `posX/posY/posZ`, and if `location` ever turns up we will have to discover its shape at
-runtime. This costs nothing today: the leaderboard does not use position at all. It would matter for
-a minimap.
+|                          | Comes from               | Verdict                                                          |
+| ------------------------ | ------------------------ | ---------------------------------------------------------------- |
+| **Envelope key**         | ob.js renames it         | **`playerInfoList`. Always. Source A was correct.**              |
+| **Player object fields** | passed through untouched | whatever the **game client** posts — i.e. source B's 3.0.0 names |
 
-**What no rule can settle:** whether `teamName`, `bHasDied` and `killNumBeforeDie` are on the wire at
-all. Source A predates them, so its silence is not evidence of absence, and source B is not a wire
-sample. `killNumBeforeDie` is the one that matters — it keeps a dead player's elimination count from
-resetting — so the adapter must treat it as optional and fall back to the last `killNum` seen while
-the player was alive.
+`ob.js` never looks inside the array. It swaps one key and re-serialises. Every field name, every
+capitalisation, every `surviceTime`-style typo inside a player object is decided by the game client
+version, not by anything we can read here.
 
-**Consequence for the adapter:** field lookup must be tolerant — case-insensitive, alias-aware,
-indifferent to extra keys, and tolerant of absent ones. See [§7](#7-what-this-changes-in-our-code).
+### This retracts the previous resolution
+
+The earlier revision applied the operator's _"newer document wins"_ rule and made `TotalPlayerList`
+the expected envelope. **That was wrong** — not because the rule is wrong, but because it was applied
+to a conflict that does not exist. The two documents never disagreed; they described different hops.
+
+No harm done: the alias lookup in
+[§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) reads both spellings
+either way. But the ordering is now settled by evidence rather than by a tie-break:
+
+| Field            | Expected              | Note                                                |
+| ---------------- | --------------------- | --------------------------------------------------- |
+| Envelope         | `playerInfoList`      | Not an alias. The only key ob.js emits.             |
+| Player id        | `uId`                 | 3.0.0 name; pass-through, so game-version dependent |
+| Survival time    | `survivalTime`        | as above, `surviceTime` was the 1.5.0 spelling      |
+| Blue circle flag | `isOutsideBlueCircle` | as above                                            |
+| Position         | `location`            | as above, `posX/posY/posZ` was 1.5.0                |
+
+**Still genuinely unknown:** whether `teamName`, `bHasDied` and `killNumBeforeDie` appear inside the
+player objects. That depends on the game client, which ob.js cannot tell us about. `killNumBeforeDie`
+is the one that matters — it keeps a dead player's elimination count from resetting — so the adapter
+treats it as optional and falls back to the last `killNum` seen while the player was alive.
+
+**Consequence for the adapter:** field lookup must still be tolerant — case-insensitive, alias-aware,
+indifferent to extra keys, and tolerant of absent ones. The envelope is now certain; the contents are
+not.
 
 ---
 
 ## 3. `gettotalplayerlist`
 
 Wire sample (source A, abridged, exactly as printed). Per
-[§2](#2-the-two-shape-problem-read-this-before-writing-a-parser) the names below are now the
+[§2](#2-the-two-shape-problem-solved-by-reading-the-server) the names below are now the
 **legacy** spellings — they are shown because they are the only concrete sample that exists, not
 because they are the ones to expect first:
 
@@ -203,6 +272,38 @@ available_, not as the number `0`.
 
 ---
 
+## 3b. `getallinfo` — undocumented, and the one we should actually poll
+
+Not in any PDF's endpoint list. Found by reading ob.js, where the route table is simply every
+function on the `app` object (`app[pathname.substring(1)]`). There are **62 routes**, not thirteen.
+
+```js
+// ObToolsNew/ob.js, line 352
+app.getallinfo = function (request, response) {
+  let ret = {};
+  if (app.allInfo) {
+    ret.allinfo = app.allInfo; // the entire object the game posted, untouched
+  }
+  // ...
+};
+```
+
+`app.allInfo` is whatever the game last POSTed to `/totalmessage`, stored verbatim. So `getallinfo`
+returns **the complete 3.0.0 structure** — `TotalPlayerList`, `TeamInfoList`, and the top-level
+`GameID`, `GameStartTime`, `FightingStartTime`, `FinishedStartTime`, `CurrentTime`.
+
+Two reasons this should be the adapter's primary request:
+
+1. **It is the only route that exposes `GameID`** — see [§4](#4-getteaminfolist) for why the
+   documented route drops it. Our match-boundary decision
+   ([§7.6](#76-match-boundaries)) depends on having it.
+2. **One request instead of two**, and players and teams then come from the same snapshot rather
+   than from two requests that could straddle an update.
+
+Note the envelope is spelled `allinfo` — all lower case, unlike the `TotalPlayerList` inside it.
+
+---
+
 ## 4. `getteaminfolist`
 
 Two shapes again, and here the difference is not cosmetic.
@@ -223,16 +324,22 @@ Two shapes again, and here the difference is not cosmetic.
 }
 ```
 
-**Source B (3.0.0)** adds `teamName` per entry, and — importantly — **five top-level fields
-alongside the array**:
+**Source B (3.0.0)** adds `teamName` per entry, and **five top-level fields alongside the array**:
+`GameID`, `GameStartTime` (the name lies — it is _elapsed_ seconds, not a timestamp),
+`FightingStartTime` (flight starts), `FinishedStartTime` (WWCD appears) and `CurrentTime`.
 
-| Field               | Documented meaning                   | Comment                                                         |
-| ------------------- | ------------------------------------ | --------------------------------------------------------------- |
-| `GameID`            | Game ID                              | **The match identifier we have been missing.**                  |
-| `GameStartTime`     | _"Game time ( 0 ~ xxx seconds )"_    | The name lies: this is **elapsed** time, not a start timestamp. |
-| `FightingStartTime` | Timing of game start (flight starts) |                                                                 |
-| `FinishedStartTime` | Timing of WWCD appears               | Match-end signal.                                               |
-| `CurrentTime`       | Current time                         |                                                                 |
+> ⚠️ **`getteaminfolist` does not serve any of those five.** From ob.js line 383:
+>
+> ```js
+> ret.teamInfoList = app.allInfo['TeamInfoList']; // the array, and nothing else
+> ```
+>
+> `GameID` and the timings are **siblings** of `TeamInfoList` inside `app.allInfo`, and this handler
+> reaches past them. Source B was describing the object the game posts, not this response.
+>
+> **This closes gap 2, in the unhelpful direction — and then reopens it in a better one:** the match
+> identifier is real and it is reachable, just not here. Use
+> [`getallinfo`](#3b-getallinfo-undocumented-and-the-one-we-should-actually-poll).
 
 Per-team, `killNum` (team total kills) and `liveMemberNum` (0–4) are both given directly. We compute
 both ourselves from the player list — keep doing so, and use these as a **cross-check**, since they
@@ -262,10 +369,20 @@ come from a different code path upstream and can disagree during the skew window
 
 `ResultHealthStatus`: `1` = knocked down, `2` = killed. **This matters more than it looks.**
 `PCOB-FINDINGS.md` §2.3 recorded that a live knock count was not available because `knockouts` is
-after-match only. It is available — from this feed. Two catches before anyone relies on it: names are
-used as identifiers here rather than `playerKey`, so correlating back to a player means matching on
-`playerName`; and nothing says whether the array is cumulative for the match or only recent events —
-if it is the latter, polling can miss events between requests.
+after-match only. It is available — from this feed.
+
+Source settles the semantics that the PDFs left open:
+
+```js
+app.killInfo.unshift(obj); // line 475 -- newest first, nothing ever removed
+ret.killInfo = app.killInfo; // line 489 -- the entire accumulated array
+```
+
+So the feed is **cumulative, newest-first, unbounded, and never cleared between matches** — only an
+`ob.js` restart empties it. A consumer therefore reads from the front and de-duplicates, and must
+not assume the array belongs to the current match. Polling cannot miss an event, which was the risk
+worth checking. Players are identified by **name** here, not `playerKey`, so correlating back to the
+player list means matching on `playerName`.
 
 **`getgameglobalinfo`** → `CircleArray` (X, Y, Size — first entry is the current circle) plus
 `PlaneStartLocX/Y` and `PlaneStopLocX/Y`. Carries a red warning in the source: _godview can stop this
@@ -301,9 +418,22 @@ The game server collects **three groups** every 2 seconds and sends them to the 
 | `PlayerRealTimeAPI` — gotAirDropNum, maxKillDistance, damage, killNumInVehicle, killNumByGrenade, rank, isOutsideBlueCircle | B       | Only on change                                 |
 | `PlayerAfterMatchAPI` — the whole after-match block                                                                         | B       | Zero until the match ends                      |
 
-On receiving **any** group, the PCOB client updates its `gettotalplayerlist` document and POSTs it to
-its own local HTTP server — the one we then GET from on port 10086. Multiple groups arriving in one
-frame produce multiple POSTs.
+On receiving **any** group, the PCOB client POSTs the whole object to its own local HTTP server — the
+one we then GET from on port 10086. Multiple groups arriving in one frame produce multiple POSTs.
+
+Source E shows exactly what that POST does:
+
+```js
+// ob.js line 330 -- POST /totalmessage
+let obj = JSON.parse(body);
+app.allInfo = obj; // wholesale replacement, no merge
+```
+
+**The replacement is total.** `app.allInfo` is not merged field by field — each POST swaps the entire
+object. So if the game ever posts a partial object, everything absent from that POST vanishes from
+the next response rather than retaining its previous value. Whether it ever does is unknown, but the
+adapter should treat a field disappearing between polls as "unchanged", not as "reset to zero" —
+which is the same defensive stance the after-match trap already requires.
 
 Two consequences:
 
@@ -357,27 +487,39 @@ starts with none of them open.
 
 | #   | Question                                   | Decision                                                                                                                   |
 | --- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Which document wins on conflict            | **The newer one** — [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser)                                       |
+| 1   | Which document wins on conflict            | **The newer one** — [§2](#2-the-two-shape-problem-solved-by-reading-the-server)                                            |
 | 2   | `liveState: 6` (Disconnected)              | **Add a fifth `disconnected` state** — [§7.3](#73-livestate-6-disconnected-is-a-state-of-its-own)                          |
 | 3   | Player slot, which the API does not supply | **First-sight arrival order, frozen by `playerKey`** — [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) |
 | 4   | Placement: `rank` or our elimination order | **`rank` primary, ours as automatic fallback** — [§6](#rank-changes-what-we-thought)                                       |
 | 5   | New match (`GameID` change)                | **Reset internally, hold the previous table on screen until new data arrives** — [§7.6](#76-match-boundaries)              |
+| 6   | Which route the adapter polls              | **`getallinfo`** — the only one carrying `GameID` — [§3b](#3b-getallinfo-undocumented-and-the-one-we-should-actually-poll) |
+| 7   | Request timeout                            | **Mandatory.** An unknown route never responds at all — [§1](#how-routing-works-and-why-it-matters)                        |
 
 ### 7.1 Parse tolerantly at the boundary, validate strictly after mapping
 
 Our house style is Zod everywhere ([ADR-0005](../docs/adr/0005-monorepo-with-shared-contracts.md)). At
-_this_ boundary a strict schema over the raw payload is the wrong instrument: the source documents
-cannot agree on `isOutSideBlueCircle` vs `isOutsideBlueCircle` or `survivalTime` vs `surviceTime`, and
-the PCOB client version moves independently of us
-([`PCOB-FINDINGS.md`](PCOB-FINDINGS.md) §5).
+_this_ boundary a strict schema over the raw payload is still the wrong instrument — but for a
+sharper reason than before.
 
-So: look fields up case-insensitively through an alias list, ignore unknown keys entirely, then
-validate the object **we** built with Zod. A new upstream field must never blank an overlay.
+**Reading ob.js narrowed the uncertainty rather than removing it.** The envelope keys are now
+certain: `ob.js` writes `playerInfoList`, `teamInfoList` and `allinfo` as string literals in its own
+source. What is _not_ certain is anything **inside** those containers, because ob.js passes the
+game's payload through without touching it
+([§2](#2-the-two-shape-problem-solved-by-reading-the-server)). Those field names belong to the game
+client — a component that updates on the publisher's schedule, independently of us
+([`PCOB-FINDINGS.md`](PCOB-FINDINGS.md) §5) and independently even of `ob.js`.
 
-Concretely, one lookup helper per field with an ordered alias list — 3.0.0 name first, legacy second
-per [§2](#2-the-two-shape-problem-read-this-before-writing-a-parser) — that logs **once per field per
-session** when it falls through to a legacy name or finds nothing. Logging once matters: at one poll
-per second, a warning per miss would produce 3,600 identical lines an hour and bury the real one.
+So the rule splits:
+
+| Layer                                                  | Treatment                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Envelope (`allinfo`, `playerInfoList`, `teamInfoList`) | **Assert it.** If it is missing, something is genuinely wrong.            |
+| Player and team object fields                          | **Look up tolerantly** — case-insensitive, alias-aware, absence-tolerant. |
+
+Concretely, one lookup helper per field with an ordered alias list — 3.0.0 name first, 1.5.0 second
+per [§2](#the-resolution-in-six-lines-of-source) — that logs **once per field per session** when it
+falls through to an older name or finds nothing. Logging once matters: at one poll per second, a
+warning per miss would produce 3,600 identical lines an hour and bury the real one.
 
 That log line is what turns the first real capture into an answer instead of an investigation.
 
@@ -463,23 +605,34 @@ Two things this decision does not settle, both for whoever implements it:
 
 ## 8. What is still missing
 
-| #   | Gap                                                                                                                                                                                                                                  | Severity | How it gets closed                                           |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------ |
-| 1   | **One captured response from a live match.** Settles the envelope key (`playerInfoList` vs `TotalPlayerList`), exact casing, and whether `killNumBeforeDie` / `teamName` / `bHasDied` are actually on the wire.                      | 🟠       | A rehearsal room is enough. Does not need a tournament.      |
-| 2   | **Does `getteaminfolist` carry the `GameID` / timing block?** Only source B claims it. If it does not, our match identifier and end-of-match signal both disappear.                                                                  | 🟠       | Same capture.                                                |
-| 3   | **Does `rank` populate live, or only after the match?** Decides whether it is our placement source or a cross-check.                                                                                                                 | 🟠       | Same capture — one player eliminated mid-match answers it.   |
-| 4   | **Behaviour between matches.** Does `gettotalplayerlist` hold the previous match's data, empty out, or fail? [§7.6](#76-match-boundaries) assumes a `GameID` change is detectable; this confirms it.                                 | 🟡       | Same capture, observed across a match boundary.              |
-| 5   | **Is `playerKey` stable for a whole match?** Undocumented. [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) rests on it: if it changes between polls, slot assignments break and the ALIVE bars reshuffle on air. | 🟠       | Same capture — compare two responses a few seconds apart.    |
-| 6   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17, CSV export and gviz).                                                                                                                       | 🟢       | Now largely redundant — these two PDFs cover what we needed. |
-| 7   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).    | 🟢       | Not needed for the leaderboard.                              |
+| #   | Gap                                                                                                                                                                                                                                                                   | Severity | How it gets closed                                        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------- |
+| 1   | **Do `killNumBeforeDie`, `teamName` and `bHasDied` appear inside the player objects?** ob.js passes contents through untouched, so only the game client can answer. `killNumBeforeDie` is the one that matters — without it a dead player's elimination count resets. | 🟠       | One capture. A rehearsal room is enough.                  |
+| 2   | **Does `rank` populate live, or only after the match?** Decides whether it is our placement source or a cross-check.                                                                                                                                                  | 🟠       | Same capture — one team eliminated mid-match answers it.  |
+| 3   | **Is `playerKey` stable for a whole match?** [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) rests on it: if it changes between polls, slot assignments break and the ALIVE bars reshuffle on air.                                                | 🟠       | Same capture — compare two responses a few seconds apart. |
+| 4   | **Behaviour between matches.** Does the game keep posting after a match ends, and does `GameID` change cleanly at the boundary? [§7.6](#76-match-boundaries) depends on it.                                                                                           | 🟡       | Same capture, observed across a match boundary.           |
+| 5   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17).                                                                                                                                                                             | 🟢       | Redundant now. ob.js answered more than it would have.    |
+| 6   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).                                     | 🟢       | Not needed for the leaderboard.                           |
 
-**None of these blocks starting the adapter**, and 1–5 are all answered by the same single capture —
-one PCOB client, one rehearsal room, two responses a few seconds apart, saved to disk. The
-tolerant-parsing design in
-[§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) exists precisely so that
-being wrong about a field name is a logged warning rather than a dead overlay.
+### Closed on 2026-08-17 by reading ob.js
 
-Worth stating plainly: the adapter can be **written and unit-tested now** against fixtures built from
-[§3](#3-gettotalplayerlist), because [ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md)
-confines every one of these unknowns to one file. What cannot be done without the capture is
-_trusting_ it in a broadcast.
+| Was                                                         | Answer                                                                                                                                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which envelope key — `playerInfoList` or `TotalPlayerList`? | **`playerInfoList`.** Written as a string literal in ob.js. Both PDFs were right about different hops — [§2](#2-the-two-shape-problem-solved-by-reading-the-server). |
+| Does `getteaminfolist` carry `GameID`?                      | **No** — it returns the array alone. `GameID` is reachable via `getallinfo` — [§3b](#3b-getallinfo-undocumented-and-the-one-we-should-actually-poll).                |
+| Is the API loopback-only?                                   | **No.** `listen(10086)` with no host binds all interfaces.                                                                                                           |
+| Is `getkillinfo` cumulative or recent-only?                 | **Cumulative, newest-first, never cleared** between matches — [§5](#5-the-remaining-live-endpoints).                                                                 |
+| How many endpoints are there?                               | **62**, not thirteen. The route table is the `app` object itself.                                                                                                    |
+
+**What remains is exactly the set of questions ob.js cannot answer**, and for a precise reason: it
+never inspects the payload. It renames one key and re-serialises. Everything still open lives inside
+that opaque blob and belongs to the game client.
+
+**None of it blocks starting the adapter**, and 1–4 are all answered by the same single capture — one
+PCOB client, one rehearsal room, two responses a few seconds apart, saved to disk. The split
+treatment in [§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) exists
+precisely so that being wrong about a field name is a logged warning rather than a dead overlay.
+
+Worth stating plainly: the adapter can be **written and unit-tested now**, because
+[ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md) confines every one of these unknowns
+to one file. What cannot be done without the capture is _trusting_ it in a broadcast.

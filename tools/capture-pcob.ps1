@@ -3,16 +3,17 @@
     Captures raw PCOB API responses during a match, and reports what they settle.
 
 .DESCRIPTION
-    The whole PCOB integration is currently written against vendor PDFs that disagree with each
-    other (specs/PCOB-API.md §2). One capture from a real match closes every open question at once.
-    This script is what turns a rehearsal slot into that capture.
+    Reading the API server's own source (ObToolsNew/ob.js) settled the endpoint list, the envelope
+    keys and where GameID lives. What it could NOT settle is anything inside the player objects,
+    because ob.js passes the game client's payload through untouched. One capture from a real match
+    closes that remainder. This script is what turns a rehearsal slot into that capture.
 
     It does two things, in order of importance:
 
       1. Saves every raw response to disk, byte for byte. This is the artifact. Even if the
          analysis below is wrong, the files are the evidence and can be re-read forever.
-      2. Prints a short report answering the five specific questions in specs/PCOB-API.md §8, so
-         the operator knows before leaving the venue whether the capture is any good.
+      2. Prints a short report answering the open questions in specs/PCOB-API.md §8, so the
+         operator knows before leaving the venue whether the capture is any good.
 
     Field names are detected from the RAW TEXT with case-sensitive regexes, never through
     PowerShell property access. PowerShell matches property names case-insensitively, so
@@ -48,18 +49,30 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Probed once at the start. Everything the vendor documents mention, including the routes we have
-# no use for -- an endpoint that answers unexpectedly is itself a finding, and probing costs one
-# request.
+# Probed once at the start.
+#
+# Taken from ob.js rather than from the vendor PDFs: the server's route table is literally its `app`
+# object (`app[pathname.substring(1)]`), so every `app.<name> = function` is reachable. The PDFs list
+# thirteen; there are 62. Probing the read side costs one request each and an endpoint that answers
+# unexpectedly is itself a finding.
+#
+# `set*` routes are deliberately excluded -- those are the game client's inbound half, and issuing a
+# GET against them would do nothing useful.
 $AllRoutes = @(
-    'gettotalplayerlist', 'getteaminfolist', 'isingame', 'getkillinfo',
-    'getgameglobalinfo', 'setcircleinfo', 'getobservingplayer',
-    'getplayerweapondetailinfo', 'gettdmresultinfo', 'getairdropboxinfo',
-    'getteambackpackinfo', 'getplayersaminfo', 'getplayerssightusageinfo'
+    'getallinfo', 'gettotalplayerlist', 'getteaminfolist', 'isingame', 'getkillinfo',
+    'getgameglobalinfo', 'getcircleinfo', 'getobservingplayer', 'getkillbossinfo',
+    'getplayerweapondetailinfo', 'getplayerweaponinfo', 'gettdmresultinfo', 'getairdropboxinfo',
+    'getteambackpackinfo', 'getplayersaminfo', 'getplayerssightusageinfo', 'getconsumeitem',
+    'getteamreportdata', 'getplayerreportdata', 'getallplayerthrowinfo', 'getplayerassistinfo',
+    'getreviveplayer', 'getplayerdeadafterrevive', 'getentertopeightafterrevive',
+    'getemergencycallland', 'getunpossessemergencycall', 'getpickupitem', 'getplayerpickupinfo',
+    'getmortarplaced', 'getmortarfire', 'getmortarkill'
 )
 
-# Sampled repeatedly. Only the routes that change during play.
-$LiveRoutes = @('gettotalplayerlist', 'getteaminfolist', 'isingame', 'getkillinfo')
+# Sampled repeatedly. getallinfo leads because it is the only route carrying GameID, and it returns
+# players and teams from the same snapshot rather than from two requests that could straddle an
+# update.
+$LiveRoutes = @('getallinfo', 'gettotalplayerlist', 'getteaminfolist', 'isingame', 'getkillinfo')
 
 if (-not $OutDir) {
     $stamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
@@ -95,6 +108,9 @@ function Save-Text {
 function Invoke-Route {
     param([string] $Route)
 
+    # The timeout is load-bearing, not defensive habit. ob.js dispatches on `app[pathname]` and, when
+    # no handler matches, logs "handle not found" and returns without ever calling response.end() --
+    # the socket is simply left open. An unknown route therefore hangs rather than 404ing.
     $url = "$BaseUrl/$Route"
     try {
         $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
@@ -122,7 +138,8 @@ if (-not $preflight.Ok) {
     Write-Log ''
     Write-Log 'Check, in this order:' Yellow
     Write-Log '  1. Is the launch.bat console window still open on the OB PC?'
-    Write-Log '     (WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat)'
+    Write-Log '     (<package>\ObToolsNew\launch.bat -- at the package root, NOT the'
+    Write-Log '      WinClient_OB_live\... path the vendor guideline prints)'
     Write-Log '  2. Is "API Enable" ticked in the PCOB client?'
     Write-Log '  3. Is the PCOB client actually running and logged in?'
     Write-Log "  4. If this script runs on a different PC: is $BaseUrl the OB PC's address,"
@@ -136,7 +153,7 @@ Write-Log ''
 
 # --- Probe every documented route once ---------------------------------------------------------
 
-Write-Log '--- Probing every documented route ---' Cyan
+Write-Log '--- Probing every readable route ---' Cyan
 $probeDir = Join-Path $OutDir 'probe'
 New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
 
@@ -151,7 +168,7 @@ foreach ($route in $AllRoutes) {
     }
     else {
         $label = $result.Status
-        if (-not $label) { $label = 'no response' }
+        if (-not $label) { $label = 'no response (route not handled)' }
         Write-Log ("  {0,-28} FAIL  {1}" -f $route, $label) DarkGray
     }
 }
@@ -170,6 +187,7 @@ $deadline = (Get-Date).AddSeconds($Seconds)
 $sample = 0
 $playerListBodies = New-Object System.Collections.ArrayList
 $teamListBodies = New-Object System.Collections.ArrayList
+$allInfoBodies = New-Object System.Collections.ArrayList
 
 while ((Get-Date) -lt $deadline) {
     $sample++
@@ -182,6 +200,7 @@ while ((Get-Date) -lt $deadline) {
             $path = Join-Path $samplesDir "$index`_$route.json"
             Save-Text $path $result.Body
             if ($route -eq 'gettotalplayerlist') { [void]$playerListBodies.Add($result.Body) }
+            if ($route -eq 'getallinfo') { [void]$allInfoBodies.Add($result.Body) }
             if ($route -eq 'getteaminfolist') { [void]$teamListBodies.Add($result.Body) }
         }
     }
@@ -271,14 +290,24 @@ else {
     }
     Write-Log ''
 
-    # Gap 2 -- does getteaminfolist carry GameID and the timing block?
-    if ($teamListBodies.Count -gt 0) {
-        $gameId = @(Find-KeyCasing $teamListBodies[0] @('GameID', 'gameId', 'GameId'))
+    # GameID lives in getallinfo, NOT in getteaminfolist -- ob.js line 383 returns the array alone
+    # and reaches past its siblings. Checked here so a capture confirms the reading.
+    if ($allInfoBodies.Count -gt 0) {
+        $gameId = @(Find-KeyCasing $allInfoBodies[0] @('GameID', 'gameId', 'GameId'))
         if ($gameId.Count -gt 0) {
-            Write-Log "  [2] GameID in getteaminfolist  $($gameId -join ', ')" Green
+            Write-Log "  [2] GameID in getallinfo ...  $($gameId -join ', ')" Green
         }
         else {
-            Write-Log '  [2] GameID in getteaminfolist  ABSENT -- match detection needs isingame instead' Yellow
+            Write-Log '  [2] GameID in getallinfo ...  ABSENT -- match detection must fall back to isingame' Yellow
+        }
+    }
+    else {
+        Write-Log '  [2] getallinfo never answered -- match detection must fall back to isingame' Yellow
+    }
+    if ($teamListBodies.Count -gt 0) {
+        $strayGameId = @(Find-KeyCasing $teamListBodies[0] @('GameID', 'gameId', 'GameId'))
+        if ($strayGameId.Count -gt 0) {
+            Write-Log '      note: getteaminfolist DOES carry GameID -- contradicts ob.js, tell the developer' Yellow
         }
     }
     Write-Log ''

@@ -293,7 +293,7 @@ Updated 2026-08-17 after the two API documents in `specs/new/`.
 - ~~The live data path~~ — `gettotalplayerlist` **is** the live endpoint.
 - ~~The endpoint index~~ — thirteen routes documented; see [`PCOB-API.md` §1](PCOB-API.md#1-transport).
 - ~~The JSON payload shape~~ — [`PCOB-API.md` §3–5](PCOB-API.md#3-gettotalplayerlist), with the
-  caveat in [§2](PCOB-API.md#2-the-two-shape-problem-read-this-before-writing-a-parser).
+  caveat in [§2](PCOB-API.md#2-the-two-shape-problem-solved-by-reading-the-server).
 - ~~`LiveState` enum~~ — seven values, 0–6, including a `Disconnected` we did not model.
 - ~~Identity fields~~ — `teamId` for teams; `playerKey` for players, with `uID` and `playerOpenId`
   alongside it.
