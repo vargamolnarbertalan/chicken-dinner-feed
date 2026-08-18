@@ -12,9 +12,19 @@ export interface StandingsInput {
   placements: ReadonlyMap<number, number>;
 }
 
-/** A player still in the fight. Knocked players have not been eliminated — they can be revived. */
+/**
+ * A player still in the fight.
+ *
+ * Knocked players count — they can be revived. So do disconnected ones: PCOB reports them as state
+ * 6, they are not eliminated, and they can come back. Excluding them would place their team early
+ * and hand out placement points for a game the team is still in.
+ */
 function isStanding(player: { liveState: IngestPlayer['liveState'] }): boolean {
-  return player.liveState === 'alive' || player.liveState === 'knocked';
+  return (
+    player.liveState === 'alive' ||
+    player.liveState === 'knocked' ||
+    player.liveState === 'disconnected'
+  );
 }
 
 function placementPointsFor(placement: number | undefined, ruleset: ScoringRuleset): number {

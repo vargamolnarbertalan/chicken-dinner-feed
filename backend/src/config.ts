@@ -30,8 +30,29 @@ const envSchema = z.object({
   DATA_DIR: z.string().min(1).default('./data'),
   STATIC_DIR: z.string().min(1).optional(),
 
-  /** See ADR-0006. `pcob` is not implemented until the API schema document is available. */
+  /** See ADR-0006. `mock` needs no game running; `pcob` polls the real observer API. */
   INGEST_SOURCE: z.enum(['mock', 'pcob']).default('mock'),
+
+  /**
+   * Where the PCOB API answers.
+   *
+   * A full origin rather than a port, because the API binds every interface — ob.js calls
+   * `listen(10086)` with no host — so it is reachable from another machine on the venue LAN
+   * (ADR-0010, specs/PCOB-API.md §1). Point this at the OB PC when our app runs elsewhere.
+   */
+  PCOB_BASE_URL: z.string().url().default('http://127.0.0.1:10086'),
+
+  /** The upstream refreshes about every 2 s, so polling faster than this gains nothing. */
+  PCOB_POLL_INTERVAL_MS: z.coerce.number().int().min(200).max(10_000).default(1000),
+
+  /**
+   * Per-request timeout.
+   *
+   * Required rather than optional: ob.js leaves the socket open for a route it does not handle
+   * instead of returning a 404, so without this a mistake would hang the poll loop silently
+   * (specs/PCOB-API.md §1).
+   */
+  PCOB_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(100).max(10_000).default(800),
 
   /**
    * Optional shared secret for the overlay control endpoints. Empty means no check, which is right
@@ -65,6 +86,9 @@ export const config = {
   dataDir: path.resolve(packageRoot, env.DATA_DIR),
   staticDir: env.STATIC_DIR ? path.resolve(packageRoot, env.STATIC_DIR) : defaultStaticDir(),
   ingestSource: env.INGEST_SOURCE,
+  pcobBaseUrl: env.PCOB_BASE_URL,
+  pcobPollMs: env.PCOB_POLL_INTERVAL_MS,
+  pcobTimeoutMs: env.PCOB_REQUEST_TIMEOUT_MS,
   controlToken: env.CONTROL_TOKEN,
   /** True when the server is reachable from outside this machine — see ADR-0012. */
   isNetworkExposed: env.HOST !== '127.0.0.1' && env.HOST !== 'localhost',

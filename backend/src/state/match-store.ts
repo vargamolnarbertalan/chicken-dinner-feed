@@ -149,7 +149,14 @@ export class MatchStore {
   private recordNewlyEliminatedTeams(update: IngestUpdate): void {
     const standingByTeam = new Map<number, number>();
     for (const player of update.players) {
-      const standing = player.liveState === 'alive' || player.liveState === 'knocked' ? 1 : 0;
+      // Same predicate as scoring/standings.ts, and for the same reason: a disconnected player is
+      // not eliminated. Treating them as out here would freeze their team's placement early, and
+      // placement is irreversible once recorded.
+      const isStanding =
+        player.liveState === 'alive' ||
+        player.liveState === 'knocked' ||
+        player.liveState === 'disconnected';
+      const standing = isStanding ? 1 : 0;
       standingByTeam.set(player.teamNo, (standingByTeam.get(player.teamNo) ?? 0) + standing);
     }
 

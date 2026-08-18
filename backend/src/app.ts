@@ -112,7 +112,14 @@ export async function buildApp(): Promise<AppContext> {
     listFonts: () => configStore.fonts.current.fonts,
     listInstanceIds: () => configStore.instances.current.instances.map((instance) => instance.id),
   });
-  const ingestSource = createIngestSource(config.ingestSource);
+  const ingestSource = createIngestSource(config.ingestSource, {
+    pcobBaseUrl: config.pcobBaseUrl,
+    pcobPollMs: config.pcobPollMs,
+    pcobTimeoutMs: config.pcobTimeoutMs,
+    // Field-mapping warnings go through the app logger so they land in the same place an operator
+    // is already looking. Each distinct message is emitted once per run, not once per poll.
+    log: (message) => app.log.warn({ source: 'pcob' }, message),
+  });
 
   // Configuration changes have to reach the live path immediately: a new scoring ruleset changes
   // the standings on air, and an appearance change must reach open browser sources without a reload.
