@@ -6,9 +6,21 @@ const STATE_COLOR: Record<PlayerLiveState, string> = {
   alive: 'var(--player-alive)',
   knocked: 'var(--player-knocked)',
   dead: 'var(--player-dead)',
+  /*
+   * Disconnected borrows the dead colour on purpose, and is then separated from it by opacity
+   * rather than by hue (see `barOpacity`). The three colours in this column are operator-configured
+   * and already carry a meaning each; adding a fourth would make the palette a puzzle and force
+   * every existing overlay configuration to grow a field. A player who is disconnected still holds
+   * their health, so the bar keeps its height — that alone distinguishes them from a dead player,
+   * whose bar has drained.
+   */
+  disconnected: 'var(--player-dead)',
   // A player we have not heard about yet must not read as dead — see the domain model.
   unknown: 'var(--player-dead)',
 };
+
+/** Half-strength for a player who is gone but not out. Reads as "present but inactive". */
+const DISCONNECTED_OPACITY = 0.45;
 
 const PLAYER_SLOTS = [1, 2, 3, 4] as const;
 
@@ -65,6 +77,7 @@ export function AlivePlayerBars({ players }: AlivePlayerBarsProps) {
               animate={{
                 height: isDead ? u(M.deadBarHeight) : `${fraction * 100}%`,
                 backgroundColor: STATE_COLOR[player?.liveState ?? 'unknown'],
+                opacity: player?.liveState === 'disconnected' ? DISCONNECTED_OPACITY : 1,
               }}
               transition={{
                 // Health drains continuously between the ~2 s data points, so it is eased over
@@ -72,6 +85,9 @@ export function AlivePlayerBars({ players }: AlivePlayerBarsProps) {
                 // fading it would read as a rendering delay rather than as something happening.
                 height: { duration: 1.6, ease: 'easeOut' },
                 backgroundColor: { duration: 0.12 },
+                // Dropping out is an event too, and a slow fade would be indistinguishable from a
+                // bar quietly draining.
+                opacity: { duration: 0.12 },
               }}
             />
           </div>

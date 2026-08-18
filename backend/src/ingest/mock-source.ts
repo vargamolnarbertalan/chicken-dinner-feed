@@ -41,6 +41,10 @@ const DAMAGE_SPREAD = 35;
 const HEAL_CHANCE = 0.06;
 const HEAL_AMOUNT = 18;
 const REVIVE_CHANCE = 0.25;
+/** Per alive player per tick. Rare enough to stay a curiosity rather than a distraction. */
+const DISCONNECT_CHANCE = 0.004;
+/** Per disconnected player per tick — they come back quickly, as they usually do. */
+const RECONNECT_CHANCE = 0.3;
 
 /** Deterministic PRNG (mulberry32) — `Math.random()` would make animation work unrepeatable. */
 function createRng(seed: number): () => number {
@@ -53,8 +57,20 @@ function createRng(seed: number): () => number {
   };
 }
 
+/**
+ * Still in the fight.
+ *
+ * Matches the predicate the real pipeline uses (`scoring/standings.ts`): knocked players can be
+ * revived and disconnected ones can reconnect, so neither is eliminated. Keeping the two in step
+ * matters — if the mock counted a disconnected player as out, a team could be "eliminated" here in
+ * a way the real adapter would never produce, and the placement logic would be exercised wrongly.
+ */
 function isStanding(player: SimPlayer): boolean {
-  return player.liveState === 'alive' || player.liveState === 'knocked';
+  return (
+    player.liveState === 'alive' ||
+    player.liveState === 'knocked' ||
+    player.liveState === 'disconnected'
+  );
 }
 
 /**
@@ -152,10 +168,35 @@ export class MockSource implements IngestSource {
   }
 
   private simulateCombat(): void {
+    this.simulateDropouts();
     this.bleedKnockedPlayers();
     this.reviveSomeKnockedPlayers();
     this.runEngagements();
     this.healSomeSurvivors();
+  }
+
+  /**
+   * Occasional disconnects and reconnects.
+   *
+   * PCOB reports `liveState: 6` for a player who has dropped out, and the overlay renders that
+   * differently from both alive and dead. Without this, that rendering could not be seen at all
+   * before a real tournament — the state would ship untested and unlooked-at, which is exactly the
+   * "looks finished and is wrong" outcome the mock source exists to prevent.
+   *
+   * Rates are deliberately low: a disconnect every few minutes is realistic, and a stream of them
+   * would make the mock unusable for judging anything else.
+   */
+  private simulateDropouts(): void {
+    for (const player of this.players) {
+      if (player.liveState === 'alive' && this.rng() < DISCONNECT_CHANCE) {
+        player.liveState = 'disconnected';
+        continue;
+      }
+      // Reconnecting returns them at whatever health they left with, which is what the game does.
+      if (player.liveState === 'disconnected' && this.rng() < RECONNECT_CHANCE) {
+        player.liveState = 'alive';
+      }
+    }
   }
 
   private bleedKnockedPlayers(): void {

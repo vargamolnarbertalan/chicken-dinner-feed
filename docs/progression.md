@@ -3,7 +3,7 @@
 The running record of what is done, what is next, and what is blocked. Required by
 `specs/APP-PLAN.md`. Update it in the same commit as the work it describes.
 
-**Last updated:** 2026-08-10 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
+**Last updated:** 2026-08-18 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
 
 ---
 
@@ -374,9 +374,53 @@ parameter or header.
 
 ---
 
-## Next — round 3, part 8
+## Done — round 4 (2026-08-18): the real PCOB adapter
 
-1. **`PcobSource`** — the real HTTP adapter, once a response has been captured. _(ADR-0010)_
+`PcobSource` exists. Built without a live match, because reading the vendor's own API server settled
+everything except what is inside the game's payload — see `specs/PCOB-API.md`.
+
+- **Polls `getallinfo`, not the documented routes.** `ob.js` accepts match data at exactly one place,
+  `POST /totalmessage`, which replaces `app.allInfo` wholesale; every documented `get*` route is a
+  projection of that one object. `getallinfo` returns it whole, which makes it the only route
+  carrying `GameID`, and means players and teams come from the same snapshot instead of two requests
+  that could straddle an update. `isingame` is genuinely separate state, so that is the second call.
+- **Tolerant reads inside, assertions outside.** The envelope keys are certain — they are string
+  literals in `ob.js` and were confirmed by running it. The contents are not, because `ob.js` passes
+  the game's payload through untouched. So field lookup is case-insensitive and alias-aware, and an
+  unreadable field degrades to a default plus **one** log line naming it. Once per run, not once per
+  poll: at 1 Hz the latter would bury the real message under thousands of copies.
+- **Kills are a high-water mark.** What `killNum` does after a player dies is undocumented — it may
+  hold, or reset with the figure moved to `killNumBeforeDie`, which the 1.5.0 sample does not even
+  contain. Taking the maximum is monotonic under all of those. A team's ELIMS counting _down_ on air
+  would be blamed on us.
+- **Slots are assigned on first sight and frozen.** PCOB supplies no position within a team. Arrival
+  order decides the layout; the id keeps it. A player missing from one response leaves their slot
+  **empty** rather than letting teammates slide up and back down two seconds later.
+- **`disconnected` is a real state now.** `PROTOCOL_VERSION` 4 → 5. It counts as standing — a
+  disconnected player is not eliminated, and treating them as out would place their team early and
+  award placement points irreversibly. In the overlay it borrows the dead colour at 45% opacity
+  rather than claiming a fourth operator-configured token, and keeps its bar height, which is what
+  separates it from a drained one.
+- The mock now produces the occasional disconnect and reconnect, so that rendering can be seen at
+  all before a tournament.
+
+**Verified against the real `ob.js`** from the v4.3.0 package — the vendor's server, fed a snapshot
+the way the game feeds it, with our app polling it as `INGEST_SOURCE=pcob`. `GameID` arrived as the
+match id, `liveState: 6` rendered as `disconnected` and counted as standing, a wiped team took
+placement 16, and `killNumBeforeDie` produced the right elimination total where `killNum` had reset
+to zero.
+
+**Still not proven, and it cannot be:** whether the live game client spells its fields the way the
+3.0.0 dictionary says. That needs one capture. Until then `mock` remains the setting for anything
+going on air.
+
+---
+
+## Next — round 5
+
+1. **One capture from a live match** — the last thing standing between the adapter and being
+   trusted on air. `docs/user/pcob-capture-guide.hu.md` is the procedure; `tools/capture-pcob.bat`
+   is the tool. _(specs/PCOB-API.md §8)_
 2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
 3. **Post-match export** — the workflow the client performs by hand today.

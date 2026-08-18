@@ -633,6 +633,20 @@ PCOB client, one rehearsal room, two responses a few seconds apart, saved to dis
 treatment in [§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping) exists
 precisely so that being wrong about a field name is a logged warning rather than a dead overlay.
 
-Worth stating plainly: the adapter can be **written and unit-tested now**, because
-[ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md) confines every one of these unknowns
-to one file. What cannot be done without the capture is _trusting_ it in a broadcast.
+### Built 2026-08-18 — `PcobSource`
+
+The adapter now exists (`backend/src/ingest/pcob/`), written against everything above.
+[ADR-0006](../docs/adr/0006-pcob-ingestion-adapter-boundary.md) is what made that possible before a
+capture: every unknown listed here is confined to one directory.
+
+It was verified **end to end against the real `ob.js`** from the v4.3.0 package — the vendor's own
+server, fed a match snapshot the way the game feeds it — rather than against a mock of our own
+design. `GameID` arrived, `liveState: 6` rendered as `disconnected`, the disconnected player counted
+as standing, and `killNumBeforeDie` produced the right elimination total where `killNum` had reset
+to zero.
+
+What remains genuinely untested is the one thing that cannot be faked: **whether the real game
+client spells its fields the way the 3.0.0 dictionary says.** The adapter degrades an unreadable
+field to a default plus one log line naming it, so a mismatch is a warning in the console rather
+than a blank overlay — but until a capture confirms otherwise, prefer `INGEST_SOURCE=mock` for
+anything going on air.
