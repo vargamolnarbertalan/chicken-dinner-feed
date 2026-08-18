@@ -91,9 +91,14 @@ This has to be done well in advance, not on the day.
 2. **Tick "API Enable" in the PCOB client before the match starts.** If this is forgotten, the app
    shows _no data_ even though everything else is working correctly. This is the single most common
    cause of an apparently broken overlay.
-3. **Start the PCOB API.** Run `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat` from a command
+3. **Start the PCOB API.** Run `ObToolsNew\launch.bat` — it sits in the **root of the unpacked PCOB
+   package**, _not_ under `WinClient_OB_live\WinClient_OB\` as the vendor guideline prints (verified
+   against v4.3.0). Run it from a command
    prompt. It opens its own console window — **that window must also stay open**, or no data is
    produced.
+
+   > The window **stays blank**, and that is normal: `launch.bat` is one line — `node.exe ob.js` —
+   > and that logs to a file. Do not judge from it whether the API is working.
 
 Two things worth knowing, because they are not faults in this app:
 
