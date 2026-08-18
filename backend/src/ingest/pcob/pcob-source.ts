@@ -52,7 +52,8 @@ export class PcobSource implements IngestSource {
 
   private events: IngestSourceEvents | null = null;
   private timer: NodeJS.Timeout | null = null;
-  private polling = false;
+  /** The poll currently in flight, or null. Doubles as the "already polling" flag. */
+  private pending: Promise<void> | null = null;
   private connected = false;
 
   constructor(options: PcobSourceOptions) {
@@ -80,12 +81,27 @@ export class PcobSource implements IngestSource {
     this.events = null;
   }
 
-  /** Exposed for tests, which drive polls deterministically rather than waiting on a timer. */
-  async poll(): Promise<void> {
-    // A slow response must not let the next tick start a second overlapping poll; they would race
-    // to update the mapper's slot assignments.
-    if (this.polling || !this.events) return;
-    this.polling = true;
+  /**
+   * One poll cycle. Also exposed for tests, which drive it directly rather than on a timer.
+   *
+   * A slow response must not let the next tick start a second overlapping poll — they would race to
+   * update the mapper's slot assignments. Rather than dropping the request, a caller arriving while
+   * one is in flight is **coalesced onto it** and gets the same promise. Returning early with
+   * nothing to await would make "poll finished" unobservable, which is misleading for any caller and
+   * untestable for us.
+   */
+  poll(): Promise<void> {
+    if (!this.events) return Promise.resolve();
+    if (this.pending) return this.pending;
+
+    this.pending = this.runPoll().finally(() => {
+      this.pending = null;
+    });
+    return this.pending;
+  }
+
+  private async runPoll(): Promise<void> {
+    if (!this.events) return;
 
     try {
       const [allInfo, isInGame] = await Promise.all([
@@ -105,8 +121,6 @@ export class PcobSource implements IngestSource {
       this.events.onUpdate(this.mapper.map(snapshot));
     } catch (cause) {
       this.reportOffline(cause);
-    } finally {
-      this.polling = false;
     }
   }
 

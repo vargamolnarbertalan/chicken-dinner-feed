@@ -24,6 +24,13 @@ function fakeApi(routes: Record<string, unknown>): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
+/**
+ * Starts the source and returns what it reported.
+ *
+ * `start()` fires an eager poll so an operator sees data immediately rather than after a full
+ * interval. Tests therefore await `poll()`, which coalesces onto that in-flight poll instead of
+ * starting a competing one.
+ */
 function record(source: PcobSource): Recorded {
   const recorded: Recorded = { updates: [], statuses: [] };
   source.start({
@@ -130,14 +137,16 @@ describe('PcobSource', () => {
     record(source);
 
     const first = source.poll();
-    await source.poll(); // returns immediately -- must not issue more requests
+    const second = source.poll();
     const callsDuringOverlap = calls.mock.calls.length;
+
+    // Coalesced onto the in-flight poll rather than starting a second one.
+    expect(second).toBe(first);
+    expect(callsDuringOverlap).toBe(2); // getallinfo + isingame, from the first poll only
 
     release?.();
     await first;
     await source.stop();
-
-    expect(callsDuringOverlap).toBe(2); // getallinfo + isingame from the first poll only
   });
 
   it('aborts a request that never gets a response', async () => {

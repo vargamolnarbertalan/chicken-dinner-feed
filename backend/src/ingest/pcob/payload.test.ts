@@ -166,11 +166,13 @@ describe('PcobMapper', () => {
       mapper.map(snapshot([player({ playerKey: 10, playerName: 'A', killNum: 7 })]));
 
       const next = mapper.map(
-        snapshot([
-          player({ playerKey: 20, playerName: 'B' }),
-          player({ playerKey: 10, playerName: 'A', killNum: 0 }),
-        ]),
-        { GameID: 'room-2' },
+        snapshot(
+          [
+            player({ playerKey: 20, playerName: 'B' }),
+            player({ playerKey: 10, playerName: 'A', killNum: 0 }),
+          ],
+          { GameID: 'room-2' },
+        ),
       );
 
       expect(next.matchId).toBe('room-2');
