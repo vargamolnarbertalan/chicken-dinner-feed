@@ -114,7 +114,15 @@ function Invoke-Route {
     $url = "$BaseUrl/$Route"
     try {
         $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-        return @{ Ok = $true; Status = $response.StatusCode; Body = $response.Content }
+
+        # ob.js answers with response.write(str) and never sets a Content-Type header. Windows
+        # PowerShell 5.1 hands back .Content as a BYTE ARRAY whenever the content type is missing or
+        # unrecognised, and stringifying that yields "123 34 112 ..." -- decimal bytes, not JSON.
+        # Every captured file would have been unusable. Decode explicitly.
+        $body = $response.Content
+        if ($body -is [byte[]]) { $body = [System.Text.Encoding]::UTF8.GetString($body) }
+
+        return @{ Ok = $true; Status = $response.StatusCode; Body = $body }
     }
     catch {
         $status = ''
