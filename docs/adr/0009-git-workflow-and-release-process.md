@@ -41,6 +41,10 @@ rather than argued about.
 **Semantic versioning**, tagged `vMAJOR.MINOR.PATCH` on `main`. Pre-1.0, breaking changes bump the
 minor. The root `package.json` version is the single source of truth; workspaces inherit it.
 
+> **2026-08-29:** the first release was cut as `v1.0.0` directly, on the operator's decision, rather
+> than starting at `0.1.0` — the app had already been verified against a real live match by then.
+> Normal semver applies from here: a breaking change bumps the major.
+
 A release is **triggered manually by pushing a tag** — deliberately not automatic on merge, because
 releasing should be a decision made when the operator is ready, not a side effect of merging.
 

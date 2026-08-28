@@ -1,6 +1,6 @@
 {
   "name": "@cdf/backend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Fastify service: ingests PCOB match data, holds live state, serves the admin API and the built frontend.",
   "type": "module",
