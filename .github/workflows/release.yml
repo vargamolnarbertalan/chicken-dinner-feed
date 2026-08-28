@@ -67,7 +67,11 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE="bundle/chicken-dinner-feed-$VERSION"
-          mkdir -p "$BUNDLE"/{backend/data/defaults,shared,docs}
+          # backend/data/{fonts,logos} are created here even though the app itself would create
+          # them on first run too (LogoStore/FontStore both mkdir -p on init) — this is what lets
+          # the smoke test's copy match the original bundle exactly instead of the two directories
+          # showing up as an "unexpected" difference every single run.
+          mkdir -p "$BUNDLE"/{backend/data/defaults,backend/data/fonts,backend/data/logos,shared,docs}
 
           # Backend: compiled output only.
           cp -r backend/dist "$BUNDLE/backend/dist"

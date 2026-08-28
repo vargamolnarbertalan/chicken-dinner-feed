@@ -21,6 +21,13 @@ release time — add to `[Unreleased]` in the same change that makes the change.
   downloaded `v1.0.0`, re-download `v1.0.1` instead** — the packaging is fixed, nothing about the
   application itself changed. The release workflow now runs its install/boot checks against a
   copy of the bundle, and independently re-checks the final ZIP's contents before publishing.
+- `/api/health` and `/feedback` reported a hardcoded `"0.1.0"` regardless of the actual release
+  version, in every release so far. The version is now read from `package.json` at startup instead
+  of a hand-copied literal.
+- The bundle-assembly step's own smoke test (installing and booting the app to verify it works)
+  would flag `backend/data/fonts` and `backend/data/logos` as unexpected contamination, since
+  `LogoStore`/`FontStore` create them on first run — a third instance of the same class of bug as
+  the `node_modules` one above. Caught by CI before anything was published.
 
 ## [1.0.0] - 2026-08-29
 
