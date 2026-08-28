@@ -248,8 +248,12 @@ These are compliance rules from the guideline that our overlay must not violate:
 
 ## 5. Versions and moving parts
 
-- PC OB Client **v4.3.0** (updated 11 Mar 2026) — distributed as 3 files via Google Drive, plus a
-  `pak` patch file dropped into `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks`.
+- PC OB Client **v4.3.0** (updated 11 Mar 2026), later **v4.5.0** (in active use as of 2026-08-28,
+  package `Win64_Release4.5.0_No17_4.5.0.21320_Shipping_OB_Shelled`) — distributed as 3 files via
+  Google Drive, plus (confirmed required for 4.5.0, unlike 4.3.0) `.pak` patch files dropped into
+  `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks`. See
+  [`docs/user/pcob-capture-guide.en.md`](../docs/user/pcob-capture-guide.en.md) §3 for the verified
+  folder layout and the extraction pitfall to avoid.
 - Requires an **OPENID-based PCOB account**, only granted to authorised tournaments.
 - Requires a **tournament room card** (not a normal/advanced room card) for full esports functions
   and 30 OB slots. Rooms can only be created from a mobile client, never from PC OB.

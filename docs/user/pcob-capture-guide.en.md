@@ -15,7 +15,7 @@ what you need has to come from Esport1 and Tencent, and the lead time on it is n
 
 | #   | Thing                                  | Comes from                         | Can you get it yourself? |
 | --- | -------------------------------------- | ---------------------------------- | ------------------------ |
-| 1   | PC OB client, v4.3.0 (three files)     | Esport1's Google Drive             | No — ask Zsófi           |
+| 1   | PC OB client, v4.5.x (three files + patch files) | Esport1's Google Drive             | No — ask Zsófi           |
 | 2   | A PUBG Mobile account for the observer | You, or Esport1                    | Yes                      |
 | 3   | **The OPENID whitelisted by Tencent**  | Tencent, requested through Esport1 | **No**                   |
 | 4   | A tournament room card (CD-KEY)        | Tencent, through Esport1           | No                       |
@@ -83,12 +83,12 @@ called `TotalPlayerList` or `playerInfoList`.
 
 On the Windows PC that will be the observer.
 
-> **What follows is based on the actual contents of the v4.3.0 package**
-> (`Win64_Release4.3.0_No14_4.3.0.20920_Shipping_OB_Shelled`), not on the guideline's generic
+> **What follows is based on the actual contents of the v4.5.0 package, verified live**
+> (`Win64_Release4.5.0_No17_4.5.0.21320_Shipping_OB_Shelled`), not on the guideline's generic
 > description. **They differ in several places** — where they do, the package is right, and it is
-> called out.
+> called out. The earlier v4.3.0 observations held up on v4.5.0 too, with the corrections below.
 
-The unpacked package root contains exactly two folders:
+The unpacked package root contains **exactly** two folders, nothing else:
 
 ```
 <package>\
@@ -96,12 +96,22 @@ The unpacked package root contains exactly two folders:
   WindowsNoEditor\   <- the client itself
 ```
 
-1. **Extract** the `.7z`. It is ~47 GB across 6,500 files — check you have the room.
+1. **Extract** the 3-part `.zip.001/.002/.003` (~50 GB compressed, ~48 GB+ unpacked — leave plenty
+   of headroom, you may briefly need double that).
 
-2. **The patch.** The guideline says to drop a separately downloaded `.pak` into
-   `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks`. **There is no such `.pak` in this package**
-   (only the engine's own CEF resources). Either 4.3.0 already includes it or it has to be requested
-   separately — **ask Zsófi** rather than guessing.
+   > ⚠️ **An extraction trap we hit ourselves.** If you extract via Explorer's **"Extract to
+   > `<archive-name>\`"** (rather than **"Extract Here"**), the archiver creates two nested folders
+   > — the outer one keeps the **full archive name, `.zip` suffix included**, the inner one does not
+   > — and copies of the un-processed volume parts (`.zip.002`, `.zip.003`) end up inside the
+   > extracted tree too. Result: an extra nesting level plus ~26 GB of dead weight. **The correct end
+   > state is exactly the two folders above, nothing else, at a single level** — if you see more,
+   > move the real content up one level and delete the rest.
+
+2. **The patch — actually needed for 4.5.x.** The guideline says to drop a separately downloaded
+   `.pak` into `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks`. **The v4.5.0 package does not include
+   one**, but unlike v4.3.0, this version **genuinely needs it**: we received 3 patch files from
+   Zsófi (`core_patch_4.5.0.21323.pak`, `game_patch_4.5.0.21125.pak`, `game_patch_4.5.0.21324.pak`),
+   and dropping them into that folder **works**.
 
 3. **Start the client from the right place:**
 
@@ -112,8 +122,9 @@ The unpacked package root contains exactly two folders:
    right-click → **Run as administrator**.
 
    > ⚠️ There is a second `ShadowTrackerExtra.exe` directly under `\WindowsNoEditor`. The size
-   > difference gives it away: **0.2 MB** (a launcher) versus **97.2 MB** (the real client). The
-   > guideline says the former will not work, and the size confirms it.
+   > difference gives it away: **~0.16 MB** (a launcher, 164,352 bytes) versus **~105 MB** (the real
+   > client, 105,076,776 bytes). The guideline says the former will not work, and the size confirms
+   > it.
 
 4. **Install the legacy DirectX 9 runtime — on a clean Windows 11 this is not optional.**
 
@@ -230,8 +241,8 @@ Ten minutes, no room needed. Do this as soon as the client is installed.
    ```
 
    > ⚠️ **The guideline prints the wrong path.** It gives
-   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. No such folder exists in the 4.3.0
-   > package — `ObToolsNew` sits directly in the **package root**.
+   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. No such folder exists in the 4.5.0
+   > package either (re-checked live) — `ObToolsNew` sits directly in the **package root**.
 
    **Leave that window open.** Closing it stops the API.
 
@@ -383,6 +394,7 @@ Work down this list — it is ordered by how often each one is the cause:
 | The capture script says "cannot reach the API" | Is the `launch.bat` window still open?                                              |
 | It is open, still nothing                      | Was **"API Enable"** ticked _before_ the match started?                             |
 | Both fine, still nothing                       | Is the OPENID whitelisted? Without it, everything runs and no data flows.           |
+| All of the above fine, still nothing during a live match | Does the PC OB client **actually show the match** (not sitting in a lobby/menu)? Does the logged-in OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3rd field) match the one sent for whitelisting? *(Hit this live on 2026-08-28, 2 teams, 1 player each — `isingame` stayed `false` throughout even with "API Enable" ticked and `launch.bat` running. Root cause not identified that day.)* |
 | Data stops mid-match                           | Did the host leave the room? No host, no API.                                       |
 | Works locally, not from the other PC           | Firewall on the OB PC, port 10086.                                                  |
 | The client will not start                      | Wrong `.exe` — use the one in `Binaries\Win64` ([§3](#3-install-the-pc-ob-client)). |

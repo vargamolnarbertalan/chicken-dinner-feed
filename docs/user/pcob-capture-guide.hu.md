@@ -15,7 +15,7 @@ annak a kétharmada az Esport1-tól és a Tencenttől jön, és az átfutási id
 
 | #   | Mi                                       | Honnan                           | Meg tudod szerezni magad? |
 | --- | ---------------------------------------- | -------------------------------- | ------------------------- |
-| 1   | PC OB kliens, v4.3.0 (három fájl)        | Az Esport1 Google Drive-ja       | Nem — kérd Zsófitól       |
+| 1   | PC OB kliens, v4.5.x (három fájl + patch fájlok) | Az Esport1 Google Drive-ja       | Nem — kérd Zsófitól       |
 | 2   | PUBG Mobile fiók az observernek          | Te vagy az Esport1               | Igen                      |
 | 3   | **A Tencent által whitelistelt OPENID**  | Tencent, az Esport1-on keresztül | **Nem**                   |
 | 4   | Tournament szobakártya (CD-KEY)          | Tencent, az Esport1-on keresztül | Nem                       |
@@ -82,11 +82,12 @@ se más ember, és már ez is megválaszolhatja a legnagyobb kérdést: `TotalPl
 
 Azon a Windows gépen, amelyik az observer lesz.
 
-> **A lentiek a v4.3.0 csomag tényleges tartalmán alapulnak**
-> (`Win64_Release4.3.0_No14_4.3.0.20920_Shipping_OB_Shelled`), nem a guideline általános leírásán. A
-> kettő **több ponton eltér** — ahol igen, ott a csomag az igazság, és jelezzük.
+> **A lentiek a v4.5.0 csomag tényleges tartalmán alapulnak, élesben ellenőrizve**
+> (`Win64_Release4.5.0_No17_4.5.0.21320_Shipping_OB_Shelled`), nem a guideline általános leírásán. A
+> kettő **több ponton eltér** — ahol igen, ott a csomag az igazság, és jelezzük. A v4.3.0-ra vonatkozó
+> korábbi megfigyelések a v4.5.0-n is érvényesnek bizonyultak, a lenti pontosításokkal.
 
-A kicsomagolt csomag gyökerében pontosan két mappa van:
+A kicsomagolt csomag gyökerében **pontosan** két mappa van, semmi más:
 
 ```
 <csomag>\
@@ -94,12 +95,22 @@ A kicsomagolt csomag gyökerében pontosan két mappa van:
   WindowsNoEditor\   <- maga a kliens
 ```
 
-1. **Csomagold ki** a `.7z`-t. ~47 GB, 6500 fájl — legyen elég hely.
+1. **Csomagold ki** a 3 részes `.zip.001/.002/.003`-at (~50 GB tömörítve, ~48 GB+ kicsomagolva —
+   legyen bőven szabad hely, ideiglenesen a duplájára is szükség lehet).
 
-2. **Patch:** a guideline azt írja, tegyél egy külön letöltött `.pak`-ot a
-   `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks` mappába. **Ebben a csomagban nincs ilyen `.pak`**
-   (csak a motor saját CEF-erőforrásai). Vagy a 4.3.0 már tartalmazza, vagy külön kell kérni —
-   **kérdezd meg Zsófit**, ne találgass.
+   > ⚠️ **Kicsomagolási csapda, amibe most mi is belefutottunk.** Ha az Intézőben **„Kibontás ide
+   > (`<archívnév>\`)"** paranccsal bontod ki (nem **„Kibontás itt"**-tel), a tömörítő két egymásba
+   > ágyazott mappát hoz létre — a külsőt a teljes archívnévvel, **`.zip` végződéssel együtt**, a
+   > belsőt anélkül —, és a fel nem dolgozott kötetdarabok (`.zip.002`, `.zip.003`) másolatai is
+   > bekerülnek a kicsomagolt fába. Eredmény: dupla mappaszint és ~26 GB fölösleges duplikáció.
+   > **A helyes végeredmény pontosan a fenti két mappa, semmi más, egyetlen szinten** — ha ennél
+   > több van, told fel eggyel a tartalmat, és töröld a maradékot.
+
+2. **Patch — a 4.5.x-hez tényleg kell.** A guideline szerint egy külön letöltött `.pak`-ot a
+   `%LOCALAPPDATA%\ShadowTrackerExtra\Saved\Paks` mappába kell tenni. **A v4.5.0 csomag ezt nem
+   tartalmazza**, de a v4.3.0-tól eltérően itt **valóban szükség van rá**: 3 patch fájlt kaptunk
+   Zsófitól (`core_patch_4.5.0.21323.pak`, `game_patch_4.5.0.21125.pak`,
+   `game_patch_4.5.0.21324.pak`), és a fenti mappába másolva **működik**.
 
 3. **A klienst a helyes helyről indítsd:**
 
@@ -110,8 +121,9 @@ A kicsomagolt csomag gyökerében pontosan két mappa van:
    jobb klikk → **Futtatás rendszergazdaként**.
 
    > ⚠️ Van egy másik `ShadowTrackerExtra.exe` közvetlenül a `\WindowsNoEditor` alatt is. A
-   > méretkülönbség árulkodó: **0,2 MB** (csak indító) vs **97,2 MB** (a valódi kliens). A guideline
-   > kimondja, hogy az előbbi nem működik — a méret ezt meg is erősíti.
+   > méretkülönbség árulkodó: **~0,16 MB** (csak indító, 164 352 bájt) vs **~105 MB** (a valódi
+   > kliens, 105 076 776 bájt). A guideline kimondja, hogy az előbbi nem működik — a méret ezt meg is
+   > erősíti.
 
 4. **Telepítsd a legacy DirectX 9 runtime-ot — tiszta Windows 11-en ez nem opcionális.**
 
@@ -227,8 +239,9 @@ Tíz perc, szoba nem kell. Csináld meg, amint a kliens fent van.
    ```
 
    > ⚠️ **A guideline rossz útvonalat ír.** Ott ez szerepel:
-   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. Ilyen mappa **nincs** a 4.3.0
-   > csomagban — az `ObToolsNew` közvetlenül a **csomag gyökerében** van.
+   > `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. Ilyen mappa **nincs** a 4.5.0
+   > csomagban sem (ezt élesben újra ellenőriztük) — az `ObToolsNew` közvetlenül a **csomag
+   > gyökerében** van.
 
    **Ezt az ablakot hagyd nyitva.** Ha bezárod, az API leáll.
 
@@ -379,6 +392,7 @@ Ezt a listát vedd sorra — aszerint van rendezve, hogy melyik szokott lenni az
 | A szkript azt írja, nem éri el az API-t | Nyitva van még a `launch.bat` ablaka?                                                         |
 | Nyitva van, mégsincs semmi              | Be volt pipálva az **„API Enable"** a meccs indulása _előtt_?                                 |
 | Ez is rendben, mégsincs adat            | Whitelistelve van az OPENID? Enélkül minden fut, és adat nincs.                               |
+| Minden fenti rendben, élő meccs alatt mégsincs adat | A PC OB kliens **ténylegesen a meccset mutatja-e** (nem lobbiban/menüben áll)? Egyezik-e a bejelentkezett OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3. mező) azzal, amit whitelistelésre küldtél? *(Élesben előfordult: 2026-08-28, 2 csapat, 1-1 játékos — az `isingame` tartósan `false` maradt, holott az „API Enable" be volt pipálva és a `launch.bat` futott. A root cause ezen a napon nem lett tisztázva.)* |
 | Meccs közben elhallgat                  | Kilépett a hoszt a szobából? Hoszt nélkül nincs API.                                          |
 | Helyben megy, másik gépről nem          | Tűzfal az OB gépen, 10086-os port.                                                            |
 | A kliens el sem indul                   | Rossz `.exe` — a `Binaries\Win64` alattit használd ([3. pont](#3-a-pc-ob-kliens-telepítése)). |
