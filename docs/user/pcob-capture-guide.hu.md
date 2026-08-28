@@ -13,14 +13,14 @@ annak a kétharmada az Esport1-tól és a Tencenttől jön, és az átfutási id
 
 ## 1. Mi kell hozzá, és kitől
 
-| #   | Mi                                       | Honnan                           | Meg tudod szerezni magad? |
-| --- | ---------------------------------------- | -------------------------------- | ------------------------- |
+| #   | Mi                                               | Honnan                           | Meg tudod szerezni magad? |
+| --- | ------------------------------------------------ | -------------------------------- | ------------------------- |
 | 1   | PC OB kliens, v4.5.x (három fájl + patch fájlok) | Az Esport1 Google Drive-ja       | Nem — kérd Zsófitól       |
-| 2   | PUBG Mobile fiók az observernek          | Te vagy az Esport1               | Igen                      |
-| 3   | **A Tencent által whitelistelt OPENID**  | Tencent, az Esport1-on keresztül | **Nem**                   |
-| 4   | Tournament szobakártya (CD-KEY)          | Tencent, az Esport1-on keresztül | Nem                       |
-| 5   | Egy telefon PUBG Mobile-lal, hosztolásra | Te                               | Igen                      |
-| 6   | Néhány játékos a szobába                 | Te és a kollégák                 | Igen                      |
+| 2   | PUBG Mobile fiók az observernek                  | Te vagy az Esport1               | Igen                      |
+| 3   | **A Tencent által whitelistelt OPENID**          | Tencent, az Esport1-on keresztül | **Nem**                   |
+| 4   | Tournament szobakártya (CD-KEY)                  | Tencent, az Esport1-on keresztül | Nem                       |
+| 5   | Egy telefon PUBG Mobile-lal, hosztolásra         | Te                               | Igen                      |
+| 6   | Néhány játékos a szobába                         | Te és a kollégák                 | Igen                      |
 
 **A 3-as pont a kemény kapu.** Whitelist nélkül **egyáltalán nincs API-adat** — a kliens elindul, a
 meccs lemegy, és az endpoint nem ad használható választ. Ez egyben az is, aminek ismeretlen az
@@ -387,12 +387,12 @@ kiszállást:
 
 Ezt a listát vedd sorra — aszerint van rendezve, hogy melyik szokott lenni az ok:
 
-| Tünet                                   | Mit nézz meg                                                                                  |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| A szkript azt írja, nem éri el az API-t | Nyitva van még a `launch.bat` ablaka?                                                         |
-| Nyitva van, mégsincs semmi              | Be volt pipálva az **„API Enable"** a meccs indulása _előtt_?                                 |
-| Ez is rendben, mégsincs adat            | Whitelistelve van az OPENID? Enélkül minden fut, és adat nincs.                               |
-| Minden fenti rendben, élő meccs alatt mégsincs adat | A PC OB kliens **ténylegesen a meccset mutatja-e** (nem lobbiban/menüben áll)? Egyezik-e a bejelentkezett OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3. mező) azzal, amit whitelistelésre küldtél? *(Élesben előfordult: 2026-08-28, 2 csapat, 1-1 játékos — az `isingame` tartósan `false` maradt, holott az „API Enable" be volt pipálva és a `launch.bat` futott. A root cause ezen a napon nem lett tisztázva.)* |
-| Meccs közben elhallgat                  | Kilépett a hoszt a szobából? Hoszt nélkül nincs API.                                          |
-| Helyben megy, másik gépről nem          | Tűzfal az OB gépen, 10086-os port.                                                            |
-| A kliens el sem indul                   | Rossz `.exe` — a `Binaries\Win64` alattit használd ([3. pont](#3-a-pc-ob-kliens-telepítése)). |
+| Tünet                                               | Mit nézz meg                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A szkript azt írja, nem éri el az API-t             | Nyitva van még a `launch.bat` ablaka?                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Nyitva van, mégsincs semmi                          | Be volt pipálva az **„API Enable"** a meccs indulása _előtt_?                                                                                                                                                                                                                                                                                                                                                                          |
+| Ez is rendben, mégsincs adat                        | Whitelistelve van az OPENID? Enélkül minden fut, és adat nincs.                                                                                                                                                                                                                                                                                                                                                                        |
+| Minden fenti rendben, élő meccs alatt mégsincs adat | A PC OB kliens **ténylegesen a meccset mutatja-e** (nem lobbiban/menüben áll)? Egyezik-e a bejelentkezett OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3. mező) azzal, amit whitelistelésre küldtél? _(Élesben előfordult: 2026-08-28, 2 csapat, 1-1 játékos — az `isingame` tartósan `false` maradt, holott az „API Enable" be volt pipálva és a `launch.bat` futott. A root cause ezen a napon nem lett tisztázva.)_ |
+| Meccs közben elhallgat                              | Kilépett a hoszt a szobából? Hoszt nélkül nincs API.                                                                                                                                                                                                                                                                                                                                                                                   |
+| Helyben megy, másik gépről nem                      | Tűzfal az OB gépen, 10086-os port.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| A kliens el sem indul                               | Rossz `.exe` — a `Binaries\Win64` alattit használd ([3. pont](#3-a-pc-ob-kliens-telepítése)).                                                                                                                                                                                                                                                                                                                                          |

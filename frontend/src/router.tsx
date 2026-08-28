@@ -1,4 +1,10 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  redirect,
+} from '@tanstack/react-router';
 import { AdminPage } from '@/pages/AdminPage';
 import { OverlayRoute } from '@/pages/OverlayRoute';
 

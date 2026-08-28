@@ -156,14 +156,14 @@ Our contract layer should model these as "not yet available" rather than as nume
 `specs/example.png` requires: rank, team logo, short name, alive-player bars with health, points,
 eliminations.
 
-| Overlay column | Source                                                    | Status                                            |
-| -------------- | --------------------------------------------------------- | ------------------------------------------------- |
-| # (rank)       | PCOB's own `rank`, our elimination order as fallback       | API ✅ (primary), ours only as a fallback         |
-| Team logo      | Local image file, uploaded via admin                      | **Our storage**                                   |
-| Team name      | Operator-configured, or imported from `TeamLogoAndColor.ini` | **Our config**                                  |
-| ALIVE bars     | `LiveState` + `Health` / `HealthMax` per player            | API ✅                                            |
-| PTS            | Placement points + kill points per the tournament ruleset  | **Our logic** — needs a configurable points table |
-| ELIMS          | Sum of team members' `KillNum` / `KillNumBeforeDie`        | API ✅                                            |
+| Overlay column | Source                                                       | Status                                            |
+| -------------- | ------------------------------------------------------------ | ------------------------------------------------- |
+| # (rank)       | PCOB's own `rank`, our elimination order as fallback         | API ✅ (primary), ours only as a fallback         |
+| Team logo      | Local image file, uploaded via admin                         | **Our storage**                                   |
+| Team name      | Operator-configured, or imported from `TeamLogoAndColor.ini` | **Our config**                                    |
+| ALIVE bars     | `LiveState` + `Health` / `HealthMax` per player              | API ✅                                            |
+| PTS            | Placement points + kill points per the tournament ruleset    | **Our logic** — needs a configurable points table |
+| ELIMS          | Sum of team members' `KillNum` / `KillNumBeforeDie`          | API ✅                                            |
 
 **This is a significant scoping finding:** points are _not_ supplied by the API, and cannot be —
 they are per-tournament. We need a configurable scoring ruleset (placement points table + points per

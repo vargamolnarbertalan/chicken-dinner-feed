@@ -152,7 +152,13 @@ export const logoRoutes: FastifyPluginAsyncZod<LogoRoutesOptions> = async (app, 
       );
 
       const document = await config.saveTeams({ ...config.teams.current, teams });
-      return reply.send({ teams: teams.length, logosCopied, logosMissing, namesTruncated, document });
+      return reply.send({
+        teams: teams.length,
+        logosCopied,
+        logosMissing,
+        namesTruncated,
+        document,
+      });
     },
   );
 

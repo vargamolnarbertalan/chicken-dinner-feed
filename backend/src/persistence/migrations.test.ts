@@ -4,7 +4,11 @@ import {
   teamRosterDocumentSchema,
 } from '@cdf/shared';
 import { describe, expect, it } from 'vitest';
-import { migrateOverlayInstances, migrateSchemaVersionOnly, migrateTeamRoster } from './migrations.js';
+import {
+  migrateOverlayInstances,
+  migrateSchemaVersionOnly,
+  migrateTeamRoster,
+} from './migrations.js';
 
 /** A document in the shape actually found on an operator's machine before the animation rework. */
 const V1_DOCUMENT = {

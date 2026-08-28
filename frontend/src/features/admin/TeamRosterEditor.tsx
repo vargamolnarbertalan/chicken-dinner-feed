@@ -96,10 +96,7 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
           const teamNo = nextFreeTeamNo();
           onChange({
             ...document,
-            teams: [
-              ...document.teams,
-              { teamNo, name: `T${teamNo}`, logoUrl: null },
-            ],
+            teams: [...document.teams, { teamNo, name: `T${teamNo}`, logoUrl: null }],
           });
         }}
       >

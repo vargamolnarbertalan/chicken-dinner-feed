@@ -67,15 +67,9 @@ export function TeamLogoCell({ team, onChange }: TeamLogoCellProps) {
           backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
         }}
         aria-label={
-          team.logoUrl
-            ? `Replace the logo for ${team.name}`
-            : `Add a logo for ${team.name}`
+          team.logoUrl ? `Replace the logo for ${team.name}` : `Add a logo for ${team.name}`
         }
-        title={
-          team.logoUrl
-            ? `Replace the logo for ${team.name}`
-            : `Add a logo for ${team.name}`
-        }
+        title={team.logoUrl ? `Replace the logo for ${team.name}` : `Add a logo for ${team.name}`}
       >
         {team.logoUrl ? (
           <img src={team.logoUrl} alt="" className="size-full object-contain" />

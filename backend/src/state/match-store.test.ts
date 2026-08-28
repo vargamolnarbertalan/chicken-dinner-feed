@@ -7,7 +7,9 @@ function roster(...teamNos: number[]): TeamRosterEntry[] {
   return teamNos.map((teamNo) => ({ teamNo, name: `T${teamNo}`, logoUrl: null }));
 }
 
-function player(overrides: Partial<IngestPlayer> & Pick<IngestPlayer, 'teamNo' | 'slot'>): IngestPlayer {
+function player(
+  overrides: Partial<IngestPlayer> & Pick<IngestPlayer, 'teamNo' | 'slot'>,
+): IngestPlayer {
   return {
     id: `p${overrides.teamNo}-${overrides.slot}`,
     name: `Player ${overrides.teamNo}-${overrides.slot}`,
