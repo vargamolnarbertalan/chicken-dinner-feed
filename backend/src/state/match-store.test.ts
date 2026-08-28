@@ -86,6 +86,67 @@ describe('MatchStore', () => {
     expect(match.teams[2]?.hasAppeared).toBe(false);
   });
 
+  it('never gives two teams the same placement when a survivor has no API rank yet but another team already does', () => {
+    // The API can answer for one team before another (specs/PCOB-API.md §4: "a single response can
+    // mix generations"). Old code numbered survivors 1, 2, 3... regardless of what the API had
+    // already claimed, so a winner reporting `rank: 1` and a teammate-less survivor still waiting
+    // for its own rank could both end up placement 1.
+    const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+
+    store.applyUpdate(
+      update({
+        phase: 'ended',
+        players: [
+          player({ teamNo: 1, slot: 1, liveState: 'alive', rank: 1 }), // API already confirmed 1st.
+          player({ teamNo: 2, slot: 1, liveState: 'alive', rank: 0 }), // Still standing, no rank yet.
+        ],
+      }),
+    );
+
+    const { match } = store.project();
+    const placements = match.teams.map((team) => team.placement).filter((p) => p !== null);
+
+    expect(new Set(placements).size).toBe(placements.length); // No two teams share a placement.
+    expect(match.teams.find((t) => t.teamNo === 1)?.placement).toBe(1);
+    expect(match.teams.find((t) => t.teamNo === 2)?.placement).toBe(2);
+  });
+
+  it('never gives two teams the same placement when an eliminated team is later confirmed by the API out of elimination order', () => {
+    // Our own elimination-order fallback and the API's `rank` are two independent guesses that can
+    // legitimately disagree about *when* — old code let the fallback's arithmetic land on a number
+    // the API had already handed to someone else.
+    const store = new MatchStore({ source: 'pcob', roster: roster(10, 11, 12) });
+
+    // Poll 1: team 12 goes out first. No rank known yet for anyone.
+    store.applyUpdate(
+      update({
+        players: [
+          player({ teamNo: 10, slot: 1, liveState: 'alive' }),
+          player({ teamNo: 11, slot: 1, liveState: 'alive' }),
+          player({ teamNo: 12, slot: 1, liveState: 'dead' }),
+        ],
+      }),
+    );
+
+    // Poll 2: team 11 goes out too. Team 12's API rank has now arrived: 2nd place.
+    store.applyUpdate(
+      update({
+        phase: 'ended',
+        players: [
+          player({ teamNo: 10, slot: 1, liveState: 'alive' }),
+          player({ teamNo: 11, slot: 1, liveState: 'dead' }),
+          player({ teamNo: 12, slot: 1, liveState: 'dead', rank: 2 }),
+        ],
+      }),
+    );
+
+    const { match } = store.project();
+    const placements = match.teams.map((team) => team.placement).filter((p) => p !== null);
+
+    expect(new Set(placements).size).toBe(placements.length); // No two teams share a placement.
+    expect(match.teams.find((t) => t.teamNo === 12)?.placement).toBe(2);
+  });
+
   it('resets which teams have appeared when a new match starts', () => {
     const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
 

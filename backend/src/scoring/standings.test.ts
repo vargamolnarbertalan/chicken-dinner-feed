@@ -191,7 +191,7 @@ describe('computeStandings', () => {
     expect(team?.players.map((p) => p.slot)).toEqual([1, 2, 3, 4]);
   });
 
-  it('marks a team present when presentTeams is given and it is not in the set', () => {
+  it('marks a team absent when presentTeams is given and it is not in the set', () => {
     const [team] = computeStandings({
       players: [],
       roster: roster(1),

@@ -155,9 +155,7 @@ export class PcobMapper {
         // the denominator everywhere downstream.
         healthMax: healthMax > 0 ? healthMax : DEFAULT_HEALTH_MAX,
         kills: this.killsFor(stableId, reader),
-        // `0` means "still playing" (specs/PCOB-API.md §6); never let a malformed value read as a
-        // false placement.
-        rank: Math.max(0, reader.number(F.rank, 0)),
+        rank: this.rankFor(reader),
       });
     }
 
@@ -173,6 +171,23 @@ export class PcobMapper {
     // player as present-but-unreported rather than guessing at dead.
     this.warn(`liveState ${raw} is not a known PCOB value; treating as unknown`);
     return 'unknown';
+  }
+
+  /**
+   * The team's placement per PCOB's own `rank` field. `0` means "still playing"
+   * (`specs/PCOB-API.md` §6); never let a malformed value read as a false placement.
+   *
+   * Truncated to an integer defensively: this value flows straight into `Team.placement`
+   * downstream, which is schema-typed as an integer. A fractional value here would fail that
+   * schema on the way out over the WebSocket, and the client drops a message that fails schema
+   * validation with no visible error — silently freezing the overlay on its last good frame for the
+   * rest of the match, exactly the failure mode ADR-0006 exists to prevent.
+   */
+  private rankFor(reader: FieldReader): number {
+    const raw = reader.number(F.rank, 0);
+    const truncated = Math.max(0, Math.trunc(raw));
+    if (truncated !== raw) this.warn(`rank ${raw} is not an integer; using ${truncated}`);
+    return truncated;
   }
 
   /**

@@ -33,12 +33,15 @@ export function ImportIniButton({ onImported }: ImportIniButtonProps) {
       // the normal outcome of moving a folder, and silence would leave the operator to notice it on
       // air instead.
       const missing = result.logosMissing.length;
+      const truncated = result.namesTruncated.length;
       const copied = `${result.logosCopied} logos copied`;
+      const notes = [
+        missing > 0 ? `${missing} logo path${missing === 1 ? '' : 's'} could not be found` : null,
+        truncated > 0 ? `${truncated} name${truncated === 1 ? '' : 's'} shortened to fit` : null,
+      ].filter(Boolean);
       toast.success(
         `Roster replaced with ${result.teams} teams`,
-        missing === 0
-          ? `${copied}.`
-          : `${copied}. ${missing} could not be found — check those paths still exist.`,
+        notes.length === 0 ? `${copied}.` : `${copied}. ${notes.join('; ')}.`,
       );
     } catch (error) {
       toast.error(

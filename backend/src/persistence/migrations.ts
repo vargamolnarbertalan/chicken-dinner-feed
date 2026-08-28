@@ -55,20 +55,33 @@ function migrateAnimationV1(raw: unknown): Record<string, unknown> {
   };
 }
 
-/** Bring an overlay-instances document up to the current schema version. */
+/**
+ * Bring an overlay-instances document up to the current schema version.
+ *
+ * `CONFIG_SCHEMA_VERSION` is one number shared by every persisted document (ADR-0004), so bumping
+ * it for an unrelated document's shape change still runs this function again on an
+ * already-migrated one. The animation rewrite below is gated on `version < 2` for exactly that
+ * reason: applying `migrateAnimationV1` a second time to an already-v2 animation silently discards
+ * whatever `type`, non-`slide` `direction`, `withFade: false` or enabled row stagger the operator
+ * had configured, because that function assumes v1 input unconditionally.
+ */
 export function migrateOverlayInstances(raw: unknown): unknown {
   if (!isRecord(raw)) return raw;
 
   const version = typeof raw['schemaVersion'] === 'number' ? raw['schemaVersion'] : 0;
   if (version >= CONFIG_SCHEMA_VERSION) return raw;
 
-  const instances = Array.isArray(raw['instances']) ? raw['instances'] : [];
+  // A malformed `instances` value must fail loud schema validation, not be silently replaced with
+  // an empty list and written back over whatever was actually on disk.
+  if (!Array.isArray(raw['instances'])) return raw;
 
   return {
     ...raw,
     schemaVersion: CONFIG_SCHEMA_VERSION,
-    instances: instances.map((instance) => {
+    instances: raw['instances'].map((instance) => {
       if (!isRecord(instance)) return instance;
+      if (version >= 2) return instance; // Already past the only shape change this function makes.
+
       const appearance = isRecord(instance['appearance']) ? instance['appearance'] : {};
 
       return {
@@ -107,12 +120,14 @@ export function migrateTeamRoster(raw: unknown): unknown {
   const version = typeof raw['schemaVersion'] === 'number' ? raw['schemaVersion'] : 0;
   if (version >= CONFIG_SCHEMA_VERSION) return raw;
 
-  const teams = Array.isArray(raw['teams']) ? raw['teams'] : [];
+  // A malformed `teams` value must fail loud schema validation, not be silently replaced with an
+  // empty roster and written back over an operator's real, if damaged, tournament team list.
+  if (!Array.isArray(raw['teams'])) return raw;
 
   return {
     ...raw,
     schemaVersion: CONFIG_SCHEMA_VERSION,
-    teams: version < 3 ? teams.map(migrateTeamNameV2ToV3) : teams,
+    teams: version < 3 ? raw['teams'].map(migrateTeamNameV2ToV3) : raw['teams'],
   };
 }
 

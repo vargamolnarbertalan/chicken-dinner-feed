@@ -174,6 +174,15 @@ describe('PcobMapper', () => {
 
       expect(update.players[0]?.rank).toBe(0);
     });
+
+    it('truncates a fractional value rather than passing it downstream', () => {
+      // `Team.placement` is schema-typed as an integer. A fractional value here would fail that
+      // schema on the way out over the WebSocket, and the client drops the whole message — freezing
+      // the overlay silently for the rest of the match.
+      const update = new PcobMapper().map(snapshot([player({ rank: 2.5 })]));
+
+      expect(update.players[0]?.rank).toBe(2);
+    });
   });
 
   describe('match boundaries', () => {

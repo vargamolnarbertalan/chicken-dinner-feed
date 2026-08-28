@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { CONFIG_SCHEMA_VERSION } from '../versions.js';
 
 /**
+ * The overlay's name column has no length check of its own — this is the actual limit. Exported so
+ * the ini-import route can truncate to it up front rather than letting a long `TeamName=` value
+ * fail schema validation deep inside a save.
+ */
+export const TEAM_NAME_MAX_LENGTH = 24;
+
+/**
  * What the overlay prints for a given PCOB team slot.
  *
  * `teamNo` is the join key: the PCOB API keys everything by team number, and the operator's
@@ -19,7 +26,7 @@ export const teamRosterEntrySchema = z.object({
    * distinction did not exist in the source data and only meant an operator could edit the field
    * nothing on air ever read.
    */
-  name: z.string().min(1).max(24),
+  name: z.string().min(1).max(TEAM_NAME_MAX_LENGTH),
   /** Null until the operator supplies a logo. */
   logoUrl: z.string().nullable(),
 });

@@ -159,6 +159,40 @@ describe('migrateOverlayInstances', () => {
     expect(migrateOverlayInstances(current)).toBe(current);
   });
 
+  it('does not re-run the v1 animation migration on an already-v2 document', () => {
+    // The regression this guards against: CONFIG_SCHEMA_VERSION is one number shared by every
+    // persisted document (ADR-0004). Bumping it for an unrelated document (e.g. the team roster,
+    // v2 -> v3) must not make this function re-migrate an overlay-instances document that was
+    // already at v2 — migrateAnimationV1 assumes v1 input unconditionally and would silently
+    // discard a real v2 animation's type, direction, withFade and row settings.
+    const alreadyV2 = {
+      schemaVersion: 2,
+      instances: [
+        {
+          id: 'main',
+          name: 'Main',
+          type: 'leaderboard',
+          appearance: {
+            animation: {
+              type: 'wipe',
+              direction: 'top',
+              durationMs: 900,
+              easing: 'smooth',
+              withFade: false,
+              rows: { enabled: true, staggerMs: 120, reverseOnHide: true },
+            },
+          },
+        },
+      ],
+    };
+
+    const migrated = migrateOverlayInstances(alreadyV2) as typeof alreadyV2;
+
+    expect(migrated.instances[0]?.appearance.animation).toEqual(
+      alreadyV2.instances[0]?.appearance.animation,
+    );
+  });
+
   it('survives a document mangled by hand rather than throwing', () => {
     // These files are hand-editable, so the migration meets whatever is on disk. Refusing to start
     // is a worse outcome than one setting reverting to a default.
@@ -169,6 +203,15 @@ describe('migrateOverlayInstances', () => {
       migrateOverlayInstances({ schemaVersion: 1, instances: [null, 42] }),
     ).not.toThrow();
     expect(() => migrateOverlayInstances(null)).not.toThrow();
+  });
+
+  it('does not coerce a hand-mangled instances value into an empty list', () => {
+    // A mangled `instances` (a stray brace turning the array into an object, say) must fail loud
+    // schema validation downstream, not get silently replaced with `[]` and written back over
+    // whatever the operator actually had on disk.
+    const mangled = { schemaVersion: 1, instances: 'not an array' };
+
+    expect(migrateOverlayInstances(mangled)).toBe(mangled);
   });
 
   it('falls back to a usable animation when the old one was missing entirely', () => {
@@ -241,6 +284,14 @@ describe('migrateTeamRoster', () => {
     expect(() => migrateTeamRoster({ schemaVersion: 2, teams: 'not an array' })).not.toThrow();
     expect(() => migrateTeamRoster({ schemaVersion: 2, teams: [null, 42] })).not.toThrow();
     expect(() => migrateTeamRoster(null)).not.toThrow();
+  });
+
+  it('does not coerce a hand-mangled teams value into an empty roster', () => {
+    // A mangled `teams` value must fail loud schema validation downstream, not get silently
+    // replaced with `[]` and written back over an operator's real tournament team list.
+    const mangled = { schemaVersion: 2, teams: 'not an array' };
+
+    expect(migrateTeamRoster(mangled)).toBe(mangled);
   });
 });
 
