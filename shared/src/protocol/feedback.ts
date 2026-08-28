@@ -110,7 +110,6 @@ export const feedbackDocumentSchema = z.object({
     leader: z
       .object({
         teamNo: z.number().int(),
-        shortName: z.string(),
         name: z.string(),
         totalPoints: z.number().int(),
         eliminations: z.number().int(),

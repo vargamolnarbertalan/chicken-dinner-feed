@@ -38,8 +38,11 @@ export function TeamRow({ team, isAlternate }: TeamRowProps) {
         columnGap: u(6),
         backgroundColor: isAlternate ? 'var(--overlay-row-alt-bg)' : 'transparent',
         // Eliminated teams recede rather than disappear — the director still needs to see where a
-        // team finished.
-        opacity: team.isEliminated ? 0.45 : 1,
+        // team finished. A team that has never actually shown up this match recedes further still:
+        // it is a roster slot nobody has played, not a competitor, and must read as visibly
+        // different from "alive, just no data yet" (which renders identically otherwise — full,
+        // undimmed bars — see AlivePlayerBars' `fillFraction`).
+        opacity: !team.hasAppeared ? 0.25 : team.isEliminated ? 0.45 : 1,
         transition: 'opacity 400ms ease',
       }}
     >
@@ -77,7 +80,7 @@ export function TeamRow({ team, isAlternate }: TeamRowProps) {
         className="truncate font-bold tracking-wide"
         style={{ fontSize: u(16), color: 'var(--overlay-text)' }}
       >
-        {team.shortName}
+        {team.name}
       </span>
 
       <div className="flex justify-center">

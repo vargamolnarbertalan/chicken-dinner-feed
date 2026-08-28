@@ -6,11 +6,13 @@ import type {
 } from '@cdf/shared';
 
 /**
- * A player exactly as an ingestion adapter reports it: raw facts, no scoring, no ranking.
+ * A player exactly as an ingestion adapter reports it: raw facts, no scoring.
  *
- * Points, placement and rank are computed downstream because the PCOB API does not supply them
- * (specs/PCOB-FINDINGS.md §2.4). Keeping them out of this type means an adapter cannot accidentally
- * become the place where scoring rules live.
+ * Points are computed downstream because the PCOB API does not supply them
+ * (specs/PCOB-FINDINGS.md §2.4). `rank` is the one exception: PCOB does supply a team's final
+ * placement directly, confirmed reliable by a live capture (`specs/PCOB-API.md` §6). It is passed
+ * through here rather than computed, so `MatchStore` can trust it over its own elimination-order
+ * guess whenever it is known.
  */
 export interface IngestPlayer {
   id: string;
@@ -21,6 +23,8 @@ export interface IngestPlayer {
   health: number;
   healthMax: number;
   kills: number;
+  /** The team's placement per PCOB's own `rank` field. `0` means not yet known — still playing. */
+  rank: number;
 }
 
 export interface IngestUpdate {

@@ -13,7 +13,7 @@
  * client could not render correctly. Clients reject snapshots whose version they do not know and
  * surface a visible error instead of rendering partial data.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * Version of the persisted configuration documents on disk (ADR-0004).
@@ -21,4 +21,4 @@ export const PROTOCOL_VERSION = 5;
  * Bump when a stored document's shape changes. Every persisted document carries this value so a
  * newer bundle can migrate an operator's existing configuration forward rather than discarding it.
  */
-export const CONFIG_SCHEMA_VERSION = 2;
+export const CONFIG_SCHEMA_VERSION = 3;

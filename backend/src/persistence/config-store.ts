@@ -18,7 +18,11 @@ import {
   teamRosterDocumentSchema,
 } from '@cdf/shared';
 import { JsonDocument } from './json-document.js';
-import { migrateOverlayInstances, migrateSchemaVersionOnly } from './migrations.js';
+import {
+  migrateOverlayInstances,
+  migrateSchemaVersionOnly,
+  migrateTeamRoster,
+} from './migrations.js';
 
 export type ConfigChange = 'instances' | 'teams' | 'scoring' | 'fonts';
 export type ConfigListener = (change: ConfigChange) => void;
@@ -62,7 +66,7 @@ export class ConfigStore {
       filePath: path.join(dataDir, 'team-roster.json'),
       schema: teamRosterDocumentSchema,
       createDefault: () => DEFAULT_TEAM_ROSTER,
-      migrate: migrateSchemaVersionOnly,
+      migrate: migrateTeamRoster,
       onWarn,
     });
 

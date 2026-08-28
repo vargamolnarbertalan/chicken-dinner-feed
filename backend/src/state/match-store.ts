@@ -47,6 +47,15 @@ export class MatchStore {
   /** Team numbers in the order they were wiped out. Index 0 went out first, so it placed last. */
   private eliminationOrder: number[] = [];
   private readonly eliminated = new Set<number>();
+  /**
+   * Team numbers actually reported by the ingest source this match — not the configured roster.
+   *
+   * A roster is sized for a full tournament (16–25 teams) and is reused for small test rooms with a
+   * handful of real participants. Sizing placement math off `roster.length` in that case invents a
+   * bracket that never existed and can rank a real, API-confirmed placement behind teams that were
+   * never in the lobby at all.
+   */
+  private readonly seenTeams = new Set<number>();
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -88,6 +97,7 @@ export class MatchStore {
     this.connectionState = 'connected';
     this.statusMessage = null;
 
+    for (const player of update.players) this.seenTeams.add(player.teamNo);
     this.recordNewlyEliminatedTeams(update);
   }
 
@@ -123,6 +133,7 @@ export class MatchStore {
       roster: this.roster,
       ruleset: this.ruleset,
       placements: this.resolvePlacements(phase),
+      presentTeams: this.seenTeams,
     });
 
     return {
@@ -144,6 +155,21 @@ export class MatchStore {
   private resetMatch(): void {
     this.eliminationOrder = [];
     this.eliminated.clear();
+    this.seenTeams.clear();
+  }
+
+  /**
+   * The team's placement straight from PCOB's own `rank` field, per team, for teams where it is
+   * known (non-zero). Confirmed reliable by a live capture (`specs/PCOB-API.md` §6): trust it
+   * directly rather than only as a cross-check against our own elimination order.
+   */
+  private apiRankByTeam(): Map<number, number> {
+    const ranks = new Map<number, number>();
+    for (const player of this.lastUpdate?.players ?? []) {
+      if (player.rank <= 0) continue;
+      ranks.set(player.teamNo, Math.max(ranks.get(player.teamNo) ?? 0, player.rank));
+    }
+    return ranks;
   }
 
   private recordNewlyEliminatedTeams(update: IngestUpdate): void {
@@ -171,23 +197,26 @@ export class MatchStore {
   /**
    * Map team numbers to final placements.
    *
-   * A team that went out first placed last, so the elimination order read backwards gives placement.
-   * Teams still standing have not placed and get nothing — until the match ends, at which point the
-   * survivors take the remaining top positions, best points first.
+   * PCOB's own `rank` is authoritative wherever it is known — see `apiRankByTeam`. Our elimination
+   * order is the fallback, for a team we believe is out but whose API rank has not caught up yet: it
+   * went out first, so counting backwards from the number of teams **actually seen this match**
+   * gives its placement. Sizing that count off the full roster instead would invent a bracket that
+   * never existed — see the `seenTeams` field comment. Teams still standing have not placed and get
+   * nothing, until the match ends, at which point the survivors take the remaining top positions,
+   * best points first.
    */
   private resolvePlacements(phase: MatchState['phase']): ReadonlyMap<number, number> {
-    const totalTeams = this.roster.length;
-    const placements = new Map<number, number>();
+    const placements = new Map<number, number>(this.apiRankByTeam());
 
+    const totalSeen = this.seenTeams.size;
     this.eliminationOrder.forEach((teamNo, index) => {
-      placements.set(teamNo, totalTeams - index);
+      if (placements.has(teamNo)) return; // The API already answered for this team.
+      placements.set(teamNo, totalSeen - index);
     });
 
     if (phase !== 'ended') return placements;
 
-    const survivors = this.roster
-      .map((entry) => entry.teamNo)
-      .filter((teamNo) => !placements.has(teamNo));
+    const survivors = [...this.seenTeams].filter((teamNo) => !placements.has(teamNo));
 
     // Normally exactly one team survives. If more do — a match cut short, say — order them by the
     // points they earned rather than leaving placement undefined.

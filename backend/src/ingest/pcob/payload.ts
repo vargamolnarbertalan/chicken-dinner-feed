@@ -40,6 +40,7 @@ const F = {
   liveState: ['liveState'],
   killNum: ['killNum'],
   killNumBeforeDie: ['killNumBeforeDie'],
+  rank: ['rank'],
 } as const;
 
 const MAX_TEAM_NO = 25;
@@ -154,6 +155,9 @@ export class PcobMapper {
         // the denominator everywhere downstream.
         healthMax: healthMax > 0 ? healthMax : DEFAULT_HEALTH_MAX,
         kills: this.killsFor(stableId, reader),
+        // `0` means "still playing" (specs/PCOB-API.md §6); never let a malformed value read as a
+        // false placement.
+        rank: Math.max(0, reader.number(F.rank, 0)),
       });
     }
 

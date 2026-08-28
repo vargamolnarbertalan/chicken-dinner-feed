@@ -10,9 +10,16 @@ import { CONFIG_SCHEMA_VERSION } from '../versions.js';
  */
 export const teamRosterEntrySchema = z.object({
   teamNo: z.number().int().min(1).max(25),
-  name: z.string().min(1).max(60),
-  /** What the overlay actually prints. The reference uses 2–5 characters. */
-  shortName: z.string().min(1).max(8),
+  /**
+   * What the overlay prints, and the only name a team has.
+   *
+   * There is no separate "full" name: the ini has just one `TeamName=` value per team
+   * (specs/PCOB-FINDINGS.md §3), and a team imported from it gets exactly that value here,
+   * unmodified. A prior version invented a second, longer name plus a derived short form; that
+   * distinction did not exist in the source data and only meant an operator could edit the field
+   * nothing on air ever read.
+   */
+  name: z.string().min(1).max(24),
   /** Null until the operator supplies a logo. */
   logoUrl: z.string().nullable(),
 });
@@ -33,21 +40,21 @@ export type TeamRosterDocument = z.infer<typeof teamRosterDocumentSchema>;
 export const DEFAULT_TEAM_ROSTER: TeamRosterDocument = {
   schemaVersion: CONFIG_SCHEMA_VERSION,
   teams: [
-    { teamNo: 1, name: 'Megalodon', shortName: 'MGLZ', logoUrl: null },
-    { teamNo: 2, name: 'Alpha Gaming', shortName: 'APG', logoUrl: null },
-    { teamNo: 3, name: 'Cloud One', shortName: 'C1', logoUrl: null },
-    { teamNo: 4, name: 'Twisted', shortName: 'TWIST', logoUrl: null },
-    { teamNo: 5, name: 'Scarlet Crew', shortName: 'SC', logoUrl: null },
-    { teamNo: 6, name: 'Eternal', shortName: 'ETN', logoUrl: null },
-    { teamNo: 7, name: 'Kingz', shortName: 'KNZ', logoUrl: null },
-    { teamNo: 8, name: 'Etcetera', shortName: 'ETC', logoUrl: null },
-    { teamNo: 9, name: 'Stellar', shortName: 'STR', logoUrl: null },
-    { teamNo: 10, name: 'Section 4', shortName: 'SE4', logoUrl: null },
-    { teamNo: 11, name: 'Echo Five', shortName: 'E5', logoUrl: null },
-    { teamNo: 12, name: 'Exodus', shortName: 'EXDS', logoUrl: null },
-    { teamNo: 13, name: 'Zenith West', shortName: 'ZEW', logoUrl: null },
-    { teamNo: 14, name: 'Matrix Four', shortName: 'M4', logoUrl: null },
-    { teamNo: 15, name: 'Two Alpha', shortName: '2A', logoUrl: null },
-    { teamNo: 16, name: 'Nocturne', shortName: 'NC', logoUrl: null },
+    { teamNo: 1, name: 'MGLZ', logoUrl: null },
+    { teamNo: 2, name: 'APG', logoUrl: null },
+    { teamNo: 3, name: 'C1', logoUrl: null },
+    { teamNo: 4, name: 'TWIST', logoUrl: null },
+    { teamNo: 5, name: 'SC', logoUrl: null },
+    { teamNo: 6, name: 'ETN', logoUrl: null },
+    { teamNo: 7, name: 'KNZ', logoUrl: null },
+    { teamNo: 8, name: 'ETC', logoUrl: null },
+    { teamNo: 9, name: 'STR', logoUrl: null },
+    { teamNo: 10, name: 'SE4', logoUrl: null },
+    { teamNo: 11, name: 'E5', logoUrl: null },
+    { teamNo: 12, name: 'EXDS', logoUrl: null },
+    { teamNo: 13, name: 'ZEW', logoUrl: null },
+    { teamNo: 14, name: 'M4', logoUrl: null },
+    { teamNo: 15, name: '2A', logoUrl: null },
+    { teamNo: 16, name: 'NC', logoUrl: null },
   ],
 };

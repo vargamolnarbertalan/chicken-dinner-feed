@@ -1,6 +1,10 @@
-import { CONFIG_SCHEMA_VERSION, overlayInstancesDocumentSchema } from '@cdf/shared';
+import {
+  CONFIG_SCHEMA_VERSION,
+  overlayInstancesDocumentSchema,
+  teamRosterDocumentSchema,
+} from '@cdf/shared';
 import { describe, expect, it } from 'vitest';
-import { migrateOverlayInstances, migrateSchemaVersionOnly } from './migrations.js';
+import { migrateOverlayInstances, migrateSchemaVersionOnly, migrateTeamRoster } from './migrations.js';
 
 /** A document in the shape actually found on an operator's machine before the animation rework. */
 const V1_DOCUMENT = {
@@ -179,6 +183,64 @@ describe('migrateOverlayInstances', () => {
     };
 
     expect(migrateAndParse(noAnimation).instances[0]?.appearance.animation.type).toBe('slide');
+  });
+});
+
+describe('migrateTeamRoster', () => {
+  /** What the file on an actual operator's machine looked like before name/shortName collapsed. */
+  const V2_DOCUMENT = {
+    schemaVersion: 2,
+    teams: [
+      { teamNo: 3, name: 'HZ', shortName: 'C1', logoUrl: '/api/logos/team-3.png' },
+      { teamNo: 4, name: 'N1', shortName: 'TWIST', logoUrl: null },
+    ],
+  };
+
+  function migrateAndParse(document: unknown) {
+    const result = teamRosterDocumentSchema.safeParse(migrateTeamRoster(document));
+    if (!result.success) throw new Error(result.error.issues[0]?.message ?? 'invalid');
+    return result.data;
+  }
+
+  it('turns a real v2 document into something the current schema accepts', () => {
+    expect(() => migrateAndParse(V2_DOCUMENT)).not.toThrow();
+  });
+
+  it('keeps shortName as the surviving name, discarding the old long name', () => {
+    // shortName was what operators actually configured and what rendered on air; the old `name`
+    // was frequently unrelated placeholder text nobody ever saw.
+    const teams = migrateAndParse(V2_DOCUMENT).teams;
+
+    expect(teams.find((team) => team.teamNo === 3)?.name).toBe('C1');
+    expect(teams.find((team) => team.teamNo === 4)?.name).toBe('TWIST');
+  });
+
+  it('preserves everything else about the team, logo included', () => {
+    const team = migrateAndParse(V2_DOCUMENT).teams.find((entry) => entry.teamNo === 3);
+
+    expect(team?.logoUrl).toBe('/api/logos/team-3.png');
+  });
+
+  it('leaves an already-current document untouched', () => {
+    const current = { schemaVersion: CONFIG_SCHEMA_VERSION, teams: [] };
+
+    expect(migrateTeamRoster(current)).toBe(current);
+  });
+
+  it('leaves a team that has no shortName alone, whatever version tagged it', () => {
+    // A document already migrated, or hand-written directly in the new shape.
+    const alreadyNew = {
+      schemaVersion: 2,
+      teams: [{ teamNo: 1, name: 'ONE', logoUrl: null }],
+    };
+
+    expect(migrateAndParse(alreadyNew).teams[0]?.name).toBe('ONE');
+  });
+
+  it('survives a document mangled by hand rather than throwing', () => {
+    expect(() => migrateTeamRoster({ schemaVersion: 2, teams: 'not an array' })).not.toThrow();
+    expect(() => migrateTeamRoster({ schemaVersion: 2, teams: [null, 42] })).not.toThrow();
+    expect(() => migrateTeamRoster(null)).not.toThrow();
   });
 });
 

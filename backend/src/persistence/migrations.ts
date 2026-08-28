@@ -83,6 +83,40 @@ export function migrateOverlayInstances(raw: unknown): unknown {
 }
 
 /**
+ * v2 → v3: a team lost its second name.
+ *
+ * Every team used to carry both `name` (a long display form) and `shortName` (what the overlay
+ * actually printed). The ini a team roster is normally imported from has only one `TeamName=` value
+ * per team, so `name` was either a hand-typed extra nobody read on air, or — for an ini import —
+ * just a duplicate of the same string `shortName` already held. `shortName` is what operators
+ * actually configured and what rendered, so it is what survives as the sole `name` field; the old
+ * `name` is discarded.
+ */
+function migrateTeamNameV2ToV3(team: unknown): unknown {
+  if (!isRecord(team)) return team;
+  if (typeof team['shortName'] !== 'string') return team; // Already migrated, or never had one.
+
+  const { shortName, name: _oldName, ...rest } = team;
+  return { ...rest, name: shortName };
+}
+
+/** Bring a team-roster document up to the current schema version. */
+export function migrateTeamRoster(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw;
+
+  const version = typeof raw['schemaVersion'] === 'number' ? raw['schemaVersion'] : 0;
+  if (version >= CONFIG_SCHEMA_VERSION) return raw;
+
+  const teams = Array.isArray(raw['teams']) ? raw['teams'] : [];
+
+  return {
+    ...raw,
+    schemaVersion: CONFIG_SCHEMA_VERSION,
+    teams: version < 3 ? teams.map(migrateTeamNameV2ToV3) : teams,
+  };
+}
+
+/**
  * Documents whose shape did not change still carry the version number, so bumping it keeps every
  * file consistent and makes "which version wrote this" answerable from any one of them.
  */

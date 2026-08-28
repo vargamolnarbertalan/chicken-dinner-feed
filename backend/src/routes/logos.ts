@@ -4,7 +4,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { ConfigStore } from '../persistence/config-store.js';
 import { MAX_LOGO_BYTES, type LogoStore } from '../persistence/logo-store.js';
-import { deriveShortName, parseTeamLogoIni } from '../persistence/team-logo-ini.js';
+import { parseTeamLogoIni } from '../persistence/team-logo-ini.js';
 
 export interface LogoRoutesOptions {
   logos: LogoStore;
@@ -135,9 +135,6 @@ export const logoRoutes: FastifyPluginAsyncZod<LogoRoutesOptions> = async (app, 
           return {
             teamNo: entry.teamNo,
             name: entry.name,
-            // An existing short name is the operator's own wording; only invent one when there is
-            // nothing to keep.
-            shortName: previous?.shortName ?? deriveShortName(entry.name),
             logoUrl,
           };
         }),

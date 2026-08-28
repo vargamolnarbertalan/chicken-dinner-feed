@@ -7,11 +7,14 @@ export interface TeamRosterEditorProps {
 }
 
 /**
- * Team names and short names, keyed by PCOB team number.
+ * Team names, keyed by PCOB team number.
  *
  * The team number is not editable in place: it is the join key to the live data
  * (specs/PCOB-FINDINGS.md §3), so changing it silently re-points a row at a different squad. Adding
  * and removing rows is how the roster changes shape.
+ *
+ * There is exactly one name field, not a long one plus a derived short one — matching the ini,
+ * which only ever has a single `TeamName=` value per team.
  */
 export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) {
   const patch = (teamNo: number, changes: Partial<TeamRosterEntry>) =>
@@ -34,8 +37,8 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
     <div className="grid gap-3">
       <p className="text-muted-foreground text-xs">
         The number is the slot the game reports, matching your <code>TeamLogoAndColor.ini</code>.
-        The short name is what the overlay prints. Logos upload as soon as you pick them — the rest
-        of the row needs <strong>Save teams</strong>. Importing an ini replaces this whole list.
+        The name is what the overlay prints. Logos upload as soon as you pick them — the rest of the
+        row needs <strong>Save teams</strong>. Importing an ini replaces this whole list.
       </p>
 
       <div className="grid gap-2">
@@ -44,7 +47,7 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
           .map((team) => (
             <div
               key={team.teamNo}
-              className="grid grid-cols-[2.5rem_4.5rem_1fr_7rem_2rem] items-center gap-2"
+              className="grid grid-cols-[2.5rem_4.5rem_1fr_2rem] items-center gap-2"
             >
               <span className="text-muted-foreground text-center text-sm tabular-nums">
                 {team.teamNo}
@@ -63,17 +66,10 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
               <input
                 type="text"
                 aria-label={`Team ${team.teamNo} name`}
-                className="border-border bg-background rounded border px-2 py-1.5 text-sm"
+                maxLength={24}
+                className="border-border bg-background rounded border px-2 py-1.5 text-sm font-semibold"
                 value={team.name}
                 onChange={(event) => patch(team.teamNo, { name: event.target.value })}
-              />
-              <input
-                type="text"
-                aria-label={`Team ${team.teamNo} short name`}
-                maxLength={8}
-                className="border-border bg-background rounded border px-2 py-1.5 text-sm font-semibold"
-                value={team.shortName}
-                onChange={(event) => patch(team.teamNo, { shortName: event.target.value })}
               />
               <button
                 type="button"
@@ -102,7 +98,7 @@ export function TeamRosterEditor({ document, onChange }: TeamRosterEditorProps) 
             ...document,
             teams: [
               ...document.teams,
-              { teamNo, name: `Team ${teamNo}`, shortName: `T${teamNo}`, logoUrl: null },
+              { teamNo, name: `T${teamNo}`, logoUrl: null },
             ],
           });
         }}

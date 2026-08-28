@@ -12,9 +12,8 @@ import { playerSchema } from './player.js';
 export const teamSchema = z.object({
   /** 1–25, matching the PCOB `TeamNo` slot. This is the join key for roster and logo config. */
   teamNo: z.number().int().min(1).max(25),
+  /** The only name a team has — see `teamRosterEntrySchema` in `config/team-roster.ts`. */
   name: z.string(),
-  /** What the overlay actually prints — the example reference shows 2–5 characters. */
-  shortName: z.string(),
   /** Resolved by the backend; null when the operator has not supplied a logo. */
   logoUrl: z.string().nullable(),
   players: z.array(playerSchema),
@@ -38,5 +37,14 @@ export const teamSchema = z.object({
   /** Final placement, known only once the team is out or the match has ended. */
   placement: z.number().int().min(1).nullable(),
   isEliminated: z.boolean(),
+  /**
+   * Whether the ingest source has ever reported a player for this team **this match**.
+   *
+   * A roster is sized for a full tournament and reused for small test rooms — most roster slots may
+   * never see a single player in a given match. `false` here is what tells the overlay to render
+   * that team as absent rather than as "alive, no data yet" (the two used to be indistinguishable,
+   * which let never-present teams outrank a real, placed team on screen).
+   */
+  hasAppeared: z.boolean(),
 });
 export type Team = z.infer<typeof teamSchema>;
