@@ -11,9 +11,23 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-29
+
+### Fixed
+
+- The `v1.0.0` release ZIP shipped a full `node_modules` and three seeded
+  `backend/data/*.json` files — the smoke test added for that release installed and booted the app
+  directly inside the bundle that then got zipped, rather than a disposable copy. **If you
+  downloaded `v1.0.0`, re-download `v1.0.1` instead** — the packaging is fixed, nothing about the
+  application itself changed. The release workflow now runs its install/boot checks against a
+  copy of the bundle, and independently re-checks the final ZIP's contents before publishing.
+
 ## [1.0.0] - 2026-08-29
 
-The first tagged release.
+The first tagged release. **Known issue, fixed in 1.0.1:** the published ZIP for this version
+shipped `node_modules` and seeded config files it should not have — see 1.0.1's entry. The
+"no bundled `node_modules`" line below described the intent correctly; the release pipeline that
+was supposed to guarantee it had a gap.
 
 ### Added
 
@@ -38,5 +52,6 @@ The first tagged release.
 - Team placement now trusts PCOB's own `rank` field instead of only an internal elimination-order
   guess, and a roster team that never joined a match no longer outranks one that did.
 
-[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.1
 [1.0.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.0
