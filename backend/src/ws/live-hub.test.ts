@@ -5,8 +5,8 @@ import { MatchStore } from '../state/match-store.js';
 import { LiveHub, type LiveClient } from './live-hub.js';
 
 const roster: TeamRosterEntry[] = [
-  { teamNo: 1, name: 'One', shortName: 'ONE', logoUrl: null },
-  { teamNo: 2, name: 'Two', shortName: 'TWO', logoUrl: null },
+  { teamNo: 1, name: 'ONE', logoUrl: null },
+  { teamNo: 2, name: 'TWO', logoUrl: null },
 ];
 
 class FakeClient implements LiveClient {
@@ -32,6 +32,7 @@ function update(overrides: Partial<IngestUpdate> = {}): IngestUpdate {
         health: 100,
         healthMax: 100,
         kills: 0,
+        rank: 0,
       },
     ],
     ...overrides,

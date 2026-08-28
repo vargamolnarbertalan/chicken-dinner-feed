@@ -13,14 +13,14 @@ what you need has to come from Esport1 and Tencent, and the lead time on it is n
 
 ## 1. What you need, and who has to give it to you
 
-| #   | Thing                                  | Comes from                         | Can you get it yourself? |
-| --- | -------------------------------------- | ---------------------------------- | ------------------------ |
+| #   | Thing                                            | Comes from                         | Can you get it yourself? |
+| --- | ------------------------------------------------ | ---------------------------------- | ------------------------ |
 | 1   | PC OB client, v4.5.x (three files + patch files) | Esport1's Google Drive             | No — ask Zsófi           |
-| 2   | A PUBG Mobile account for the observer | You, or Esport1                    | Yes                      |
-| 3   | **The OPENID whitelisted by Tencent**  | Tencent, requested through Esport1 | **No**                   |
-| 4   | A tournament room card (CD-KEY)        | Tencent, through Esport1           | No                       |
-| 5   | A phone with PUBG Mobile, to host      | You                                | Yes                      |
-| 6   | A few players to join the room         | You and colleagues                 | Yes                      |
+| 2   | A PUBG Mobile account for the observer           | You, or Esport1                    | Yes                      |
+| 3   | **The OPENID whitelisted by Tencent**            | Tencent, requested through Esport1 | **No**                   |
+| 4   | A tournament room card (CD-KEY)                  | Tencent, through Esport1           | No                       |
+| 5   | A phone with PUBG Mobile, to host                | You                                | Yes                      |
+| 6   | A few players to join the room                   | You and colleagues                 | Yes                      |
 
 **Item 3 is the hard gate.** Without whitelisting there is no API data at all — the client runs, the
 match plays, and the endpoint returns nothing useful. It is also the one with an unknown lead time,
@@ -389,12 +389,12 @@ Three things the vendor documents do not answer, and any of them could save the 
 
 Work down this list — it is ordered by how often each one is the cause:
 
-| Symptom                                        | Check                                                                               |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------- |
-| The capture script says "cannot reach the API" | Is the `launch.bat` window still open?                                              |
-| It is open, still nothing                      | Was **"API Enable"** ticked _before_ the match started?                             |
-| Both fine, still nothing                       | Is the OPENID whitelisted? Without it, everything runs and no data flows.           |
-| All of the above fine, still nothing during a live match | Does the PC OB client **actually show the match** (not sitting in a lobby/menu)? Does the logged-in OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3rd field) match the one sent for whitelisting? *(Hit this live on 2026-08-28, 2 teams, 1 player each — `isingame` stayed `false` throughout even with "API Enable" ticked and `launch.bat` running. Root cause not identified that day.)* |
-| Data stops mid-match                           | Did the host leave the room? No host, no API.                                       |
-| Works locally, not from the other PC           | Firewall on the OB PC, port 10086.                                                  |
-| The client will not start                      | Wrong `.exe` — use the one in `Binaries\Win64` ([§3](#3-install-the-pc-ob-client)). |
+| Symptom                                                  | Check                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The capture script says "cannot reach the API"           | Is the `launch.bat` window still open?                                                                                                                                                                                                                                                                                                                                                                      |
+| It is open, still nothing                                | Was **"API Enable"** ticked _before_ the match started?                                                                                                                                                                                                                                                                                                                                                     |
+| Both fine, still nothing                                 | Is the OPENID whitelisted? Without it, everything runs and no data flows.                                                                                                                                                                                                                                                                                                                                   |
+| All of the above fine, still nothing during a live match | Does the PC OB client **actually show the match** (not sitting in a lobby/menu)? Does the logged-in OpenID (`%LOCALAPPDATA%\ShadowTrackerExtra\Saved\token.txt`, 3rd field) match the one sent for whitelisting? _(Hit this live on 2026-08-28, 2 teams, 1 player each — `isingame` stayed `false` throughout even with "API Enable" ticked and `launch.bat` running. Root cause not identified that day.)_ |
+| Data stops mid-match                                     | Did the host leave the room? No host, no API.                                                                                                                                                                                                                                                                                                                                                               |
+| Works locally, not from the other PC                     | Firewall on the OB PC, port 10086.                                                                                                                                                                                                                                                                                                                                                                          |
+| The client will not start                                | Wrong `.exe` — use the one in `Binaries\Win64` ([§3](#3-install-the-pc-ob-client)).                                                                                                                                                                                                                                                                                                                         |

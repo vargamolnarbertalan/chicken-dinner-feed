@@ -186,7 +186,7 @@ JSON path in a feedback rule.
 | Is game data arriving?           | `data.isReceivingData`             | `true` / `false` |
 | Has the data gone quiet?         | `data.isStale`                     | `true` / `false` |
 | Is anything actually showing it? | `overlays.main.hasConnectedSource` | `true` / `false` |
-| Who is leading?                  | `match.leader.shortName`           | e.g. `MGLZ`      |
+| Who is leading?                  | `match.leader.name`                | e.g. `MGLZ`      |
 | Teams still standing             | `match.standingTeamCount`          | e.g. `12`        |
 
 Replace `main` with your own overlay id — the same one that appears in the browser-source address.
@@ -284,9 +284,9 @@ Companion buttons, so renaming it would silently break them. Create a new overla
 
 ### Teams tab
 
-Team names, short names and logos, by team number. **The number is the slot the game reports** — it
-has to match the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's
-players will appear on the wrong row. The short name is what the overlay prints.
+Team names and logos, by team number. **The number is the slot the game reports** — it has to match
+the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's players will appear
+on the wrong row. There is one name field, and it is what the overlay prints.
 
 **Start with Import TeamLogoAndColor.ini.** That is the file your observer already maintains for the
 PCOB client, and importing it fills in every team number, name and logo in one step instead of

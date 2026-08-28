@@ -52,26 +52,3 @@ export function parseTeamLogoIni(text: string): IniTeamEntry[] {
 
   return entries.sort((a, b) => a.teamNo - b.teamNo);
 }
-
-/**
- * A short name for the overlay, derived from the full name.
- *
- * The ini has no short-name field, and the overlay column fits roughly five characters. An acronym
- * from the initials reads better than a truncation: "Team Falcons" as "TF" beats "TEAM ".
- */
-export function deriveShortName(name: string): string {
-  const words = name
-    .trim()
-    .split(/[\s_-]+/)
-    .filter(Boolean);
-
-  if (words.length > 1) {
-    return words
-      .map((word) => word[0] ?? '')
-      .join('')
-      .toUpperCase()
-      .slice(0, 5);
-  }
-
-  return (words[0] ?? 'TEAM').toUpperCase().slice(0, 5);
-}

@@ -3,7 +3,7 @@
 The running record of what is done, what is next, and what is blocked. Required by
 `specs/APP-PLAN.md`. Update it in the same commit as the work it describes.
 
-**Last updated:** 2026-08-18 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
+**Last updated:** 2026-08-28 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
 
 ---
 
@@ -58,9 +58,8 @@ rejected alternatives. Summary of what is now settled:
   from; guessing now would be premature abstraction.
 - **Scoring ruleset format** — placement points table plus points per elimination is certain
   (see below); whether it needs per-stage or per-match-day variants is not yet known.
-- **Team logo storage** — upload through the admin, or point at an existing folder? The PCOB
-  `TeamLogoAndColor.ini` convention (`001.png` … `025.png` at 4 resolutions) is a strong argument for
-  reusing the operator's existing directory. See `specs/PCOB-FINDINGS.md` §3.
+- ~~**Team logo storage**~~ — resolved round 3, part 1: both. Upload through the admin, or import
+  `TeamLogoAndColor.ini` in one click, which copies the logos it points at too.
 
 ---
 
@@ -410,69 +409,80 @@ match id, `liveState: 6` rendered as `disconnected` and counted as standing, a w
 placement 16, and `killNumBeforeDie` produced the right elimination total where `killNum` had reset
 to zero.
 
-**Still not proven, and it cannot be:** whether the live game client spells its fields the way the
-3.0.0 dictionary says. That needs one capture. Until then `mock` remains the setting for anything
-going on air.
+**Proven 2026-08-28** — see round 5 below. The live game client spells its fields exactly as the
+3.0.0 dictionary said, `rank` turned out to be real placement data, and `INGEST_SOURCE=pcob` is now
+verified, not just built.
 
 ---
 
-## Next — round 5
+## Done — round 5 (2026-08-28): the first real live match, and what it changed
 
-1. **One capture from a live match** — the last thing standing between the adapter and being
-   trusted on air. `docs/user/pcob-capture-guide.hu.md` is the procedure; `tools/capture-pcob.bat`
-   is the tool. _(specs/PCOB-API.md §8)_
-2. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
+**The capture.** A real PCOB client (v4.5.0,
+`Win64_Release4.5.0_No17_4.5.0.21320_Shipping_OB_Shelled`) watched a 1v1 test match end to end —
+lobby, plane, a death by zone damage plus combat, match end, and a clean restart into a second match.
+`docs/user/pcob-capture-guide.{en,hu}.md` were corrected against the real package layout in the same
+session (a double-nested extraction folder and ~26 GB of duplicated split-archive volumes were a
+one-time mistake, now documented as a trap to avoid; v4.5.0, unlike v4.3.0, genuinely needs `.pak`
+patch files). Full findings: `specs/PCOB-API.md` §6, §8.
+
+**What the capture confirmed:**
+
+- `rank` populates **immediately at match end**, for every team, in the same poll `isingame` flips
+  `false` — not post-match-only, and not needing a grace period.
+- `playerKey` is stable for an entire match and changes on the next one.
+- `killNumBeforeDie`, `teamName`, `bHasDied` all appear on the wire, every poll.
+- Three previously undocumented fields exist: `PoisonTotalDamage`, `UseSelfRescueTime`,
+  `UseEmergencyCallTime`. Ignored by design — no code change needed.
+
+**What it changed, once real (not mocked) data hit the standings:**
+
+- **Placement now trusts `rank`.** It was never actually read anywhere — despite a 2026-08-17
+  decision to use it. `MatchStore.resolvePlacements` now takes a team's own `rank` as primary,
+  falling back to elimination-order tracking only for a team believed out whose API rank has not
+  caught up. ADR-0006 corrected accordingly.
+- **A roster team that never joined a match no longer outranks one that did.** The 1v1 test used 2 of
+  a 16-team default roster; the fallback placement math, previously sized off the full roster, put
+  the API-confirmed 2nd-place team in 16th. New `Team.hasAppeared` (backed by `MatchStore`'s
+  match-scoped `seenTeams`) fixes both the math and the display — present teams always sort first,
+  and a never-present team renders visibly dimmer than even an eliminated one.
+- **A team has one name, not two.** `name` + a derived `shortName` never matched the source data —
+  the ini has a single `TeamName=` value per team. Collapsed to one `name` everywhere (schema,
+  persistence, admin, overlay). A migration (`CONFIG_SCHEMA_VERSION` 2 → 3) carries an operator's
+  existing roster forward, keeping whichever value actually rendered on air.
+- **`/` now redirects to `/admin`.** The old placeholder homepage (a pre-admin signpost, literally
+  commented as such) had no link to the admin at all — hit live tonight by opening the app fresh.
+  Deleted rather than left unrouted.
+- `PROTOCOL_VERSION` 5 → 6 (the `Team` wire shape changed).
+
+**Verified live:** the whole fix chain (rank, `hasAppeared`, single team name) watched rendering
+correctly on the `/overlay/teszt` browser source during and after a real match.
+
+**One real gap found, not yet fixed:** `OverlayPage` shows a visible banner on a protocol-version
+mismatch; `AdminPage` does not — a stale admin tab just stops updating silently (badges stuck,
+buttons unresponsive) with no explanation on screen. Hit live tonight after this round's own
+`PROTOCOL_VERSION` bump. Backlogged below.
+
+---
+
+## Next
+
+1. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
    Windows machine with only Node installed.
-3. **Post-match export** — the workflow the client performs by hand today.
-4. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
+2. **Post-match export** — the workflow the client performs by hand today.
+3. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
+4. **Admin-side protocol-mismatch banner** — found tonight (round 5); `OverlayPage` already has one.
 
 ### Backlog
 
 - **Post-match export** (final standings as CSV or a sheet-ready table). The client performs exactly
   this by hand today — save JSON, convert to CSV, paste into a Google Sheet. High value per unit of
   effort. _(`specs/PCOB-FINDINGS.md` §6)_
-- Import an existing `TeamLogoAndColor.ini` to bootstrap the team roster in one click — cheap, and
-  saves an operator retyping 16–25 teams. _(`specs/PCOB-FINDINGS.md` §3)_
 - Startup lock file so two backends cannot share one `data/` directory. _(ADR-0004)_
 - Lazy-load the admin route tree so overlay pages do not parse admin JavaScript. _(ADR-0008)_
 - Performance check of the real overlay on a broadcast machine — the known risk in ADR-0003.
 - Additional overlay types (minimap using `Location`, damage leaderboard using `Damage`).
 - Optional shared passphrase for `/admin`, only if a setup ever exposes the port. Not a security
   boundary. _(ADR-0008)_
-
----
-
-## Blocked
-
-### 🟠 PCOB API payload shape (downgraded from 🔴 on 2026-08-09)
-
-The client thread answered transport, host and port — HTTP + JSON on `127.0.0.1:10086`. What remains
-unknown is the **payload shape** and **which route serves live in-match data**. `gettotalplayerlist`
-is described as post-match, and the client states they do not know how the live table works either.
-
-Two independent ways to unblock, and the cheaper one does not involve the restricted document:
-
-1. **🟡 Capture one real response.** With a PCOB client running, "API Enable" ticked and
-   `launch.bat` open, probe port 10086 — `GET /`, `GET /gettotalplayerlist`, and a few guessed
-   sibling routes — and save one response body. A single payload would settle field names, nesting,
-   `LiveState` values and how teams and players are keyed.
-   **Status (2026-08-09): standing to-do, not currently actionable.** The PCOB client itself can
-   probably be started, but we have no way into a live PUBG Mobile match yet, and the API only
-   produces data inside one. Do this at the first opportunity — a rehearsal room would be enough,
-   it does not need a real tournament.
-2. **🔴 The schema document.**
-   `docs.google.com/spreadsheets/d/1__DWeOyhrNs4PdXs9EoWwXdylU-CMICOQ-yNpw3Ag34` still returns
-   **HTTP 401**; access requested by the client on 2026-08-09, no committed date. It would
-   additionally list endpoints nobody has thought to probe.
-
-**Not blocking round 2.** ADR-0006 puts everything behind an adapter and builds the mock source
-first, so the domain model, overlay, scoring and admin can all be finished and demonstrated without
-it. Only `PcobSource` waits — and when real data arrives, the first task is validating the domain
-model against it rather than assuming the mock was right.
-
-### Lower priority
-
-- The _PCOB update note_ and _account application_ Google Docs are unverified; likely operator-only.
-- No access to a live PCOB client for integration testing yet. The first real-data session should be
-  scheduled as a milestone, not treated as a formality — and it is now also the cheapest way to
-  unblock the payload question above.
+- Whether `rank` populates for an early-eliminated team while others keep playing (the 1v1 capture
+  cannot distinguish this from "populates at whole-match end") — needs a ≥3-team match capture.
+  _(`specs/PCOB-API.md` §6)_

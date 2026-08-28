@@ -10,6 +10,12 @@ export interface StandingsInput {
    * in the match has not placed yet and must not be given placement points.
    */
   placements: ReadonlyMap<number, number>;
+  /**
+   * Team numbers the ingest source has reported at least one player for, this match. Optional so a
+   * caller with nothing to say about presence (mostly tests) is not forced to spell out "everyone in
+   * the roster" — defaults to exactly that, which reproduces the old behaviour.
+   */
+  presentTeams?: ReadonlySet<number>;
 }
 
 /**
@@ -40,12 +46,15 @@ function placementPointsFor(placement: number | undefined, ruleset: ScoringRules
  * PTS or # columns (specs/PCOB-FINDINGS.md §2.4). Computing it here rather than per overlay means
  * two overlays can never disagree about the standings at the same moment.
  *
- * Teams appear in roster order regardless of whether the ingest reported any player for them, so a
- * team that has not been seen yet renders as present-but-unknown rather than vanishing from the
- * table mid-broadcast.
+ * Every roster team appears in the table, even ones the ingest has never reported a player for — so
+ * a team the match simply has not gotten to yet renders as present-but-unknown rather than
+ * vanishing mid-broadcast. `hasAppeared` distinguishes that "not yet" case from "never in this
+ * match at all" (a roster sized for a full tournament, reused for a small test room), and such
+ * never-present teams always sort last regardless of points.
  */
 export function computeStandings(input: StandingsInput): Team[] {
   const { players, roster, ruleset, placements } = input;
+  const presentTeams = input.presentTeams ?? new Set(roster.map((entry) => entry.teamNo));
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -72,7 +81,6 @@ export function computeStandings(input: StandingsInput): Team[] {
     return {
       teamNo: entry.teamNo,
       name: entry.name,
-      shortName: entry.shortName,
       logoUrl: entry.logoUrl,
       players: teamPlayers satisfies Player[],
       standingPlayerCount,
@@ -84,14 +92,20 @@ export function computeStandings(input: StandingsInput): Team[] {
       // A team with no reported players has not been wiped out — it has not been seen. Treating
       // "unknown" as "eliminated" would black out the whole table before the first update arrives.
       isEliminated: teamPlayers.length > 0 && standingPlayerCount === 0,
+      hasAppeared: presentTeams.has(entry.teamNo),
     };
   });
 
-  // Points first, then eliminations, then team number — deterministic, so equal teams never swap
-  // places between snapshots and trigger a pointless reorder animation on air.
+  // Present teams first, then points, then eliminations, then team number — deterministic, so equal
+  // teams never swap places between snapshots and trigger a pointless reorder animation on air. A
+  // roster team that never showed up this match must never outrank one that actually played, however
+  // few points the real one has earned so far.
   const ranked = unranked.sort(
     (a, b) =>
-      b.totalPoints - a.totalPoints || b.eliminations - a.eliminations || a.teamNo - b.teamNo,
+      Number(b.hasAppeared) - Number(a.hasAppeared) ||
+      b.totalPoints - a.totalPoints ||
+      b.eliminations - a.eliminations ||
+      a.teamNo - b.teamNo,
   );
 
   return ranked.map((team, index) => ({ ...team, rank: index + 1 }));

@@ -181,7 +181,6 @@ export const feedbackRoutes: FastifyPluginAsyncZod<FeedbackRoutesOptions> = asyn
           leader: leader
             ? {
                 teamNo: leader.teamNo,
-                shortName: leader.shortName,
                 name: leader.name,
                 totalPoints: leader.totalPoints,
                 eliminations: leader.eliminations,

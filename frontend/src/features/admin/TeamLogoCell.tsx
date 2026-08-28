@@ -25,10 +25,10 @@ export function TeamLogoCell({ team, onChange }: TeamLogoCellProps) {
     setBusy(true);
     try {
       onChange(await api.uploadTeamLogo(team.teamNo, file));
-      toast.success(`Logo set for ${team.shortName}`, 'It is already showing on air.');
+      toast.success(`Logo set for ${team.name}`, 'It is already showing on air.');
     } catch (error) {
       toast.error(
-        `Could not set the logo for ${team.shortName}`,
+        `Could not set the logo for ${team.name}`,
         error instanceof Error ? error.message : String(error),
       );
     } finally {
@@ -42,10 +42,10 @@ export function TeamLogoCell({ team, onChange }: TeamLogoCellProps) {
     setBusy(true);
     try {
       onChange(await api.deleteTeamLogo(team.teamNo));
-      toast.success(`Logo removed for ${team.shortName}`);
+      toast.success(`Logo removed for ${team.name}`);
     } catch (error) {
       toast.error(
-        `Could not remove the logo for ${team.shortName}`,
+        `Could not remove the logo for ${team.name}`,
         error instanceof Error ? error.message : String(error),
       );
     } finally {
@@ -67,15 +67,9 @@ export function TeamLogoCell({ team, onChange }: TeamLogoCellProps) {
           backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
         }}
         aria-label={
-          team.logoUrl
-            ? `Replace the logo for ${team.shortName}`
-            : `Add a logo for ${team.shortName}`
+          team.logoUrl ? `Replace the logo for ${team.name}` : `Add a logo for ${team.name}`
         }
-        title={
-          team.logoUrl
-            ? `Replace the logo for ${team.shortName}`
-            : `Add a logo for ${team.shortName}`
-        }
+        title={team.logoUrl ? `Replace the logo for ${team.name}` : `Add a logo for ${team.name}`}
       >
         {team.logoUrl ? (
           <img src={team.logoUrl} alt="" className="size-full object-contain" />
@@ -100,7 +94,7 @@ export function TeamLogoCell({ team, onChange }: TeamLogoCellProps) {
         disabled={busy || !team.logoUrl}
         onClick={() => void remove()}
         className="text-muted-foreground hover:text-destructive grid size-5 place-items-center rounded disabled:invisible"
-        aria-label={`Remove the logo for ${team.shortName}`}
+        aria-label={`Remove the logo for ${team.name}`}
         title="Remove the logo"
       >
         <X className="size-3.5" aria-hidden />

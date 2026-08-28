@@ -90,6 +90,7 @@ export const api = {
       teams: number;
       logosCopied: number;
       logosMissing: string[];
+      namesTruncated: string[];
       document: TeamRosterDocument;
     }>('/teams/import-ini', { method: 'POST', body });
   },

@@ -27,7 +27,7 @@ import { matchPhaseSchema } from '../domain/match.js';
  */
 
 /** Bumped only on a breaking change, so a setup can detect one rather than misbehave quietly. */
-export const FEEDBACK_VERSION = 1;
+export const FEEDBACK_VERSION = 2;
 
 const overlayFeedbackAppearanceSchema = z.object({
   anchor: z.enum(['left', 'right']),
@@ -110,7 +110,6 @@ export const feedbackDocumentSchema = z.object({
     leader: z
       .object({
         teamNo: z.number().int(),
-        shortName: z.string(),
         name: z.string(),
         totalPoints: z.number().int(),
         eliminations: z.number().int(),

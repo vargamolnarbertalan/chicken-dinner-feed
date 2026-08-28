@@ -4,9 +4,10 @@ import { CONFIG_SCHEMA_VERSION } from '../versions.js';
 /**
  * Tournament scoring rules.
  *
- * This exists because the PCOB API supplies **no points and no ranking** — only raw kills and live
- * state (specs/PCOB-FINDINGS.md §2.4). Every number in the PTS column is ours to compute, and the
- * rules differ per tournament, so they are operator-configurable rather than hardcoded.
+ * This exists because the PCOB API supplies **no points** — only raw kills, live state, and (as of
+ * a 2026-08-28 live capture) the team's own placement via `rank` (specs/PCOB-API.md §6). Every
+ * number in the PTS column is still ours to compute, and the rules differ per tournament, so they
+ * are operator-configurable rather than hardcoded.
  */
 export const scoringRulesetSchema = z.object({
   schemaVersion: z.number().int().min(1),

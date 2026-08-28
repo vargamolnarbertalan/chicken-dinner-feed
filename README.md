@@ -5,8 +5,9 @@ telemetry, applies a configurable tournament scoring ruleset, and renders animat
 broadcast tool can consume as browser sources.
 
 > **Status: in progress.** The live pipeline, the leaderboard overlay, configuration and the admin
-> UI all work end to end against a simulated match. **Team logos and real PCOB ingestion** are not
-> built yet — see [`docs/progression.md`](docs/progression.md).
+> UI all work end to end — against a simulated match, and, as of a 2026-08-28 live test, against a
+> real PCOB client (v4.5.0). Team logos (including one-click `TeamLogoAndColor.ini` import) are
+> built too — see [`docs/progression.md`](docs/progression.md).
 >
 > Try it: `npm install && npm run build && npm start`, then open
 > <http://127.0.0.1:4317/admin> to configure, <http://127.0.0.1:4317/overlay/main> to watch, and
@@ -138,19 +139,14 @@ version:
 | [Fixed design canvas](docs/adr/0011-resolution-independent-overlay-scaling.md)           | Contractual FullHD / 1440p / 4K support, identical proportions at all three             |
 | [HTTP overlay control](docs/adr/0012-http-overlay-control-for-stream-decks.md)           | Directors press buttons, not web pages; visibility must survive a browser-source reload |
 
-## Known blocker
+## PCOB integration status
 
-The PCOB API's **transport is now known** — HTTP + JSON on `http://127.0.0.1:10086`, from the client
-correspondence in [`specs/PCOB_Tool_fejlesztes_thread.md`](specs/PCOB_Tool_fejlesztes_thread.md).
-
-Still unknown: the **JSON payload shape**, and **which route serves live in-match data** — the one
-documented endpoint, `gettotalplayerlist`, is described as post-match. So `INGEST_SOURCE` defaults to
-`mock`.
-
-The cheapest way to close this is to **capture a single real response** from a running PCOB client
-with "API Enable" ticked; it needs nothing from outside the project. The authoritative schema
-spreadsheet remains HTTP 401. Full list:
-[`specs/PCOB-FINDINGS.md`](specs/PCOB-FINDINGS.md#open-questions).
+The PCOB API's transport, payload shape, and every field the leaderboard needs are now confirmed —
+first by reading the vendor documents and `ob.js` itself, then by a real live-match capture on
+2026-08-28 (PCOB client v4.5.0). `PcobSource` is the default-available real adapter;
+`INGEST_SOURCE=mock` remains for development without a running game. Details and the full history of
+what was confirmed when: [`specs/PCOB-API.md`](specs/PCOB-API.md) and
+[`specs/PCOB-FINDINGS.md`](specs/PCOB-FINDINGS.md).
 
 ## Contributing
 

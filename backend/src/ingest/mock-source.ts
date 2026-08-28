@@ -155,13 +155,16 @@ export class MockSource implements IngestSource {
     this.players = this.roster.flatMap((team) =>
       Array.from({ length: PLAYERS_PER_TEAM }, (_unused, index) => ({
         id: `${team.teamNo}-${index + 1}`,
-        name: `${team.shortName}_${index + 1}`,
+        name: `${team.name}_${index + 1}`,
         teamNo: team.teamNo,
         slot: index + 1,
         liveState: 'alive' as const,
         health: 100,
         healthMax: 100,
         kills: 0,
+        // The mock has no separate ground truth to leak — its own elimination order is exactly what
+        // MatchStore's fallback would otherwise derive from PCOB's `rank`, so this stays 0 always.
+        rank: 0,
         knockedBy: null,
       })),
     );

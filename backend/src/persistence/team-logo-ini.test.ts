@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveShortName, parseTeamLogoIni } from './team-logo-ini.js';
+import { parseTeamLogoIni } from './team-logo-ini.js';
 
 const SAMPLE = `
 [/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]
@@ -71,29 +71,5 @@ describe('parseTeamLogoIni', () => {
 
   it('returns nothing for a file with no entries', () => {
     expect(parseTeamLogoIni('EnableTeamLogoAndColor=1')).toEqual([]);
-  });
-});
-
-describe('deriveShortName', () => {
-  it('builds an acronym from multiple words', () => {
-    // Better than truncating: "Team Falcons" as "TF" beats "TEAM ".
-    expect(deriveShortName('Alpha Gaming')).toBe('AG');
-    expect(deriveShortName('Team Falcons')).toBe('TF');
-  });
-
-  it('truncates a single word', () => {
-    expect(deriveShortName('Megalodon')).toBe('MEGAL');
-  });
-
-  it('treats hyphens and underscores as word separators', () => {
-    expect(deriveShortName('Zenith-West')).toBe('ZW');
-  });
-
-  it('never exceeds the width the overlay column allows', () => {
-    expect(deriveShortName('A B C D E F G H').length).toBeLessThanOrEqual(5);
-  });
-
-  it('produces something usable for an empty name', () => {
-    expect(deriveShortName('   ')).toBe('TEAM');
   });
 });

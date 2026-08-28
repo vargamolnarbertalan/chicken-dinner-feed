@@ -87,5 +87,6 @@ export {
   teamRosterEntrySchema,
   teamRosterDocumentSchema,
   DEFAULT_TEAM_ROSTER,
+  TEAM_NAME_MAX_LENGTH,
 } from './config/team-roster.js';
 export type { TeamRosterEntry, TeamRosterDocument } from './config/team-roster.js';

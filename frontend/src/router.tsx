@@ -1,14 +1,23 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  redirect,
+} from '@tanstack/react-router';
 import { AdminPage } from '@/pages/AdminPage';
-import { HomePage } from '@/pages/HomePage';
 import { OverlayRoute } from '@/pages/OverlayRoute';
 
 const rootRoute = createRootRoute({ component: Outlet });
 
+// `/` has no screen of its own — it just sends the operator straight to the admin, so nobody lands
+// on a blank-looking page and wonders where the admin went (it used to be an unlinked status page).
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: HomePage,
+  beforeLoad: () => {
+    throw redirect({ to: '/admin' });
+  },
 });
 
 /**

@@ -14,8 +14,7 @@ const ruleset: ScoringRuleset = {
 function roster(...teamNos: number[]): TeamRosterEntry[] {
   return teamNos.map((teamNo) => ({
     teamNo,
-    name: `Team ${teamNo}`,
-    shortName: `T${teamNo}`,
+    name: `T${teamNo}`,
     logoUrl: null,
   }));
 }
@@ -30,6 +29,7 @@ function player(
     health: 100,
     healthMax: 100,
     kills: 0,
+    rank: 0,
     ...overrides,
   };
 }
@@ -189,5 +189,45 @@ describe('computeStandings', () => {
     });
 
     expect(team?.players.map((p) => p.slot)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('marks a team absent when presentTeams is given and it is not in the set', () => {
+    const [team] = computeStandings({
+      players: [],
+      roster: roster(1),
+      ruleset,
+      placements: new Map(),
+      presentTeams: new Set(),
+    });
+
+    expect(team?.hasAppeared).toBe(false);
+  });
+
+  it('defaults every roster team to present when presentTeams is not given', () => {
+    // Preserves old behaviour for callers (mostly other tests) that do not care about presence.
+    const [team] = computeStandings({
+      players: [],
+      roster: roster(1),
+      ruleset,
+      placements: new Map(),
+    });
+
+    expect(team?.hasAppeared).toBe(true);
+  });
+
+  it('ranks a never-present roster team behind every real team, however few points the real team has', () => {
+    // The exact bug this guards: a small test lobby using 2 of a 16-team roster must not let the
+    // other 14, never-joined teams outrank the real, placed team just because it is tied on points.
+    const teams = computeStandings({
+      players: [player({ teamNo: 1, slot: 1 })], // 0 kills, not placed — 0 points, same as the ghost.
+      roster: roster(1, 2),
+      ruleset,
+      placements: new Map(),
+      presentTeams: new Set([1]),
+    });
+
+    expect(teams.map((team) => team.teamNo)).toEqual([1, 2]);
+    expect(teams[0]?.hasAppeared).toBe(true);
+    expect(teams[1]?.hasAppeared).toBe(false);
   });
 });

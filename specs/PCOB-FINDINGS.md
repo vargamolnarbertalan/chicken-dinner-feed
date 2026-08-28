@@ -156,25 +156,26 @@ Our contract layer should model these as "not yet available" rather than as nume
 `specs/example.png` requires: rank, team logo, short name, alive-player bars with health, points,
 eliminations.
 
-| Overlay column  | Source                                                    | Status                                            |
-| --------------- | --------------------------------------------------------- | ------------------------------------------------- |
-| # (rank)        | Computed by us from points + elims + placement            | **Our logic**, not from API                       |
-| Team logo       | Local image file, uploaded via admin                      | **Our storage**                                   |
-| Team short name | Operator-configured mapping                               | **Our config**                                    |
-| ALIVE bars      | `LiveState` + `Health` / `HealthMax` per player           | API ✅                                            |
-| PTS             | Placement points + kill points per the tournament ruleset | **Our logic** — needs a configurable points table |
-| ELIMS           | Sum of team members' `KillNum` / `KillNumBeforeDie`       | API ✅                                            |
+| Overlay column | Source                                                       | Status                                            |
+| -------------- | ------------------------------------------------------------ | ------------------------------------------------- |
+| # (rank)       | PCOB's own `rank`, our elimination order as fallback         | API ✅ (primary), ours only as a fallback         |
+| Team logo      | Local image file, uploaded via admin                         | **Our storage**                                   |
+| Team name      | Operator-configured, or imported from `TeamLogoAndColor.ini` | **Our config**                                    |
+| ALIVE bars     | `LiveState` + `Health` / `HealthMax` per player              | API ✅                                            |
+| PTS            | Placement points + kill points per the tournament ruleset    | **Our logic** — needs a configurable points table |
+| ELIMS          | Sum of team members' `KillNum` / `KillNumBeforeDie`          | API ✅                                            |
 
-**This is a significant scoping finding:** points and ranking are _not_ supplied by the API. We
-need a configurable scoring ruleset (placement points table + points per kill) as a first-class
-feature, not an afterthought.
+**This is a significant scoping finding:** points are _not_ supplied by the API, and cannot be —
+they are per-tournament. We need a configurable scoring ruleset (placement points table + points per
+kill) as a first-class feature, not an afterthought. Placement itself, however, **is** supplied.
 
-⚠️ **One row corrected 2026-08-17.** _Points_ are still ours — the API supplies no points table and
-cannot, since it is per-tournament. **Placement is not.** `rank` is documented as the team's
-placement, `0` while still playing
-([`PCOB-API.md` §6](PCOB-API.md#rank-changes-what-we-thought)). Our elimination-order tracking
-becomes the fallback rather than the only source — pending one capture confirming that `rank`
-populates during the match rather than only after it.
+⚠️ **Corrected twice.** 2026-08-17: _Points_ are still ours; **placement is not** — `rank` is
+documented as the team's placement, `0` while still playing
+([`PCOB-API.md` §6](PCOB-API.md#rank-changes-what-we-thought)). **Closed 2026-08-28** by a real live
+capture: `rank` populates **immediately at match end**, in the same poll `isingame` flips `false` —
+see [`PCOB-API.md` §8](PCOB-API.md#closed-on-2026-08-28-by-a-live-1v1-match-capture). `rank` is now
+the primary placement source in `MatchStore`; our elimination-order tracking is the fallback, used
+only for a team believed eliminated whose API rank has not caught up yet.
 
 ## 3. Team identity — the `TeamLogoAndColor.ini` mechanism
 

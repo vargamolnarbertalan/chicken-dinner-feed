@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { teamRosterDocumentSchema, teamRosterEntrySchema } from '@cdf/shared';
+import { TEAM_NAME_MAX_LENGTH, teamRosterDocumentSchema, teamRosterEntrySchema } from '@cdf/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { ConfigStore } from '../persistence/config-store.js';
 import { MAX_LOGO_BYTES, type LogoStore } from '../persistence/logo-store.js';
-import { deriveShortName, parseTeamLogoIni } from '../persistence/team-logo-ini.js';
+import { parseTeamLogoIni } from '../persistence/team-logo-ini.js';
 
 export interface LogoRoutesOptions {
   logos: LogoStore;
@@ -88,6 +88,7 @@ export const logoRoutes: FastifyPluginAsyncZod<LogoRoutesOptions> = async (app, 
             teams: z.number().int(),
             logosCopied: z.number().int(),
             logosMissing: z.array(z.string()),
+            namesTruncated: z.array(z.string()),
             document: teamRosterDocumentSchema,
           }),
           400: errorSchema,
@@ -108,6 +109,7 @@ export const logoRoutes: FastifyPluginAsyncZod<LogoRoutesOptions> = async (app, 
 
       const existing = new Map(config.teams.current.teams.map((team) => [team.teamNo, team]));
       const logosMissing: string[] = [];
+      const namesTruncated: string[] = [];
       let logosCopied = 0;
 
       const teams = await Promise.all(
@@ -132,19 +134,31 @@ export const logoRoutes: FastifyPluginAsyncZod<LogoRoutesOptions> = async (app, 
             }
           }
 
+          // The ini's TeamName has no length limit of its own; ours does (TEAM_NAME_MAX_LENGTH).
+          // Truncating here, reported like a missing logo, beats a save that 500s deep inside
+          // schema validation with no indication of which team caused it.
+          let name = entry.name;
+          if (name.length > TEAM_NAME_MAX_LENGTH) {
+            name = name.slice(0, TEAM_NAME_MAX_LENGTH);
+            namesTruncated.push(entry.name);
+          }
+
           return {
             teamNo: entry.teamNo,
-            name: entry.name,
-            // An existing short name is the operator's own wording; only invent one when there is
-            // nothing to keep.
-            shortName: previous?.shortName ?? deriveShortName(entry.name),
+            name,
             logoUrl,
           };
         }),
       );
 
       const document = await config.saveTeams({ ...config.teams.current, teams });
-      return reply.send({ teams: teams.length, logosCopied, logosMissing, document });
+      return reply.send({
+        teams: teams.length,
+        logosCopied,
+        logosMissing,
+        namesTruncated,
+        document,
+      });
     },
   );
 

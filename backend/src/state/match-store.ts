@@ -47,6 +47,15 @@ export class MatchStore {
   /** Team numbers in the order they were wiped out. Index 0 went out first, so it placed last. */
   private eliminationOrder: number[] = [];
   private readonly eliminated = new Set<number>();
+  /**
+   * Team numbers actually reported by the ingest source this match — not the configured roster.
+   *
+   * A roster is sized for a full tournament (16–25 teams) and is reused for small test rooms with a
+   * handful of real participants. Sizing placement math off `roster.length` in that case invents a
+   * bracket that never existed and can rank a real, API-confirmed placement behind teams that were
+   * never in the lobby at all.
+   */
+  private readonly seenTeams = new Set<number>();
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -88,6 +97,7 @@ export class MatchStore {
     this.connectionState = 'connected';
     this.statusMessage = null;
 
+    for (const player of update.players) this.seenTeams.add(player.teamNo);
     this.recordNewlyEliminatedTeams(update);
   }
 
@@ -123,6 +133,7 @@ export class MatchStore {
       roster: this.roster,
       ruleset: this.ruleset,
       placements: this.resolvePlacements(phase),
+      presentTeams: this.seenTeams,
     });
 
     return {
@@ -136,7 +147,10 @@ export class MatchStore {
         matchId: update?.matchId ?? null,
         phase,
         teams,
-        standingTeamCount: teams.filter((team) => !team.isEliminated).length,
+        // A never-present team is not eliminated (it was never in the fight to lose), but it must
+        // not inflate the count either — a director reading this off a Stream Deck button needs the
+        // number of teams actually left in a real, small test lobby, not the size of the roster.
+        standingTeamCount: teams.filter((team) => team.hasAppeared && !team.isEliminated).length,
       },
     };
   }
@@ -144,6 +158,21 @@ export class MatchStore {
   private resetMatch(): void {
     this.eliminationOrder = [];
     this.eliminated.clear();
+    this.seenTeams.clear();
+  }
+
+  /**
+   * The team's placement straight from PCOB's own `rank` field, per team, for teams where it is
+   * known (non-zero). Confirmed reliable by a live capture (`specs/PCOB-API.md` §6): trust it
+   * directly rather than only as a cross-check against our own elimination order.
+   */
+  private apiRankByTeam(): Map<number, number> {
+    const ranks = new Map<number, number>();
+    for (const player of this.lastUpdate?.players ?? []) {
+      if (player.rank <= 0) continue;
+      ranks.set(player.teamNo, Math.max(ranks.get(player.teamNo) ?? 0, player.rank));
+    }
+    return ranks;
   }
 
   private recordNewlyEliminatedTeams(update: IngestUpdate): void {
@@ -171,23 +200,43 @@ export class MatchStore {
   /**
    * Map team numbers to final placements.
    *
-   * A team that went out first placed last, so the elimination order read backwards gives placement.
-   * Teams still standing have not placed and get nothing — until the match ends, at which point the
+   * PCOB's own `rank` is authoritative wherever it is known — see `apiRankByTeam`. Our elimination
+   * order is the fallback, for a team we believe is out but whose API rank has not caught up yet.
+   * Teams still standing have not placed and get nothing, until the match ends, at which point the
    * survivors take the remaining top positions, best points first.
+   *
+   * Every placement number handed out by the fallback or by the survivor pass comes from a single
+   * shared pool of the slots the API has *not* already claimed. This matters because our own
+   * elimination tracking and the API's `rank` are not always the same story — a poll can catch one
+   * player's group mid-update while a teammate's is still last tick's (`specs/PCOB-API.md` §4), so
+   * a team we believe eliminated can turn out to already have an API rank, or a team we count as
+   * still standing can be the one true survivor while another team's rank has not arrived yet. Two
+   * teams computing to the same number — two teams both "1st place" — used to be reachable this
+   * way; drawing every number from one pool that shrinks as it is spent makes that structurally
+   * impossible, whatever the two sources disagree about.
    */
   private resolvePlacements(phase: MatchState['phase']): ReadonlyMap<number, number> {
-    const totalTeams = this.roster.length;
-    const placements = new Map<number, number>();
+    const placements = new Map<number, number>(this.apiRankByTeam());
 
-    this.eliminationOrder.forEach((teamNo, index) => {
-      placements.set(teamNo, totalTeams - index);
-    });
+    const totalSeen = this.seenTeams.size;
+    const claimed = new Set(placements.values());
+    // Worst-to-best (descending): exactly the order the elimination-order fallback needs, since the
+    // earliest-eliminated team belongs at the worst slot nobody has already claimed.
+    const available: number[] = [];
+    for (let slot = totalSeen; slot >= 1; slot -= 1) {
+      if (!claimed.has(slot)) available.push(slot);
+    }
+
+    for (const teamNo of this.eliminationOrder) {
+      if (placements.has(teamNo)) continue; // The API already answered for this team.
+      const slot = available.shift();
+      if (slot === undefined) break; // Every slot is already claimed by an API-reported rank.
+      placements.set(teamNo, slot);
+    }
 
     if (phase !== 'ended') return placements;
 
-    const survivors = this.roster
-      .map((entry) => entry.teamNo)
-      .filter((teamNo) => !placements.has(teamNo));
+    const survivors = [...this.seenTeams].filter((teamNo) => !placements.has(teamNo));
 
     // Normally exactly one team survives. If more do — a match cut short, say — order them by the
     // points they earned rather than leaving placement undefined.
@@ -196,10 +245,14 @@ export class MatchStore {
       killsByTeam.set(player.teamNo, (killsByTeam.get(player.teamNo) ?? 0) + player.kills);
     }
 
+    // Survivors take the best remaining slots, best performer first — `available` is still
+    // descending, so its tail end is the best (lowest) of what is left.
     survivors
       .sort((a, b) => (killsByTeam.get(b) ?? 0) - (killsByTeam.get(a) ?? 0) || a - b)
-      .forEach((teamNo, index) => {
-        placements.set(teamNo, index + 1);
+      .forEach((teamNo) => {
+        const slot = available.pop();
+        if (slot === undefined) return; // No slot left — every one already claimed elsewhere.
+        placements.set(teamNo, slot);
       });
 
     return placements;

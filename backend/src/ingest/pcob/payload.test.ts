@@ -160,6 +160,31 @@ describe('PcobMapper', () => {
     });
   });
 
+  describe('rank', () => {
+    it('passes the raw rank through unchanged', () => {
+      // Confirmed reliable by a live capture — specs/PCOB-API.md §6. MatchStore is what decides
+      // whether to trust it; the mapper's only job is to not lose it.
+      const update = new PcobMapper().map(snapshot([player({ rank: 2 })]));
+
+      expect(update.players[0]?.rank).toBe(2);
+    });
+
+    it('defaults to 0 — still playing — when absent', () => {
+      const update = new PcobMapper().map(snapshot([player()]));
+
+      expect(update.players[0]?.rank).toBe(0);
+    });
+
+    it('truncates a fractional value rather than passing it downstream', () => {
+      // `Team.placement` is schema-typed as an integer. A fractional value here would fail that
+      // schema on the way out over the WebSocket, and the client drops the whole message — freezing
+      // the overlay silently for the rest of the match.
+      const update = new PcobMapper().map(snapshot([player({ rank: 2.5 })]));
+
+      expect(update.players[0]?.rank).toBe(2);
+    });
+  });
+
   describe('match boundaries', () => {
     it('drops slot and kill state when GameID changes', () => {
       const mapper = new PcobMapper();
