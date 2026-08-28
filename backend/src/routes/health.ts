@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION } from '@cdf/shared';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { APP_VERSION } from '../version.js';
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
@@ -27,7 +28,7 @@ export const healthRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async () => ({
       status: 'ok' as const,
-      version: '0.1.0',
+      version: APP_VERSION,
       protocolVersion: PROTOCOL_VERSION,
       ingestSource: config.ingestSource,
       uptimeSeconds: Math.round(process.uptime()),

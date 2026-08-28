@@ -71,8 +71,12 @@ The ZIP is attached to the GitHub release along with generated release notes.
   valuable when releases go to live production environments.
 - PRs on a single-developer project are ceremony. They are also the only place a review of the
   diff happens, so they stay.
-- Bundling `node_modules` makes the ZIP large. Alternative packaging (a single executable via
-  `node --experimental-sea-config`, or `pkg`) can be evaluated later; correctness first.
+- ~~Bundling `node_modules` makes the ZIP large.~~ **Revised 2026-08-28** — the release workflow
+  never actually bundled `node_modules`: it ships only the built `dist/` output plus a generated
+  `package.json` and lockfile scoped to the backend's runtime dependencies, and
+  `install-dependencies.bat` installs them on the operator's machine on first run (and, since the
+  same date, skips reinstalling when nothing has changed — see below). This line was aspirational
+  and never matched the implementation; corrected here rather than left to mislead the next reader.
 
 ### Neutral
 
@@ -93,6 +97,44 @@ deployed service, and the plan specifies otherwise.
 **A Windows installer (MSI/NSIS).** More polished than a ZIP, but it requires code signing to avoid
 SmartScreen warnings and adds real build complexity. A ZIP with two batch files meets the stated
 requirement now; an installer can come later.
+
+## Hardened 2026-08-28 — the pipeline had never actually been run
+
+No tag had ever been pushed before this date; the release workflow above existed only as
+unexercised code. Running it for the first time (`feat/release-pipeline`) surfaced gaps a real run
+would have hit:
+
+- **The tag and the version could disagree.** Nothing checked that the pushed tag matched
+  `package.json`. Release now fails fast, before building anything, if `vX.Y.Z` and every
+  workspace's `version` are not identical. `npm run version:set -- X.Y.Z` bumps all four
+  consistently in one step (`npm version --workspaces --include-workspace-root`).
+- **The bundle was never smoke-tested.** The workflow built and published a ZIP without ever
+  installing or running it. It now runs `npm ci --omit=dev` and boots the server inside the
+  assembled bundle, health-checks it, and fails the release if it does not answer — the same steps
+  `install-dependencies.bat` and `startup.bat` perform on the operator's machine. Doing this
+  locally, once, before wiring it into CI is what caught the next point:
+- **`NODE_ENV=production` is load-bearing, not incidental.** Without it, Fastify's logger reaches
+  for the `pino-pretty` transport, which is a devDependency and is correctly absent from the
+  `--omit=dev` bundle — so an unset `NODE_ENV` crashes the process on its first log line.
+  `startup.bat` already set it; the new smoke-test step now does too, deliberately, with a comment
+  explaining why, so nobody "simplifies" it away.
+- **`install-dependencies.bat` reinstalled every run, unconditionally.** Fine once, wasteful and
+  slow on every later run — including "did anything change after unpacking a new release into the
+  same folder?", which is exactly when an operator would run it again. It now stamps
+  `node_modules/.install-stamp.txt` with the installed lockfile's SHA-256 and skips straight to
+  "already up to date" when nothing changed, using `certutil -hashfile` (built into Windows,
+  nothing extra to ship). It also reads its own Node version floor from the bundle's `package.json`
+  instead of a number hand-copied into the script.
+- **Shipped dependencies were never audited.** `npm audit --omit=dev --audit-level=high` now runs
+  against the bundle's own runtime dependencies (not the monorepo's dev tooling) and fails the
+  release on a high or critical finding.
+- **No changelog existed.** Added `CHANGELOG.md` (Keep a Changelog format), with the convention that
+  an entry is written in the same change that makes it, not reconstructed at release time.
+- The ZIP's SHA-256 is now computed and attached alongside it, so an operator can verify what they
+  downloaded matches what was published.
+
+None of this changes the branching, tagging or bundle-contents decisions above — it is the
+difference between a release process that reads correctly and one that has actually been run.
 
 ## Revisit when
 

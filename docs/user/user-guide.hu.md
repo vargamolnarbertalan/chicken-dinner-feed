@@ -4,9 +4,10 @@ _In English: [user-guide.en.md](user-guide.en.md)_
 
 Ez az útmutató a közvetítést kezelő operátornak készült. Programozói ismereteket nem feltételez.
 
-> **Ez a verzió még csak váz.** A telepítés és az indítás az itt leírtak szerint működik. Az overlay
-> és az admin felület még készül, ezért a _Hamarosan_ jelölésű részek azt írják le, ami tervezett,
-> nem azt, ami ma már kattintható.
+> **Ez a verzió készülőben van.** A telepítés, az indítás, a ranglista-overlay, az admin felület, a
+> csapatlogók és a Stream Deck vezérlés az itt leírtak szerint működik. Az élő játékkapcsolathoz még
+> hiányzik a valódi PCOB adapter — addig az alkalmazás szimulált meccsadatokon fut, így előre be
+> tudsz állítani mindent.
 
 ---
 
@@ -69,14 +70,36 @@ Leállítani úgy tudod, hogy bezárod a konzolablakot, vagy belekattintasz és 
 
 ## 5. A játékadatok bekötése
 
-Az adatok a PCOB kliensből jönnek, és két dolgot **a PCOB-ban** kell elvégezned, nem ebben az
-alkalmazásban:
+Az adatok a PCOB kliensből jönnek. Az ebben a fejezetben leírtak mind **a PCOB-ban** történnek, nem
+ebben az alkalmazásban — de ha bármelyik kimarad, ez az alkalmazás nem kap adatot.
 
-1. **Indítsd el a PCOB API-t.** Futtasd a
-   `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat` fájlt. Ez saját konzolablakot nyit —
+### Versenyenként egyszer: fiók whitelistelése
+
+Ezt jó előre el kell intézni, nem a helyszínen.
+
+1. Lépj be a PCOB kliensbe, lehetőleg email + jelszó párossal. Ha az observernek nincs PUBG Mobile
+   fiókja, mobilon indítsa el a játékot, válassza a **Guest login**-t, majd csatoljon hozzá emailt és
+   jelszót.
+2. Futtasd a kapott `.bat` fájlt, és olvasd ki az **OPENID** számsort.
+3. Ezt az OPENID-t el kell küldeni a kiadónak **whitelistelésre**. **Whitelist nélkül egyáltalán
+   nincs API adat**, hiába van minden más jól beállítva.
+4. Ne egy, hanem **két fiókot** whitelisteltess. Ha az egyik a helyszínen bedől, újat kérni már nincs
+   idő.
+
+### Minden meccs előtt
+
+1. Az observer a PCOB (ShadowTracker) kliensen keresztül becsatlakozik a lobbiba, és observer módba
+   áll.
+2. **A meccs kezdete előtt pipáld be az "API Enable" gombot a PCOB kliensben.** Ha ez kimarad, az
+   alkalmazás _nincs adat_ állapotot mutat, hiába működik egyébként minden. Messze ez a leggyakoribb
+   oka annak, ha látszólag nem működik az overlay.
+3. **Indítsd el a PCOB API-t.** Futtasd parancssorból az `ObToolsNew\launch.bat` fájlt. Ez a
+   **kicsomagolt PCOB-csomag gyökerében** van, _nem_ a `WinClient_OB_live\WinClient_OB\` útvonalon,
+   amit a gyártói guideline ír (a v4.3.0 csomagon ellenőrizve). Saját konzolablakot nyit —
    **azt az ablakot is nyitva kell hagyni**, különben nem keletkezik adat.
-2. **A meccs kezdete előtt kattints az "API Enable" gombra a PCOB kliensben.** Ha ez kimarad, az
-   alkalmazás _nincs adat_ állapotot mutat, hiába működik egyébként minden.
+
+   > Az ablak **üresen marad**, és ez normális: a `launch.bat` egyetlen sora `node.exe ob.js`, az
+   > pedig fájlba naplóz. Ne ebből próbáld eldönteni, hogy működik-e.
 
 Két dolog, amit érdemes tudni, mert ezek nem az alkalmazás hibái:
 
@@ -93,42 +116,230 @@ Az admin felület folyamatosan mutatja a kapcsolat állapotát:
 | **Stale**        | Van kapcsolat, de mostanában nem jött új adat | Ellenőrizd, hogy a host bent van-e még a szobában                                         |
 | **Disconnected** | Nincs kapcsolat a PCOB API-val                | Nézd meg, hogy nyitva van-e a `launch.bat` ablaka, és megnyomtad-e az "API Enable" gombot |
 
+Ha **Disconnected** állapotot mutat, és a `launch.bat` ablaka nyitva van, akkor valószínűleg a fiók
+whitelistelése maradt el.
+
 Ha meccs közben szakad meg a kapcsolat, az overlay **az utoljára kapott adatot tartja meg**, nem
 ürül ki az adásban. Amint újra jön adat, magától visszakapcsolódik.
 
 ## 6. Overlay hozzáadása a közvetítő szoftverhez
 
-_Hamarosan — a pontos lépések az első overlayjel véglegesednek._ A menet:
-
-1. Hozz létre egy overlay példányt az adminban, és másold ki a címét.
+1. Nyisd meg az admin felületet, menj az **Overlays** fülre, válassz ki egy overlayt, majd használd
+   a _Browser source address_ melletti **Copy** gombot — kézzel átgépelni jó módszer arra, hogy üres
+   forrásod legyen.
 2. OBS-ben: **Források → + → Böngésző**, illeszd be a címet, a szélességet és magasságot állítsd a
-   vászon méretére (általában 1920 × 1080).
+   vászon méretére. **1920 × 1080, 2560 × 1440 és 3840 × 2160 is támogatott** — az overlay magától
+   skálázódik, és mindháromnál ugyanúgy néz ki, tehát felbontásonként nincs mit beállítani.
 3. A **"Forrás leállítása, ha nem látható"** opciót kapcsold **ki**, hogy az overlay elrejtve is
    kapcsolatban maradjon.
 4. Az overlay háttere átlátszó, így közvetlenül ráilleszkedik a videóra.
 
-Ismételd meg minden overlay példánynál. Ugyanabból az overlay típusból több példány is futhat —
-például egy világos és egy sötét, vagy egy brandelt és egy generikus verzió —, ezeket ugyanaz az élő
-adat hajtja, de külön-külön állíthatók.
+Ismételd meg minden overlaynél, mindegyiknek más azonosítót adva. Az overlayeket ugyanaz az élő adat
+hajtja, de egymástól függetlenül jeleníthetők meg és rejthetők el.
 
-## 7. Overlayek beállítása
+## 7. Overlayek vezérlése Stream Deckről (Bitfocus Companion)
 
-_Hamarosan._ A tervezett beállítások, overlay példányonként:
+Az overlayek hardveres gombról fel- és leanimálhatók. Az alkalmazás sima webcímekre válaszol, tehát
+bármi működik, ami képes webkérést küldeni — a Companion csak a legelterjedtebb ilyen.
 
-- színek, betűtípusok és betűméretek;
-- méret és pozíció a vásznon;
-- fel- és leanimálás, állítható sebességgel;
-- csapatnevek és logók;
-- a pontozási szabályrendszer — helyezési pontok és pont/kiütés.
+### A címek
 
-Minden változást **élő előnézet** mutat, ami a valódi overlayt jeleníti meg, tehát pontosan azt
-látod, ami adásba megy.
+A `<id>` helyére az overlay példány azonosítója kerül (ugyanaz, ami a browser source címében is
+szerepel):
 
-**A pontokat ez az alkalmazás számolja, nem a játék.** A PCOB API nem ad versenypontokat, ezért a
-pontozási szabályrendszernek meg kell egyeznie a te versenyed szabályaival. Közvetítés előtt
-ellenőrizd.
+| Cím                                              | Mit csinál               |
+| ------------------------------------------------ | ------------------------ |
+| `http://127.0.0.1:4317/api/overlays/<id>/show`   | Felanimálja az overlayt  |
+| `http://127.0.0.1:4317/api/overlays/<id>/hide`   | Leanimálja               |
+| `http://127.0.0.1:4317/api/overlays/<id>/toggle` | Átbillenti               |
+| `http://127.0.0.1:4317/api/overlays/<id>/state`  | Megmondja, épp látszik-e |
 
-## 8. A beállításaid
+### Companion gomb beállítása
+
+1. Hozz létre egy gombot, és adj neki egy akciót a **Generic HTTP** modulból.
+2. Válaszd a **GET** metódust, és illeszd be a fenti címek egyikét.
+3. Ennyi a beállítás. Általában a `toggle` gomb a leghasznosabb; ha többen kezelitek, biztonságosabb
+   külön `show` és `hide` gomb.
+
+Két dolog, amit érdemes tudni:
+
+- **A gombot kétszer megnyomni biztonságos.** A már látszó overlayen a „show" nem csinál semmit — nem
+  indítja újra az animációt, és nem villan meg az adásban.
+- **A browser source újratöltése megőrzi az állapotot.** Egy elrejtett overlay elrejtve marad
+  újratöltés után is, nem villan fel a képernyőn.
+
+### Hogy a gombok mutassák is, mi történik: `/feedback`
+
+Az a gomb, amelyik csak parancsot küld, nem tudja megmondani, hogy sikerült-e. Nyisd meg ezt a címet:
+
+```
+http://127.0.0.1:4317/feedback
+```
+
+Az alkalmazás egyetlen szövegblokkban válaszol mindenről: minden overlay, hogy adásban van-e, a
+színei és animációs beállításai, hogy érkezik-e a játékadat, és az aktuális éllovas. A Companion
+ebből egyetlen értéket ki tud olvasni, és be tudja vele színezni a gombot.
+
+**Companionban:** vegyél fel egy **Generic HTTP** _változót_ (nem action-t), ami ezt a címet
+lekérdezi, majd egy feedback szabályban használj JSON útvonalat.
+
+| Mit mutasson a gomb                | JSON útvonal                       | Mit ad vissza    |
+| ---------------------------------- | ---------------------------------- | ---------------- |
+| Adásban van ez az overlay?         | `overlays.main.isVisible`          | `true` / `false` |
+| Érkezik játékadat?                 | `data.isReceivingData`             | `true` / `false` |
+| Elhallgatott az adat?              | `data.isStale`                     | `true` / `false` |
+| Meg is jeleníti egyáltalán valami? | `overlays.main.hasConnectedSource` | `true` / `false` |
+| Ki vezet?                          | `match.leader.name`                | pl. `MGLZ`       |
+| Hány csapat van még talpon         | `match.standingTeamCount`          | pl. `12`         |
+
+A `main` helyére a saját overlay-azonosítód kerül — ugyanaz, ami a browser source címében is
+szerepel.
+
+Ezek közül háromra külön is érdemes gombot tenni:
+
+- A **`hasConnectedSource`** azt számolja, hány browser source jeleníti meg az adott overlayt. Egy
+  overlay lehet úgy is „adásban”, hogy közben semmi nincs rákötve — ez pontosan úgy néz ki, mint egy
+  működő beállítás, egészen addig, amíg rá nem vágsz. A saját adminos previewd szándékosan **nem**
+  számít bele, így ez tényleg arra a kérdésre válaszol, amit felteszel: mi a helyzet az OBS-ben.
+- A **`data.isStale`** azt jelenti, hogy az alkalmazás még beszél a játékkal, de már nem érkezik új
+  adat — ilyenkor általában a szoba hosztja szállt ki. Az overlay ilyenkor megtartja az utolsó jó
+  állapotát ahelyett, hogy kiürülne, tehát enélkül észre sem vennéd.
+- A **`feedbackVersion`** azért van ott, hogy az alkalmazás egy későbbi verziója jelezni tudja, ha
+  változott a formátum — ahelyett, hogy a gombjaid csendben rosszul működnének.
+
+A válaszban az `actions` alatt minden cím szerepel, amit az alkalmazás kiszolgál — tehát ha ez az
+útmutató elveszik, a `/feedback` megmondja, mit lehet még hívni.
+
+### Ha a Companion másik gépen fut
+
+Alapból az alkalmazás csak a saját gépéről érhető el, tehát egy másik gépen futó Companion nem éri
+el. Ha engedni akarod:
+
+1. Nyisd meg a `backend\.env` fájlt Jegyzettömbben, és írd át a `HOST=127.0.0.1` sort erre:
+   `HOST=0.0.0.0`.
+2. A Companionban a `127.0.0.1` helyett az overlay-gép hálózati címét használd.
+
+A `/feedback` válaszában szereplő címek ahhoz igazodnak, ahogy lekérdezted: ha
+`http://192.168.1.50:4317/feedback` címen nyitod meg, akkor minden, amit visszaad, már arra a gépre
+van megírva, és egyenesen bemásolható egy gombba.
+
+⚠️ **Ezzel az admin felület is elérhetővé válik mindenki számára a hálózaton**, és az adminon nincs
+jelszó. Zárt közvetítői hálózaton ez általában rendben van. Ha szeretnél némi védelmet, állíts be egy
+`CONTROL_TOKEN=valami-amit-te-választasz` értéket a `backend\.env` fájlban, és a Companionban fűzd a
+címek végére: `?token=valami-amit-te-választasz` — **a `/feedback` végére is**, mert azt ugyanez a
+token védi. Ez a show/hide gombokat és a feedback oldalt védi, az admin felületet nem.
+
+## 8. Overlayek beállítása
+
+Minden az admin felületen van: `http://127.0.0.1:4317/admin`.
+
+### Overlays fül
+
+Válassz ki balra egy overlayt, majd állítsd:
+
+- **Placement** — a képernyő melyik oldalán, milyen távol az adott széltől, függőlegesen középen
+  legyen-e, és mekkora. A távolságok 1080p pixelben értendők, és 1440p-n meg 4K-n is ugyanazt
+  jelentik.
+- **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat. A betűtípus-lista
+  néhány beépített választást tartalmaz, plusz mindent, amit a **Fonts** fülön feltöltöttél.
+- **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
+  félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
+  megmaradjon az átlátszóság.
+- **Show / hide animation** — hogyan érkezik és távozik az overlay:
+  - **Fade** — helyben jelenik meg.
+  - **Wipe** — a panel pontosan a helyén marad, és a választott él felől tárul fel. A szöveg nem
+    mozdul, ezért nyugodtabb hatású, mint a slide.
+  - **Slide** — a teljes panel becsúszik a választott él felől.
+  - **Zoom** — kicsit kisebbről nő a helyére.
+  - A **Cross-fade as well** bármelyikre ráteszi az áttűnést is. Kikapcsolva tiszta wipe, slide vagy
+    zoom marad, átlátszóság-változás nélkül.
+  - A **Duration** 0,1 és 5 másodperc között állítható.
+- **Rows** — a sorok opcionálisan egyenként úsznak be, **miután** a panel megérkezett; nagy
+  ranglistán ez jól mutat. A sorok közti szünet állítható, és az admin kiírja, mennyi idő alatt telik
+  meg a teljes lista — valójában ez a szám számít. A sorok az elejétől kezdve elfoglalják a helyüket,
+  így a panel közben nem méreteződik át.
+  A **Reverse it on the way out** szándékosan alapból ki van kapcsolva: ha a rendezőnek el kell
+  tűnnie a grafikának, akkor tűnjön el — a fordított lépcsőzés a teljes feltöltési időt még egyszer
+  hozzáadja, mielőtt tiszta lenne a kép.
+
+⚠️ **A változtatások csak a Save gomb megnyomásakor kerülnek adásba.** Az előnézet gépelés közben
+frissül.
+
+Minden overlaynél látszik, hogy éppen **ON AIR** vagy **HIDDEN** — a bal oldali listában és a
+show/hide gomb mellett is. Ez az állapot élő: ha valaki megnyom egy Stream Deck gombot, az admin
+követi. Minden művelet rövid értesítéssel visszaigazolja magát a sarokban, ami magától eltűnik, vagy
+az ×-szel bezárható.
+
+Az előnézet **maga az overlay**, ugyanarról a címről betöltve, amit a browser source is használ.
+Pontosan úgy játssza le a fel- és leanimálást, ahogy adásban is fog — akkor is, ha valaki egy Stream
+Deck gombot nyom. Tehát itt tudod kipróbálni az animációs irányokat és sebességeket.
+
+Mivel a valódi dologról van szó, a **mentett** beállításokat mutatja: állíts valamin, nyomj Save-et,
+és nézd, ahogy változik. Amit így kipróbálsz, az az élő kimeneten is megjelenik — erre való a
+közvetítés előtti tesztidőszak, és a rendező addig ki tudja kulcsolni a réteget.
+
+Két mód: a **Full canvas** a teljes 16∶9 képet mutatja, elhelyezés megítélésére. Az **Actual size**
+valódi 1080p pixelekben jelenít meg, a színekhez és az olvashatósághoz. A kockás háttér a videót
+helyettesíti, hogy lásd, hogyan mutatnak az átlátszó hátterek.
+
+Második overlay létrehozásához — például egy világos és egy sötét változat ugyanabból az adatból —
+írj be egy azonosítót, majd nyomd meg vagy a **Create** (alapértelmezésből indul), vagy a
+**Duplicate** gombot (az éppen kijelölt overlay megjelenését másolja).
+
+**Az overlay azonosítója létrehozás után nem módosítható.** Bele van égetve a browser source-ba és a
+Companion gombokba, tehát az átnevezés csendben eltörné őket. Helyette hozz létre újat.
+
+### Teams fül
+
+Csapatnevek és logók, csapatszám szerint. **A szám az a slot, amit a játék jelent** — meg kell
+egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított, különben
+rossz csapat játékosai jelennek meg rossz sorban. Egyetlen névmező van, ezt írja ki az overlay.
+
+**Kezdd az Import TeamLogoAndColor.ini gombbal.** Ezt a fájlt az observer amúgy is karbantartja a
+PCOB kliens számára, és az importálás egy lépésben kitölti az összes csapatszámot, nevet és logót —
+16–25 sor kézi begépelése helyett. A teljes listát **lecseréli**, mert az a fájl az esemény
+csapatlistája. Ha egy logó útvonal már nem létezik, az import megmondja, hány hiányzott, nem hagyja,
+hogy adásban derüljön ki.
+
+**Logók.** Kattints a csapat melletti négyzetre, és válassz képet; azonnal feltöltődik és rögtön
+megjelenik az adásban is — ehhez nem kell Save. A kis × eltávolítja. PNG, JPEG, WebP és SVG
+támogatott, 2 MB-ig. Ha van, válaszd az **SVG**-t: az overlay 4K-ig megy, és vektoros logó az
+egyetlen, ami ott is éles marad. Egyébként legalább 256 × 256 legyen. A logók mögötti kockás minta
+azért van ott, hogy lásd, mely részek átlátszók.
+
+A logókon kívül minden máshoz kell a **Save teams** gomb.
+
+### Fonts fül
+
+A közvetítési grafika arculatos, és egy verseny betűtípusa ritkán van azok között, amiket egy
+alkalmazás ésszerűen szállítani tud. Itt töltheted fel a sajátodat, és onnantól minden overlay
+**Font** listájában megjelenik.
+
+**TTF, OTF, WOFF és WOFF2** támogatott, 8 MB-ig — egy márka betűtípusa általában asztali `.ttf` vagy
+`.otf` formában érkezik, és ezek közvetlenül működnek, konvertálás nélkül.
+
+Minden betűtípus **saját magával** van előnézetezve, olyan szöveggel, amilyet az overlay is mutat —
+a név ugyanis semmit nem árul el arról, olvashatók-e a számjegyek overlay-méretben.
+
+Ha ugyanolyan nevű fájlt töltesz fel újra, az **lecseréli** a korábbit, nem hoz létre másodpéldányt.
+Egy betűtípus eltávolítása után az azt használó overlayek a rendszer betűtípusára esnek vissza,
+amíg nem választasz másikat — az alkalmazás nem írja át magától, mi megy adásba.
+
+### Scoring fül
+
+**A pontokat ez az alkalmazás számolja, nem a játék.** A PCOB API egyáltalán nem ad versenypontokat,
+ezért ennek meg kell egyeznie a te versenyed szabályaival — minden esemény előtt ellenőrizd.
+
+- **Points per elimination** — minden kiütésért járó pont.
+- **Placement points** — akkor jár, ha a csapat kiesik, vagy ha véget ér a meccs. Egy még játékban
+  lévő csapat még nem helyezett, tehát innen nem kap pontot. A lista végén túli helyezések nulla
+  pontot érnek.
+
+Az alapértelmezés a standard PUBG Mobile tábla (10/6/5/4/3/2/1/1, 1 pont/kill).
+
+A mentés azonnal érvénybe lép, meccs közben is.
+
+## 9. A beállításaid
 
 A konfiguráció fájlokban tárolódik, az alkalmazás mappáján belüli **`backend\data`** könyvtárban.
 
@@ -137,7 +348,7 @@ A konfiguráció fájlokban tárolódik, az alkalmazás mappáján belüli **`ba
 - **Frissítéskor:** az új verziót csomagold ki egy _új_ mappába, majd indítás előtt másold bele a
   régi `backend\data` mappát.
 
-## 9. Hibaelhárítás
+## 10. Hibaelhárítás
 
 **„Port 4317 is already in use"**
 Valószínűleg már fut az alkalmazás. Keresd meg a másik konzolablakot, és zárd be. Ha a portot egy
@@ -153,13 +364,14 @@ Valószínűleg megszakadt a kapcsolat a PCOB-bal — az admin _Stale_ vagy _Dis
 mutat. Nézd meg a `launch.bat` ablakát, és hogy a szoba hostja bent van-e még.
 
 **Egyáltalán nincs adat, pedig minden rendben van**
-A messze leggyakoribb ok: **a meccs kezdete előtt nem lett megnyomva az "API Enable" gomb a
-PCOB-ban.**
+Gyakoriság szerint: **nem lett bepipálva az "API Enable"** a meccs kezdete előtt; bezárult a
+`launch.bat` konzolablaka; vagy az observer **fiókja nem lett whitelistelve** a kiadónál. Az utóbbi a
+helyszínen már nem javítható — lásd az 5. fejezetet.
 
 **Indításkor nem nyílt meg a böngésző**
 Ez nem baj. Nyiss egy böngészőt, és írd be: `http://127.0.0.1:4317/admin`.
 
-## 10. Segítségkérés
+## 11. Segítségkérés
 
 Hibabejelentéskor küldd el ezeket:
 

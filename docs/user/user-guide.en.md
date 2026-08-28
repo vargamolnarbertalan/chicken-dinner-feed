@@ -4,9 +4,10 @@ _Magyarul: [user-guide.hu.md](user-guide.hu.md)_
 
 This guide is for the person operating the broadcast. It assumes no programming knowledge.
 
-> **This version is a scaffold.** Installation and startup work as described below. The overlay and
-> admin screens are still being built, so the sections marked _Coming soon_ describe what is planned
-> rather than what you can click today.
+> **This version is in progress.** Installation, startup, the leaderboard overlay, the admin page,
+> team logos and Stream Deck control all work as described. The live game connection still needs the
+> real PCOB adapter — until then the app runs on simulated match data, so you can set everything up
+> in advance.
 
 ---
 
@@ -68,13 +69,36 @@ To stop the app, close the console window, or click into it and press `Ctrl+C`.
 
 ## 5. Connecting the game data
 
-The match data comes from the PCOB client, and there are two things you must do **in PCOB**, not in
-this app:
+The match data comes from the PCOB client. Everything in this section happens **in PCOB**, not in
+this app — but if any of it is missed, this app shows no data.
 
-1. **Start the PCOB API.** Run `WinClient_OB_live\WinClient_OB\ObToolsNew\launch.bat`. It opens its
-   own console window — **that window must also stay open**, or no data is produced.
-2. **Click "API Enable" in the PCOB client before the match starts.** If you forget, the app will
-   show _no data_ even though everything else is working correctly.
+### Once per tournament: get the account whitelisted
+
+This has to be done well in advance, not on the day.
+
+1. Log in to the PCOB client, ideally with an email and password. An observer with no PUBG Mobile
+   account can start the game on a phone, choose **Guest login**, then attach an email and password.
+2. Run the provided `.bat` file and read out the **OPENID** number.
+3. Send that OPENID to the publisher for **whitelisting**. **Without whitelisting there is no API
+   data at all**, no matter what else is configured correctly.
+4. Get **two accounts** whitelisted rather than one. If the first fails on the day, there is no time
+   to request another.
+
+### Before every match
+
+1. The observer joins the lobby through the PCOB (ShadowTracker) client and switches to observer
+   mode.
+2. **Tick "API Enable" in the PCOB client before the match starts.** If this is forgotten, the app
+   shows _no data_ even though everything else is working correctly. This is the single most common
+   cause of an apparently broken overlay.
+3. **Start the PCOB API.** Run `ObToolsNew\launch.bat` — it sits in the **root of the unpacked PCOB
+   package**, _not_ under `WinClient_OB_live\WinClient_OB\` as the vendor guideline prints (verified
+   against v4.3.0). Run it from a command
+   prompt. It opens its own console window — **that window must also stay open**, or no data is
+   produced.
+
+   > The window **stays blank**, and that is normal: `launch.bat` is one line — `node.exe ob.js` —
+   > and that logs to a file. Do not judge from it whether the API is working.
 
 Two things worth knowing, because they are not faults in this app:
 
@@ -91,40 +115,222 @@ The admin page shows the connection state at all times:
 | **Stale**        | Connected, but nothing new has arrived recently | Check that the host is still in the room                                 |
 | **Disconnected** | No connection to the PCOB API                   | Check the `launch.bat` window is still open and "API Enable" was clicked |
 
+If it says **Disconnected** and the `launch.bat` window is open, the likely cause is that the
+account was never whitelisted.
+
 If the connection drops mid-match, the overlay **keeps showing the last data it received** rather
 than going blank on air. It reconnects on its own when data returns.
 
 ## 6. Adding an overlay to your broadcast software
 
-_Coming soon — the exact steps will be finalised with the first overlay._ The approach:
-
-1. Create an overlay instance in the admin and copy its address.
+1. Open the admin page and go to **Overlays**. Select an overlay, then use the **Copy** button next
+   to _Browser source address_ — retyping it by hand is a good way to end up with a blank source.
 2. In OBS: **Sources → + → Browser**, paste the address, and set the width and height to your canvas
-   size (usually 1920 × 1080).
-3. Tick **Shutdown source when not visible** off, so the overlay stays connected while hidden.
+   size. **1920 × 1080, 2560 × 1440 and 3840 × 2160 are all supported** — the overlay scales itself
+   and looks identical at each, so there is nothing to configure per resolution.
+3. Untick **Shutdown source when not visible**, so the overlay stays connected while hidden.
 4. The overlay has a transparent background, so it composites straight over your video.
 
-Repeat for each overlay instance. Multiple instances of the same overlay type — for example a light
-and a dark version, or a branded and a generic version — are driven by the same live data and can be
-configured independently.
+Repeat for each overlay you want, giving each a different id. Multiple overlays are driven by the
+same live data but are shown and hidden independently.
 
-## 7. Configuring overlays
+## 7. Controlling overlays from a Stream Deck (Bitfocus Companion)
 
-_Coming soon._ Planned controls, per overlay instance:
+Overlays can be animated on and off air from a hardware button. The app answers plain web addresses,
+so anything that can make a web request works — Companion is just the usual one.
 
-- colours, fonts and font sizes;
-- size and position on the canvas;
-- show and hide animations, with adjustable speed;
-- team names and logos;
-- the scoring ruleset — placement points per rank and points per elimination.
+### The addresses
 
-Every change is shown in a **live preview** that renders the real overlay, so what you see is exactly
-what goes on air.
+Replace `<id>` with the overlay instance id (the same one that appears in its browser-source
+address):
 
-**Points are calculated by this app, not by the game.** The PCOB API does not supply tournament
-points, so the scoring ruleset must match your tournament's rules. Check it before a broadcast.
+| Address                                          | What it does                          |
+| ------------------------------------------------ | ------------------------------------- |
+| `http://127.0.0.1:4317/api/overlays/<id>/show`   | Animates the overlay on               |
+| `http://127.0.0.1:4317/api/overlays/<id>/hide`   | Animates it off                       |
+| `http://127.0.0.1:4317/api/overlays/<id>/toggle` | Flips it                              |
+| `http://127.0.0.1:4317/api/overlays/<id>/state`  | Reports whether it is currently shown |
 
-## 8. Your settings
+### Setting up a Companion button
+
+1. Add a button and give it an action from the **Generic HTTP** module.
+2. Choose **GET** and paste one of the addresses above.
+3. That is the whole setup. A `toggle` button is usually the most useful; `show` and `hide` on
+   separate buttons is safer when several people are operating.
+
+Two things worth knowing:
+
+- **Pressing a button twice is safe.** Pressing "show" on an overlay that is already showing does
+  nothing — it will not restart the animation or make the overlay flicker on air.
+- **Reloading a browser source keeps the current state.** An overlay that is hidden stays hidden
+  when its browser source reloads; it will not flash on screen.
+
+### Making buttons show what is happening: `/feedback`
+
+A button that only sends commands cannot tell you whether it worked. Open
+
+```
+http://127.0.0.1:4317/feedback
+```
+
+and the app answers with one block of text describing everything at once: every overlay, whether it
+is on air, its colours and animation settings, whether the game data is arriving, and the current
+match leader. Companion can read a single value out of that and colour a button with it.
+
+**In Companion:** add a **Generic HTTP** _variable_ (not an action) polling that address, then use a
+JSON path in a feedback rule.
+
+| What you want the button to show | JSON path                          | It gives you     |
+| -------------------------------- | ---------------------------------- | ---------------- |
+| Is this overlay on air?          | `overlays.main.isVisible`          | `true` / `false` |
+| Is game data arriving?           | `data.isReceivingData`             | `true` / `false` |
+| Has the data gone quiet?         | `data.isStale`                     | `true` / `false` |
+| Is anything actually showing it? | `overlays.main.hasConnectedSource` | `true` / `false` |
+| Who is leading?                  | `match.leader.name`                | e.g. `MGLZ`      |
+| Teams still standing             | `match.standingTeamCount`          | e.g. `12`        |
+
+Replace `main` with your own overlay id — the same one that appears in the browser-source address.
+
+Three of these are worth a button on their own:
+
+- **`hasConnectedSource`** counts the browser sources rendering that overlay. An overlay can be "on
+  air" with nothing connected to display it, which looks exactly like a working setup until you cut
+  to it. Your own preview in the admin page is deliberately **not** counted, so this answers the
+  question you are actually asking, which is about OBS.
+- **`data.isStale`** means the app is still talking to the game but nothing new has arrived —
+  usually the room host has dropped. The overlay holds its last good state rather than blanking, so
+  without this you would not notice.
+- **`feedbackVersion`** is there so a future version of the app can tell you the format changed,
+  rather than your buttons quietly going wrong.
+
+Every address the app answers on is listed inside the response too, under `actions` — so if you lose
+this guide, `/feedback` tells you what else you can call.
+
+### If Companion runs on a different computer
+
+By default the app only listens to the machine it is running on, so a Companion on another computer
+cannot reach it. To allow it:
+
+1. Open `backend\.env` in Notepad and change `HOST=127.0.0.1` to `HOST=0.0.0.0`.
+2. In Companion, use the overlay machine's network address instead of `127.0.0.1`.
+
+The addresses inside `/feedback` follow whatever address you used to ask, so if you open it as
+`http://192.168.1.50:4317/feedback`, everything it hands back is already written for that machine and
+can be copied straight into a button.
+
+⚠️ **This also makes the admin page reachable by anyone on the same network**, and the admin has no
+password. On a closed production network that is usually fine. If you want a little protection, set
+`CONTROL_TOKEN=something-you-choose` in `backend\.env` and append `?token=something-you-choose` to
+the addresses in Companion — **including `/feedback`**, which is protected by the same token. That
+protects the show/hide buttons and the feedback page, not the admin page.
+
+## 8. Configuring overlays
+
+Everything is on the admin page at `http://127.0.0.1:4317/admin`.
+
+### Overlays tab
+
+Select an overlay on the left, then adjust:
+
+- **Placement** — which side of the screen, distance from that edge, whether it is centred
+  vertically, and its size. Distances are given in 1080p pixels and mean the same thing at 1440p and
+  4K.
+- **Type and rows** — font, how many teams to show, whether the colour legend appears. The font
+  list holds a few built-in choices plus anything you have uploaded on the **Fonts** tab.
+- **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
+  The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
+  keep them see-through.
+- **Show / hide animation** — how the overlay arrives and leaves:
+  - **Fade** — appears in place.
+  - **Wipe** — the panel stays exactly where it is and is revealed from the edge you choose. The
+    text does not move, which is why this reads as calmer than a slide.
+  - **Slide** — the whole panel travels in from the edge you choose.
+  - **Zoom** — grows into place from slightly smaller.
+  - **Cross-fade as well** adds a fade on top of any of those. Turning it off leaves a plain wipe,
+    slide or zoom, with no change in transparency.
+  - **Duration** runs from 0.1 to 5 seconds.
+- **Rows** — optionally, the rows fade in one after another _after_ the panel has arrived, which
+  reads well on a big leaderboard. The gap between rows is adjustable; the admin tells you how long
+  the whole list will take to fill, which is the number that actually matters. The rows hold their
+  place from the start, so the panel never resizes while filling.
+  **Reverse it on the way out** is off by default on purpose: when a director needs a graphic gone,
+  it should go, and reversing adds the whole fill time again before the screen clears.
+
+⚠️ **Changes only reach your broadcast when you press Save.** The preview updates as you type.
+
+Each overlay shows whether it is currently **ON AIR** or **HIDDEN**, both in the list on the left and
+next to the show/hide button. That state is live: if someone presses a Stream Deck button, the admin
+updates to match. Every action you take confirms itself with a short notification in the corner,
+which fades on its own or can be dismissed with the ×.
+
+The preview is the **overlay itself**, loaded from the same address your browser source uses. It
+plays the show/hide animation exactly as it will on air, including when someone presses a Stream
+Deck button — so it is the place to try animation directions and speeds.
+
+Because it is the real thing, it shows **saved** settings: adjust something, press Save, and watch
+the preview change. Anything you try this way is also on your live output, which is what the test
+window before a broadcast is for — the director can key the layer out while you work.
+
+Two modes: **Full canvas** shows the whole 16∶9 frame, for judging placement. **Actual size**
+renders at true 1080p pixels, for judging colours and whether names are legible. The checkerboard
+stands in for your video, so you can see how translucent backgrounds look.
+
+To make a second overlay — for example a light and a dark version driven by the same data — type an
+id, then press either **Create** (starts from the defaults) or **Duplicate** (copies the look of the
+overlay currently selected).
+
+**An overlay id cannot be changed after it is created.** It is baked into your browser source and
+Companion buttons, so renaming it would silently break them. Create a new overlay instead.
+
+### Teams tab
+
+Team names and logos, by team number. **The number is the slot the game reports** — it has to match
+the numbering the observer set up in `TeamLogoAndColor.ini`, or the wrong team's players will appear
+on the wrong row. There is one name field, and it is what the overlay prints.
+
+**Start with Import TeamLogoAndColor.ini.** That is the file your observer already maintains for the
+PCOB client, and importing it fills in every team number, name and logo in one step instead of
+typing 16–25 rows by hand. It **replaces** the whole list, because that file is the team list for
+the event. If a logo path in it no longer exists, the import says how many were missing rather than
+leaving you to notice on air.
+
+**Logos.** Click the square beside a team to pick an image; it uploads immediately and appears on air
+straight away — no need to press Save for that. The small × removes it. PNG, JPEG, WebP and SVG are
+accepted, up to 2 MB. Prefer **SVG** if you have it: overlays run at up to 4K and a vector logo is
+the only kind that stays sharp there. Otherwise use at least 256 × 256. The chequered background
+behind each logo is there so you can see which parts are transparent.
+
+Everything except the logos needs **Save teams**.
+
+### Fonts tab
+
+Broadcast graphics are branded, and a tournament's typeface is rarely one of the handful shipped
+with the app. Upload your own here and it appears in the **Font** list of every overlay.
+
+**TTF, OTF, WOFF and WOFF2** are accepted, up to 8 MB — a brand's font usually arrives as a desktop
+`.ttf` or `.otf`, and those work directly, with no conversion.
+
+Each font is previewed in itself, using the kind of text an overlay actually shows, because a name
+tells you nothing about whether the digits are legible at overlay size.
+
+Uploading a file with the same name again **replaces** that font rather than adding a second copy.
+Removing a font leaves overlays that were using it on the system font until you pick another — the
+app will not quietly change what is on air on your behalf.
+
+### Scoring tab
+
+**Points are calculated by this app, not by the game.** The PCOB API supplies no tournament points
+at all, so this must match your tournament's rules — check it before every event.
+
+- **Points per elimination** — added for every kill the team gets.
+- **Placement points** — awarded when a team is eliminated, or when the match ends. A team still
+  playing has not placed yet and scores nothing here. Positions past the end of the list score zero.
+
+The default is the standard PUBG Mobile table (10/6/5/4/3/2/1/1, 1 point per kill).
+
+Saving takes effect immediately, including mid-match.
+
+## 9. Your settings
 
 Your configuration is stored as files in the **`backend\data`** folder inside the app folder.
 
@@ -133,7 +339,7 @@ Your configuration is stored as files in the **`backend\data`** folder inside th
 - **When upgrading:** unpack the new version to a _new_ folder, then copy your old `backend\data`
   into it before starting.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 **"Port 4317 is already in use"**
 The app is probably already running. Look for another console window and close it. If the port is
@@ -149,12 +355,14 @@ The connection to PCOB has probably dropped — the admin will show _Stale_ or _
 the `launch.bat` window and whether the room host is still connected.
 
 **No data at all, though everything looks fine**
-The most common cause by far: **"API Enable" was not clicked in PCOB before the match started**.
+In order of likelihood: **"API Enable" was not clicked** in PCOB before the match started; the
+`launch.bat` console window was closed; or the observer's **account was never whitelisted** by the
+publisher. The last one cannot be fixed on the day — see section 5.
 
 **The browser did not open on startup**
 Not a problem. Open a browser yourself and go to `http://127.0.0.1:4317/admin`.
 
-## 10. Getting help
+## 11. Getting help
 
 When reporting a problem, include:
 

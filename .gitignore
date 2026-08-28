@@ -48,3 +48,9 @@ coverage/
 # Tooling caches
 .eslintcache
 .oxlintcache
+
+# The PCOB client, if an operator unpacks it here for testing. ~47 GB and 6500 files
+# of vendor binaries -- never committed. specs/PCOB-API.md cites ObToolsNew/ob.js from
+# it; that file is quoted in the spec rather than vendored, so the reference survives
+# without the payload.
+/pcob/

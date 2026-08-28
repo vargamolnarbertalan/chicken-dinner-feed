@@ -24,7 +24,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "version:set": "npm version --workspaces --include-workspace-root --no-git-tag-version"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
