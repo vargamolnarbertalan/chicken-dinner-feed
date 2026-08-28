@@ -7,8 +7,10 @@ echo  ===============================================================
 echo   chicken-dinner-feed - Dependency installation / Telepites
 echo  ===============================================================
 echo.
-echo  Run this once after unpacking. It needs an internet connection.
-echo  Ezt eleg egyszer lefuttatni a kicsomagolas utan. Internet kell hozza.
+echo  Run this once after unpacking, and again after every update. It only needs an
+echo  internet connection when something actually has to be installed.
+echo  Ezt futtasd egyszer kicsomagolas utan, es minden frissites utan ujra. Internet
+echo  csak akkor kell, ha tenyleg telepiteni kell valamit.
 echo.
 
 cd /d "%~dp0"
@@ -29,13 +31,19 @@ if errorlevel 1 (
 for /f "tokens=*" %%v in ('node --version') do set NODE_VERSION=%%v
 echo  [i] Node.js found / megtalalva: !NODE_VERSION!
 
-REM --- Node.js new enough? Requires v22 or newer. ------------------------------
+REM --- Node.js new enough? ------------------------------------------------------
+REM The floor comes from this bundle's own package.json ("engines"."node"), not a number
+REM copied into this script by hand — the two can never quietly drift apart.
+for /f "delims=" %%r in ('node -e "console.log(require('./package.json').engines.node.match(/\d+/)[0])" 2^>nul') do set REQUIRED_MAJOR=%%r
+if not defined REQUIRED_MAJOR set REQUIRED_MAJOR=22
+
 set NODE_MAJOR=!NODE_VERSION:v=!
 for /f "tokens=1 delims=." %%m in ("!NODE_MAJOR!") do set NODE_MAJOR=%%m
-if !NODE_MAJOR! LSS 22 (
+
+if !NODE_MAJOR! LSS !REQUIRED_MAJOR! (
     echo.
-    echo  [X] Node.js !NODE_VERSION! is too old. Version 22 or newer is required.
-    echo      A Node.js !NODE_VERSION! tul regi. Legalabb 22-es verzio kell.
+    echo  [X] Node.js !NODE_VERSION! is too old. Version !REQUIRED_MAJOR! or newer is required.
+    echo      A Node.js !NODE_VERSION! tul regi. Legalabb !REQUIRED_MAJOR!-es verzio kell.
     echo.
     echo      Download the current LTS from https://nodejs.org/
     echo.
@@ -43,10 +51,41 @@ if !NODE_MAJOR! LSS 22 (
     exit /b 1
 )
 
-REM --- Install ----------------------------------------------------------------
+REM --- Does anything actually need installing? -----------------------------------
+REM A stamp file records the SHA-256 of package-lock.json from the last successful
+REM install. If node_modules exists and the lockfile has not changed since, there is
+REM nothing to do — this is what makes it safe to run this script again after every
+REM update instead of only once: unpacking a new release with unchanged dependencies
+REM costs nothing, and one with new or updated packages installs only what changed.
+set "STAMP=node_modules\.install-stamp.txt"
+set "LOCK_HASH="
+for /f "skip=1 tokens=1" %%h in ('certutil -hashfile package-lock.json SHA256 2^>nul ^| findstr /v /i "hash CertUtil"') do if not defined LOCK_HASH set LOCK_HASH=%%h
+
+set NEED_INSTALL=1
+if exist "node_modules" if exist "!STAMP!" if defined LOCK_HASH (
+    set /p STAMPED_HASH=<"!STAMP!"
+    if "!LOCK_HASH!"=="!STAMPED_HASH!" set NEED_INSTALL=0
+)
+
+if !NEED_INSTALL! EQU 0 (
+    echo.
+    echo  ===============================================================
+    echo   [OK] Dependencies are already installed and up to date.
+    echo        A fuggosegek mar telepitve es naprakeszek. Nincs mit tenni.
+    echo  ===============================================================
+    echo.
+    pause
+    exit /b 0
+)
+
 echo.
-echo  [i] Installing packages, this can take a few minutes...
-echo      Csomagok telepitese, ez eltarthat par percig...
+if exist "node_modules" (
+    echo  [i] An update is available. Updating dependencies, this can take a few minutes...
+    echo      Van egy frissites. Fuggosegek frissitese, ez eltarthat par percig...
+) else (
+    echo  [i] Installing packages, this can take a few minutes...
+    echo      Csomagok telepitese, ez eltarthat par percig...
+)
 echo.
 
 call npm ci --omit=dev
@@ -65,6 +104,11 @@ if errorlevel 1 (
         exit /b 1
     )
 )
+
+REM Record what was just installed so the next run can tell nothing has changed.
+set "LOCK_HASH="
+for /f "skip=1 tokens=1" %%h in ('certutil -hashfile package-lock.json SHA256 2^>nul ^| findstr /v /i "hash CertUtil"') do if not defined LOCK_HASH set LOCK_HASH=%%h
+if defined LOCK_HASH echo !LOCK_HASH!> "%STAMP%"
 
 echo.
 echo  ===============================================================

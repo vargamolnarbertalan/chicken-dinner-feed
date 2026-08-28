@@ -16,12 +16,37 @@ permissions:
 
 jobs:
   bundle:
-    name: Build the all-in-one bundle
+    name: Build, verify and publish the all-in-one bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # The tag is the source of truth for what gets published (git-workflow-and-versioning), so a
+      # tag that disagrees with what is actually checked out must stop the release rather than ship
+      # a ZIP labelled with the wrong version. Cheap, so it runs before anything else.
+      - name: Verify the tag matches package.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for pkg in package.json backend/package.json frontend/package.json shared/package.json; do
+            PKG_VERSION=$(node -p "require('./$pkg').version")
+            if [ "$PKG_VERSION" != "$VERSION" ]; then
+              echo "::error::$pkg is at $PKG_VERSION, but the tag says $VERSION. Bump the version" \
+                   "(npm run version:set -- $VERSION) and re-tag before releasing."
+              exit 1
+            fi
+          done
 
       - uses: actions/setup-node@v5
         with:
@@ -33,15 +58,9 @@ jobs:
       - name: Build all workspaces
         run: npm run build
 
-      - name: Determine version
-        id: version
-        run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
       # Assemble exactly what an operator needs and nothing else: no specs, no ADRs, no tests, no
-      # source, no dev dependencies (ADR-0009).
+      # source, no dev dependencies, and — deliberately — no node_modules and no copy of Node itself.
+      # install-dependencies.bat resolves those dynamically on the operator's machine (ADR-0009).
       - name: Assemble bundle
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -67,19 +86,23 @@ jobs:
           # Operator entry points and documentation.
           cp install-dependencies.bat startup.bat "$BUNDLE/"
           cp docs/user/user-guide.en.md docs/user/user-guide.hu.md "$BUNDLE/docs/"
+          if [ -f CHANGELOG.md ]; then cp CHANGELOG.md "$BUNDLE/"; fi
 
           # A standalone manifest holding only the backend's runtime dependencies, so
-          # install-dependencies.bat installs the minimum and nothing workspace-related.
+          # install-dependencies.bat installs the minimum and nothing workspace-related. The
+          # "engines" field here is what install-dependencies.bat reads its own Node version floor
+          # from — keep it in sync with .nvmrc, not with a number hand-copied into the script.
           node -e "
             const fs = require('node:fs');
             const backend = JSON.parse(fs.readFileSync('backend/package.json', 'utf8'));
+            const nvmrc = fs.readFileSync('.nvmrc', 'utf8').trim();
             const deps = { ...backend.dependencies, '@cdf/shared': 'file:./shared' };
             fs.writeFileSync('$BUNDLE/package.json', JSON.stringify({
               name: 'chicken-dinner-feed',
               version: process.env.VERSION,
               private: true,
               type: 'module',
-              engines: { node: '>=22.19.0' },
+              engines: { node: '>=' + nvmrc },
               scripts: { start: 'node backend/dist/index.js' },
               dependencies: Object.fromEntries(Object.entries(deps).sort()),
             }, null, 2) + '\n');
@@ -92,21 +115,79 @@ jobs:
           cat > "$BUNDLE/README.txt" <<EOF
           chicken-dinner-feed $VERSION
 
-          1. Run install-dependencies.bat once (needs internet).
+          1. Run install-dependencies.bat once (needs internet). Safe to run again after an
+             update — it only installs when something has actually changed.
           2. Run startup.bat before each broadcast, and leave the window open.
 
           Full instructions: docs/user-guide.en.md  |  docs/user-guide.hu.md
           EOF
+
+      # The single most valuable check available before anything is published: does the bundle
+      # actually install and boot, using nothing but what is inside it plus a bare Node install —
+      # exactly what install-dependencies.bat and startup.bat do on the operator's machine. Catching
+      # a broken bundle here costs two minutes of CI time; catching it after publishing costs an
+      # operator a broadcast.
+      - name: Smoke-test the bundle — install, boot, health-check
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          BUNDLE="bundle/chicken-dinner-feed-$VERSION"
+
+          echo "::group::npm ci (as install-dependencies.bat would run it)"
+          (cd "$BUNDLE" && npm ci --omit=dev)
+          echo "::endgroup::"
+
+          echo "::group::Boot the server (as startup.bat would run it)"
+          # NODE_ENV=production is not optional here: startup.bat always sets it, and without it
+          # Fastify's logger reaches for the pino-pretty transport, which is a devDependency and is
+          # not in this bundle's node_modules (--omit=dev above) — the process crashes on the very
+          # first log line. Found by running this smoke test locally before it ever reached CI.
+          (cd "$BUNDLE" && NODE_ENV=production PORT=4317 node backend/dist/index.js > server.log 2>&1 &)
+          SERVER_OK=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4317/api/health >/tmp/health.json 2>/dev/null; then
+              SERVER_OK=1
+              break
+            fi
+            sleep 1
+          done
+          echo "::endgroup::"
+
+          if [ "$SERVER_OK" -ne 1 ]; then
+            echo "::error::The bundle did not answer /api/health within 30s."
+            echo "--- server.log ---"
+            cat "$BUNDLE/server.log" || true
+            exit 1
+          fi
+
+          echo "Health check passed:"
+          cat /tmp/health.json
+          pkill -f "backend/dist/index.js" || true
+
+      # Only the runtime dependencies actually shipped in the bundle — not the monorepo's dev
+      # tooling, which never reaches an operator's machine.
+      - name: Audit shipped dependencies
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd "bundle/chicken-dinner-feed-$VERSION" && npm audit --omit=dev --audit-level=high)
 
       - name: Create ZIP
         id: zip
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
           cd bundle
-          zip -r "../chicken-dinner-feed-$VERSION.zip" "chicken-dinner-feed-$VERSION"
+          ZIP_NAME="chicken-dinner-feed-$VERSION.zip"
+          zip -rq "../$ZIP_NAME" "chicken-dinner-feed-$VERSION"
           cd ..
-          echo "path=chicken-dinner-feed-$VERSION.zip" >> "$GITHUB_OUTPUT"
+          sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
+          echo "path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$ZIP_NAME.sha256" >> "$GITHUB_OUTPUT"
+          echo "checksum=$(cut -d' ' -f1 "$ZIP_NAME.sha256")" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -114,7 +195,9 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
-          files: ${{ steps.zip.outputs.path }}
+          files: |
+            ${{ steps.zip.outputs.path }}
+            ${{ steps.zip.outputs.checksum_path }}
           body: |
             ## Installation
 
@@ -122,7 +205,12 @@ jobs:
             2. Run `install-dependencies.bat` once — it needs an internet connection.
             3. Run `startup.bat` to start the app, and leave the console window open.
 
-            Requires **Node.js 22 or newer** (<https://nodejs.org/>).
+            Requires **Node.js 22 or newer** (<https://nodejs.org/>). Nothing else needs to be
+            installed — `install-dependencies.bat` fetches the app's own dependencies for you.
 
-            Upgrading? Unpack into a new folder, then copy your old `backend\data` folder across to
-            keep your configuration.
+            **SHA-256:** `${{ steps.zip.outputs.checksum }}`
+
+            Upgrading? Unpack into a new folder, run `install-dependencies.bat` there, then copy
+            your old `backend\data` folder across to keep your configuration.
+
+            See `CHANGELOG.md` in the ZIP for what changed.
