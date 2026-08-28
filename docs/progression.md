@@ -464,13 +464,42 @@ buttons unresponsive) with no explanation on screen. Hit live tonight after this
 
 ---
 
+## Done — round 6 (2026-08-28): the release pipeline, run for the first time
+
+`docs/adr/0009-git-workflow-and-release-process.md` described a release workflow that had never
+actually been exercised — no tag had ever been pushed. Running it for the first time on
+`feat/release-pipeline` found real gaps; see the ADR's "Hardened 2026-08-28" section for the full
+account. Summary:
+
+- The release now **fails fast if the pushed tag disagrees with `package.json`**, across all four
+  workspaces. `npm run version:set -- X.Y.Z` bumps all four in one step.
+- The workflow **smoke-tests the assembled bundle** — `npm ci --omit=dev`, boot, `/api/health` — and
+  **audits its shipped dependencies** (`npm audit --omit=dev --audit-level=high`), both before
+  anything is published, not after.
+- That smoke test caught a real bug on its first run: without `NODE_ENV=production`, the server
+  crashes on its first log line (`pino-pretty` is a devDependency, correctly excluded from the
+  bundle). `startup.bat` already sets this; the CI smoke test now does too, explicitly.
+- `install-dependencies.bat` no longer reinstalls unconditionally on every run — it stamps the
+  installed lockfile's hash and skips straight to "already up to date" when nothing changed, and
+  reads its Node version floor from the bundle's own `package.json` rather than a hard-coded number.
+- Added `CHANGELOG.md` (Keep a Changelog format) and a SHA-256 checksum published alongside the ZIP.
+
+**Verified locally before trusting CI**, since nothing here had ever run: assembled a real bundle
+from a fresh `npm run build`, ran `npm install --package-lock-only --omit=dev` and `npm ci
+--omit=dev` inside it, booted it as `startup.bat` would, and confirmed `/api/health` responds —
+reproducing the `NODE_ENV` bug in that process rather than discovering it from a failed release.
+
+**Still open:** the actual `v0.1.0` tag has not been cut. That is next.
+
+---
+
 ## Next
 
-1. **Release workflow end to end** — cut `v0.2.0`, verify the bundle ZIP unpacks and runs on a clean
-   Windows machine with only Node installed.
+1. **Cut the first real release, `v0.1.0`** — now that the pipeline has been run and hardened once;
+   verify the published bundle unpacks and runs on a clean Windows machine with only Node installed.
 2. **Post-match export** — the workflow the client performs by hand today.
 3. **Startup lock file** so two backends cannot share one `data/` directory. _(ADR-0004)_
-4. **Admin-side protocol-mismatch banner** — found tonight (round 5); `OverlayPage` already has one.
+4. **Admin-side protocol-mismatch banner** — found in round 5; `OverlayPage` already has one.
 
 ### Backlog
 
