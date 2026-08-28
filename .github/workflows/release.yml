@@ -127,15 +127,28 @@ jobs:
       # exactly what install-dependencies.bat and startup.bat do on the operator's machine. Catching
       # a broken bundle here costs two minutes of CI time; catching it after publishing costs an
       # operator a broadcast.
-      - name: Smoke-test the bundle — install, boot, health-check
+      # Runs against a COPY, never the bundle directory itself. Installing and booting the app
+      # necessarily writes things into it — node_modules, a log file, and (found the hard way,
+      # after v1.0.0 shipped with all three) backend/data/*.json seeded by the app's own
+      # first-run config bootstrap. A copy means the smoke test can be exactly as thorough as it
+      # needs to be without a matching, ever-growing list of exactly what to clean up afterward —
+      # there is nothing to clean up, because nothing about the shipped bundle ever changes.
+      - name: Smoke-test a copy of the bundle — install, boot, health-check, audit
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           BUNDLE="bundle/chicken-dinner-feed-$VERSION"
+          SMOKE="smoke-test/chicken-dinner-feed-$VERSION"
+          mkdir -p smoke-test
+          cp -r "$BUNDLE" "$SMOKE"
 
           echo "::group::npm ci (as install-dependencies.bat would run it)"
-          (cd "$BUNDLE" && npm ci --omit=dev)
+          (cd "$SMOKE" && npm ci --omit=dev)
+          echo "::endgroup::"
+
+          echo "::group::npm audit (only this bundle's runtime dependencies)"
+          (cd "$SMOKE" && npm audit --omit=dev --audit-level=high)
           echo "::endgroup::"
 
           echo "::group::Boot the server (as startup.bat would run it)"
@@ -143,7 +156,7 @@ jobs:
           # Fastify's logger reaches for the pino-pretty transport, which is a devDependency and is
           # not in this bundle's node_modules (--omit=dev above) — the process crashes on the very
           # first log line. Found by running this smoke test locally before it ever reached CI.
-          (cd "$BUNDLE" && NODE_ENV=production PORT=4317 node backend/dist/index.js > server.log 2>&1 &)
+          (cd "$SMOKE" && NODE_ENV=production PORT=4317 node backend/dist/index.js > server.log 2>&1 &)
           SERVER_OK=0
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:4317/api/health >/tmp/health.json 2>/dev/null; then
@@ -157,7 +170,7 @@ jobs:
           if [ "$SERVER_OK" -ne 1 ]; then
             echo "::error::The bundle did not answer /api/health within 30s."
             echo "--- server.log ---"
-            cat "$BUNDLE/server.log" || true
+            cat "$SMOKE/server.log" || true
             exit 1
           fi
 
@@ -165,14 +178,16 @@ jobs:
           cat /tmp/health.json
           pkill -f "backend/dist/index.js" || true
 
-      # Only the runtime dependencies actually shipped in the bundle — not the monorepo's dev
-      # tooling, which never reaches an operator's machine.
-      - name: Audit shipped dependencies
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          (cd "bundle/chicken-dinner-feed-$VERSION" && npm audit --omit=dev --audit-level=high)
+          # The bundle that will actually be zipped must be byte-for-byte what "Assemble bundle"
+          # produced — this is the check that would have caught v1.0.0 shipping node_modules and a
+          # seeded backend/data, rather than trusting that nothing here touched it.
+          if ! diff -rq "$BUNDLE" "$SMOKE" \
+               -x node_modules -x package-lock.json -x server.log \
+               -x overlay-instances.json -x scoring-ruleset.json -x custom-fonts.json \
+               -x team-roster.json; then
+            echo "::error::The smoke test changed files outside the paths it is allowed to touch."
+            exit 1
+          fi
 
       - name: Create ZIP
         id: zip
@@ -188,6 +203,33 @@ jobs:
           echo "path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
           echo "checksum_path=$ZIP_NAME.sha256" >> "$GITHUB_OUTPUT"
           echo "checksum=$(cut -d' ' -f1 "$ZIP_NAME.sha256")" >> "$GITHUB_OUTPUT"
+
+      # Defense in depth: verify the artifact actually being published, not just the directory
+      # that was supposed to become it. A future change that re-introduces node_modules, a stray
+      # log file, or an operator-config file seeded by booting the app (all three shipped in
+      # v1.0.0, from the smoke test having run against the bundle itself rather than a copy) fails
+      # the release here instead of shipping.
+      - name: Verify the ZIP contains nothing it should not
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          LISTING=$(unzip -l "${{ steps.zip.outputs.path }}")
+          FOUND=0
+          for PATTERN in '/node_modules/' '/server\.log$' \
+                         '/backend/data/overlay-instances\.json$' '/backend/data/scoring-ruleset\.json$' \
+                         '/backend/data/custom-fonts\.json$' '/backend/data/team-roster\.json$'; do
+            if echo "$LISTING" | grep -qE "$PATTERN"; then
+              echo "::error::The published ZIP contains something matching '$PATTERN'."
+              echo "$LISTING" | grep -E "$PATTERN" | head -10
+              FOUND=1
+            fi
+          done
+          if [ "$FOUND" -ne 0 ]; then
+            echo "::error::Refusing to publish."
+            exit 1
+          fi
+          echo "Confirmed: the ZIP contains none of the known contamination this bundle has shipped before."
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
