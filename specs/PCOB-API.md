@@ -175,10 +175,12 @@ either way. But the ordering is now settled by evidence rather than by a tie-bre
 | Blue circle flag | `isOutsideBlueCircle` | as above                                            |
 | Position         | `location`            | as above, `posX/posY/posZ` was 1.5.0                |
 
-**Still genuinely unknown:** whether `teamName`, `bHasDied` and `killNumBeforeDie` appear inside the
-player objects. That depends on the game client, which ob.js cannot tell us about. `killNumBeforeDie`
-is the one that matters — it keeps a dead player's elimination count from resetting — so the adapter
-treats it as optional and falls back to the last `killNum` seen while the player was alive.
+**Confirmed 2026-08-28 by a live capture**, closing what used to be open here: `teamName`, `bHasDied`
+and `killNumBeforeDie` all appear inside the player objects, on every poll — see
+[§8](#closed-on-2026-08-28-by-a-live-1v1-match-capture). `killNumBeforeDie` is the one that matters —
+it keeps a dead player's elimination count from resetting — so the adapter still treats it as
+optional and falls back to the last `killNum` seen while the player was alive, since the field's
+presence was never guaranteed by anything ob.js itself controls.
 
 **Consequence for the adapter:** field lookup must still be tolerant — case-insensitive, alias-aware,
 indifferent to extra keys, and tolerant of absent ones. The envelope is now certain; the contents are

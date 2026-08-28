@@ -189,7 +189,7 @@ lekérdezi, majd egy feedback szabályban használj JSON útvonalat.
 | Érkezik játékadat?                 | `data.isReceivingData`             | `true` / `false` |
 | Elhallgatott az adat?              | `data.isStale`                     | `true` / `false` |
 | Meg is jeleníti egyáltalán valami? | `overlays.main.hasConnectedSource` | `true` / `false` |
-| Ki vezet?                          | `match.leader.shortName`           | pl. `MGLZ`       |
+| Ki vezet?                          | `match.leader.name`                | pl. `MGLZ`       |
 | Hány csapat van még talpon         | `match.standingTeamCount`          | pl. `12`         |
 
 A `main` helyére a saját overlay-azonosítód kerül — ugyanaz, ami a browser source címében is
@@ -291,9 +291,9 @@ Companion gombokba, tehát az átnevezés csendben eltörné őket. Helyette hoz
 
 ### Teams fül
 
-Csapatnevek, rövid nevek és logók, csapatszám szerint. **A szám az a slot, amit a játék jelent** —
-meg kell egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított,
-különben rossz csapat játékosai jelennek meg rossz sorban. A rövid nevet írja ki az overlay.
+Csapatnevek és logók, csapatszám szerint. **A szám az a slot, amit a játék jelent** — meg kell
+egyeznie azzal a számozással, amit az observer a `TeamLogoAndColor.ini` fájlban beállított, különben
+rossz csapat játékosai jelennek meg rossz sorban. Egyetlen névmező van, ezt írja ki az overlay.
 
 **Kezdd az Import TeamLogoAndColor.ini gombbal.** Ezt a fájlt az observer amúgy is karbantartja a
 PCOB kliens számára, és az importálás egy lépésben kitölti az összes csapatszámot, nevet és logót —

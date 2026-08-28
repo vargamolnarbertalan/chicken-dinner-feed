@@ -23,7 +23,7 @@ What we _do_ know, from the reachable _PCOB API updated rules_ sheet:
   forget to press "API Enable" at all.
 
 Also relevant: the PCOB client is versioned and updated independently of us (v4.3.0 as of March
-2026), so its payload can change without warning.
+2026; in production use as v4.5.0 by 2026-08-28), so its payload can change without warning.
 
 Blocking all development until the schema arrives would waste the entire first round, since the
 overlay, the scoring rules and the admin do not depend on the wire format — only on our own domain
@@ -55,8 +55,13 @@ The domain model explicitly diverges from the API where the API is a poor fit:
 
 - `PlayerAfterMatchAPI` fields are modelled as **"not yet available"**, never as `0`, so no overlay
   can silently display zeros mid-match;
-- **points and ranking are computed by us** from a configurable scoring ruleset, because the API
-  does not provide them (`specs/PCOB-FINDINGS.md` §2.4);
+- **points are computed by us** from a configurable scoring ruleset, because the API does not
+  provide them (`specs/PCOB-FINDINGS.md` §2.4).
+  > ⚠️ **Corrected 2026-08-28.** Ranking is not ours after all — a live capture confirmed PCOB's own
+  > `rank` field is reliable placement data. `MatchStore` now takes it as the primary placement
+  > source; our elimination-order tracking survives only as a fallback for a team believed
+  > eliminated whose API rank has not caught up yet (`specs/PCOB-API.md` §6, §8). The rest of this
+  > ADR's decision — the adapter boundary itself — is unaffected.
 - the **last known good state is retained** when the source drops, with staleness exposed
   separately, so a disconnect does not blank the overlay on air.
 
@@ -97,6 +102,8 @@ Rejected: unverifiable, and a wrong guess is more expensive than a mock because 
 
 ## Revisit when
 
-- **The API schema document becomes available** — this is the immediate unblock, and the first
-  action is validating the domain model against it.
-- The first live test against a real PCOB client reveals a mismatch.
+- ~~The API schema document becomes available~~ — happened 2026-08-17 (two vendor documents), then
+  settled further by reading `ob.js` itself the same day (`specs/PCOB-API.md`).
+- ~~The first live test against a real PCOB client reveals a mismatch~~ — happened 2026-08-28: no
+  mismatch in the domain model, but it did surface that ranking, not just points, needed a decision
+  (see the correction above).
