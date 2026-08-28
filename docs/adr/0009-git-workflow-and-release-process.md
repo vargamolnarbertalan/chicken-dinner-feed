@@ -137,6 +137,30 @@ would have hit:
 - The ZIP's SHA-256 is now computed and attached alongside it, so an operator can verify what they
   downloaded matches what was published.
 
+Running the hardened pipeline for real (`v1.0.0`, then `v1.0.1`) surfaced two more gaps, both from
+the same root cause: the smoke test installed and booted the app **inside the bundle directory
+that then got zipped**, so anything the app does on first run shipped as if it were part of the
+release.
+
+- **`v1.0.0`'s published ZIP contained a full `node_modules` and three seeded
+  `backend/data/*.json` files.** `npm ci --omit=dev` and the app's own first-run config bootstrap
+  (`JsonDocument.load()` writing a default file when one doesn't exist) both ran directly inside
+  the bundle. Fixed by running the entire smoke test against a **copy** of the bundle instead —
+  `bundle/` is asserted byte-for-byte unchanged afterward (`diff -rq`), and the final ZIP is
+  independently re-scanned for the same contamination patterns before publishing, so a future
+  regression fails the release rather than shipping.
+- **`v1.0.1`'s first tagged attempt failed at that same `diff -rq` check** — correctly. `LogoStore`
+  and `FontStore` each `mkdir` their data directory on init, same as the JSON config bootstrap
+  above; the smoke test's copy grew `backend/data/fonts` and `backend/data/logos` that the
+  pristine bundle didn't have. Fixed by pre-creating both (empty) during bundle assembly, so the
+  app's own first-run `mkdir` is a no-op and produces no diff. This is the safety net added for the
+  first bug catching a second instance of the same class of bug, before anything was published —
+  the outcome the check exists for.
+
+Separately, `/api/health` and `/feedback` had reported a hardcoded `APP_VERSION = '0.1.0'` since
+before either release — never wired to the real version despite the comment on the constant
+explicitly warning against exactly that kind of drift. Now read from `package.json` at startup.
+
 None of this changes the branching, tagging or bundle-contents decisions above — it is the
 difference between a release process that reads correctly and one that has actually been run.
 
