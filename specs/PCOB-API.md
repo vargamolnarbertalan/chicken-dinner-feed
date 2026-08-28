@@ -466,6 +466,20 @@ under `PlayerAfterMatchAPI`. The after-match group is the one documented to hold
 ends; `rank` is explicitly not in it. That is not the same as a capture, but it is a second document
 agreeing, and it makes "primary source, with the elimination-order fallback" the right way round.
 
+**Confirmed by a real capture, 2026-08-28.** A 1v1 test match (`gettotalplayerlist`, polled at the
+same moment `isingame` flipped to `false`): the winner carried `rank: 1`, `killNum: 1`, the loser
+`rank: 2`. Both populated **immediately**, in the same poll as match end, no grace period needed. This
+does not yet distinguish "populates the instant a team is eliminated, others still playing" from
+"populates only once the whole match ends" — a 1v1 collapses those into the same event. That
+narrower question needs a ≥3-team capture where one team is out early. What it does settle: `rank` is
+reliably correct **by** the time `isingame` goes false, so the elimination-order fallback is not
+required just to get final standings on screen.
+
+One oddity from the same capture, noted but not acted on: the loser's `bHasDied` stayed `false` even
+at `health: 0`, `liveState: 5`. Our code was already right not to key off `bHasDied` — `liveStateFor`
+in `payload.ts` derives alive/dead from `liveState` alone — so this is a documentation note, not a
+bug: do not add a `bHasDied` check later without re-reading this.
+
 ### The same grouping settles two more things
 
 - **`killNumBeforeDie` is live** — source C files it under `PlayerBaseInfo`. So a dead player's
@@ -605,14 +619,30 @@ Two things this decision does not settle, both for whoever implements it:
 
 ## 8. What is still missing
 
-| #   | Gap                                                                                                                                                                                                                                                                   | Severity | How it gets closed                                        |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------- |
-| 1   | **Do `killNumBeforeDie`, `teamName` and `bHasDied` appear inside the player objects?** ob.js passes contents through untouched, so only the game client can answer. `killNumBeforeDie` is the one that matters — without it a dead player's elimination count resets. | 🟠       | One capture. A rehearsal room is enough.                  |
-| 2   | **Does `rank` populate live, or only after the match?** Decides whether it is our placement source or a cross-check.                                                                                                                                                  | 🟠       | Same capture — one team eliminated mid-match answers it.  |
-| 3   | **Is `playerKey` stable for a whole match?** [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one) rests on it: if it changes between polls, slot assignments break and the ALIVE bars reshuffle on air.                                                | 🟠       | Same capture — compare two responses a few seconds apart. |
-| 4   | **Behaviour between matches.** Does the game keep posting after a match ends, and does `GameID` change cleanly at the boundary? [§7.6](#76-match-boundaries) depends on it.                                                                                           | 🟡       | Same capture, observed across a match boundary.           |
-| 5   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17).                                                                                                                                                                             | 🟢       | Redundant now. ob.js answered more than it would have.    |
-| 6   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).                                     | 🟢       | Not needed for the leaderboard.                           |
+| #   | Gap                                                                                                                                                                                                                                | Severity | How it gets closed                                     |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------- |
+| 5   | **The restricted schema spreadsheet** still returns **HTTP 401** (re-checked 2026-08-17).                                                                                                                                             | 🟢       | Redundant now. ob.js answered more than it would have.    |
+| 6   | **`[20230322] PCOB Weapon / others item ID.xlsx`** is an _embedded attachment_ in the API PDF, not a link, so it is unreachable. The gun-ID list it partly duplicates was retrieved ([`pcob-weapon-ids.md`](pcob-weapon-ids.md)).       | 🟢       | Not needed for the leaderboard.                          |
+
+Items 1–4 (`killNumBeforeDie`/`teamName`/`bHasDied` presence, `rank` timing, `playerKey` stability,
+between-match behaviour) were closed 2026-08-28 by a live capture — see below.
+
+### Closed on 2026-08-28 by a live 1v1 match capture
+
+The first real match captured end-to-end (2 teams, 1 player each), from the plane through a death by
+zone damage to a match restart. Concrete answers, not inference from source code:
+
+| Was                                                                        | Answer                                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Do `killNumBeforeDie`, `teamName`, `bHasDied` appear in the player objects? | **Yes, all three, on every poll.** `teamName` was the client's auto-generated default (`"Team4"`, `"Team16"`) since no `TeamLogoAndColor.ini` was configured for this test — expect real values once one is imported.                                                    |
+| Does `rank` populate live or only after the match?                        | **By match end, immediately** — winner `rank: 1`, loser `rank: 2`, in the same poll `isingame` flipped to `false`. See [§6](#rank-changes-what-we-thought). Still open: whether it populates for an _early-out_ team while others keep playing (needs a ≥3-team match). |
+| Is `playerKey` stable for a whole match?                                  | **Yes within a match, no across matches.** Same two values held from the plane to the final poll of that match; the next match assigned each player a **different** `playerKey`. Confirms [§7.2](#72-player-slot-has-to-be-derived-the-api-does-not-have-one)'s "frozen by `playerKey`, reset on a new match" design was the right call.                                |
+| Behaviour between matches                                                 | **The server kept answering with full final stats after `isingame` went `false`**, then a new match began (`isingame: true` again, positions reset to a plane drop, `rank` back to `0`, new `playerKey`s). `GameID` itself was not diffed across this specific boundary, so treat that one detail as still unconfirmed.                                                  |
+
+Also newly seen, not previously documented anywhere: **`PoisonTotalDamage`, `UseSelfRescueTime`,
+`UseEmergencyCallTime`** appear in the player object. Unmapped fields are ignored by design
+([§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping)), so this needed no
+code change — recorded here so nobody rediscovers them from scratch.
 
 ### Closed on 2026-08-17 by reading ob.js
 
