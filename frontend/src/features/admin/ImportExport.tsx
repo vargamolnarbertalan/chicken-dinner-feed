@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { BackupPreview } from '@cdf/shared';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { api, ApiError } from '@/lib/api';
@@ -26,15 +27,14 @@ interface PendingImport {
  * document and every file reference before writing anything.
  */
 export function ImportExport() {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[] | null>(null);
 
-  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = ''; // So picking the same file again still fires this handler.
-    if (!file) return;
-
+  /** Shared by the file picker and drag-and-drop — both just need to hand over one File. */
+  const processFile = async (file: File) => {
     setValidationErrors(null);
     setBusy(true);
     try {
@@ -51,6 +51,19 @@ export function ImportExport() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // So picking the same file again still fires this handler.
+    if (file) void processFile(file);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) void processFile(file);
   };
 
   const confirmImport = async () => {
@@ -133,12 +146,42 @@ export function ImportExport() {
           Pick a backup ZIP exported from another (or this) machine. It is checked first — nothing
           is changed until you confirm what it contains.
         </p>
+        <div
+          role="button"
+          tabIndex={busy ? -1 : 0}
+          aria-disabled={busy}
+          onClick={() => !busy && inputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (busy) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!busy) setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={busy ? undefined : handleDrop}
+          className={`border-border grid cursor-pointer place-items-center gap-2 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors ${
+            dragOver ? 'border-primary bg-primary/5' : 'hover:bg-secondary/40'
+          } ${busy ? 'pointer-events-none opacity-50' : ''}`}
+        >
+          <Upload className="text-muted-foreground size-8" aria-hidden />
+          <p className="text-sm font-medium">
+            {busy ? 'Checking the backup…' : 'Drop a backup ZIP here, or click to choose one'}
+          </p>
+          <p className="text-muted-foreground text-xs">.zip files exported from this app</p>
+        </div>
+
         <input
+          ref={inputRef}
           type="file"
           accept=".zip"
           disabled={busy}
-          onChange={(event) => void handleFileSelected(event)}
-          className="text-sm"
+          onChange={handleFileSelected}
+          className="hidden"
         />
 
         {validationErrors && (
