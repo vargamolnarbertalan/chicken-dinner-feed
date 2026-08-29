@@ -11,6 +11,8 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-29
+
 ### Changed
 
 - `HOST` now defaults to `0.0.0.0` (every network interface) instead of `127.0.0.1`, so a Stream
@@ -72,6 +74,7 @@ was supposed to guarantee it had a gap.
 - Team placement now trusts PCOB's own `rank` field instead of only an internal elimination-order
   guess, and a roster team that never joined a match no longer outranks one that did.
 
-[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.2
 [1.0.1]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.1
 [1.0.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.0
