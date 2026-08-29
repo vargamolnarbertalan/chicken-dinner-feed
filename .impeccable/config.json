@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-29T19:58:40.968Z",
+        "reason": "Pre-existing choice, not introduced this session: Inter was already this app's default overlay font (shared/src/config/overlay-instance.ts DEFAULT_OVERLAY_APPEARANCE, set before this task). This file only adds the live Google Fonts <link> so it actually renders reliably; it does not choose Inter as a design decision. It is one of four operator-selectable overlay text fonts in a broadcast graphics tool, not this app's own product identity."
+      }
+    ]
+  }
+}
