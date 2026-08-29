@@ -240,6 +240,11 @@ Válassz ki balra egy overlayt, majd állítsd:
   jelentik.
 - **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat. A betűtípus-lista
   néhány beépített választást tartalmaz, plusz mindent, amit a **Fonts** fülön feltöltöttél.
+  ⚠️ **A beépített betűtípusok közül az Arial kivételével mindegyikhez internet kell** azon a gépen,
+  ahol az app fut — élőben töltődnek be, hogy mindenhol ugyanúgy nézzenek ki, ahelyett hogy attól
+  függenének, mi van éppen telepítve helyben. Internet nélkül csendben egy egyszerű betűtípusra esnek
+  vissza, nem hibáznak. Ha a helyszínen nincs internet, válaszd az **Arial**-t, vagy tölts fel saját
+  betűtípus-fájlt a **Fonts** fülön — mindkettő internet nélkül is működik.
 - **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
   félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
   megmaradjon az átlátszóság.

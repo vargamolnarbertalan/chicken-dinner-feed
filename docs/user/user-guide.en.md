@@ -236,6 +236,11 @@ Select an overlay on the left, then adjust:
   4K.
 - **Type and rows** — font, how many teams to show, whether the colour legend appears. The font
   list holds a few built-in choices plus anything you have uploaded on the **Fonts** tab.
+  ⚠️ **The built-in fonts other than Arial need internet on the machine running this app** — they
+  load live so they look the same on every PC, rather than depending on what happens to be installed
+  locally. With no internet, they quietly fall back to a plain font instead of failing. If the venue
+  has no internet, pick **Arial** or upload your own font file on the **Fonts** tab — both work with
+  no internet at all.
 - **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
   The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
   keep them see-through.

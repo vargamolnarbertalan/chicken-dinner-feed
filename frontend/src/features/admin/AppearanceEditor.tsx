@@ -9,11 +9,20 @@ import type {
 import { fontFamilyValue } from '@cdf/shared';
 import { ColorField } from './ColorField';
 
+/**
+ * Each of the first three is one concrete weight, loaded live from Google Fonts (index.html) — not
+ * a family with a range of weights still open, since only that one weight is ever fetched. Labelled
+ * accordingly ("Inter Bold", not "Inter") so the picker does not promise a choice that is not there.
+ *
+ * "Arial" needs no network at all — a plain, universally-installed Windows font, offered for an
+ * operator with no internet on site. Without it, or if Google Fonts genuinely cannot be reached,
+ * each of the first three quietly falls back to the next entry in its own stack instead of failing.
+ */
 const FONT_OPTIONS = [
-  { value: "'Inter', system-ui, sans-serif", label: 'Inter' },
-  { value: "'Rajdhani', system-ui, sans-serif", label: 'Rajdhani' },
-  { value: "'Barlow Condensed', system-ui, sans-serif", label: 'Barlow Condensed' },
-  { value: 'system-ui, sans-serif', label: 'System' },
+  { value: "'Inter', system-ui, sans-serif", label: 'Inter Bold' },
+  { value: "'Rajdhani', system-ui, sans-serif", label: 'Rajdhani SemiBold' },
+  { value: "'Barlow Condensed', system-ui, sans-serif", label: 'Barlow Condensed SemiBold' },
+  { value: 'Arial, system-ui, sans-serif', label: 'Arial' },
   { value: "'Courier New', monospace", label: 'Monospace' },
 ];
 
