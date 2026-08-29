@@ -11,6 +11,19 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+### Changed
+
+- `HOST` now defaults to `0.0.0.0` (every network interface) instead of `127.0.0.1`, so a Stream
+  Deck / Companion box on another machine works with no `.env` change. **This also exposes the
+  admin UI — which has no authentication — to everyone on the network by default**; the existing
+  startup warning now fires on a fresh install rather than only after an explicit opt-in. Set
+  `HOST=127.0.0.1` in `backend\.env` to restrict it to this machine, as before.
+- `INGEST_SOURCE` now defaults to `pcob` (the real observer API) instead of `mock`, now that a live
+  match capture has confirmed the real client's field spellings (see `specs/PCOB-API.md` §8). `mock`
+  remains available for rehearsing overlay setup without a running match.
+- The startup log always prints `http://localhost:<port>` regardless of the configured `HOST`, since
+  that is the address an operator actually opens in a browser on this machine.
+
 ## [1.0.1] - 2026-08-29
 
 ### Fixed

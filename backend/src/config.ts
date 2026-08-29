@@ -25,13 +25,18 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   PORT: z.coerce.number().int().min(1).max(65535).default(4317),
-  HOST: z.string().min(1).default('127.0.0.1'),
+  /**
+   * Defaults to every interface so a Stream Deck / Companion box on another machine works out of
+   * the box (ADR-0012) — set to `127.0.0.1` in `.env` to restrict the admin UI to this machine
+   * only. See the startup warning this triggers (ADR-0008's "Revisit when": no auth exists yet).
+   */
+  HOST: z.string().min(1).default('0.0.0.0'),
 
   DATA_DIR: z.string().min(1).default('./data'),
   STATIC_DIR: z.string().min(1).optional(),
 
   /** See ADR-0006. `mock` needs no game running; `pcob` polls the real observer API. */
-  INGEST_SOURCE: z.enum(['mock', 'pcob']).default('mock'),
+  INGEST_SOURCE: z.enum(['mock', 'pcob']).default('pcob'),
 
   /**
    * Where the PCOB API answers.

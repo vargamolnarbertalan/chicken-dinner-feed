@@ -42,7 +42,9 @@ async function main(): Promise<void> {
 
   app.log.info(
     {
-      url: `http://${config.host}:${config.port}`,
+      // Always localhost here, regardless of config.host (default 0.0.0.0 binds every interface,
+      // including loopback) — this is what the operator pastes into a browser on this machine.
+      url: `http://localhost:${config.port}`,
       ingestSource: config.ingestSource,
       dataDir: config.dataDir,
     },

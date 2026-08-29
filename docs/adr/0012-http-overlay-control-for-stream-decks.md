@@ -69,13 +69,21 @@ access control, because the admin has no authentication.
 
 We resolve it without adding an auth system:
 
-- **The default stays `127.0.0.1`.** Companion on the same PC — the common case — needs no change.
+- ~~The default stays `127.0.0.1`.~~ **Revised 2026-08-29:** the default is now `0.0.0.0` — see the
+  note below.
 - **`HOST` can be opened up** for a remote Companion. Doing so logs a warning at startup naming
   exactly what is now reachable, rather than changing the security posture silently.
 - **`CONTROL_TOKEN` is optional and off by default.** When set, the control endpoints require it as
   `?token=` or an `X-Control-Token` header — both trivial in Companion. It is a speed bump against
   accidents and curious people on a venue LAN, **not authentication**, and it does not protect the
   admin UI.
+
+> **2026-08-29:** flipped the default from `127.0.0.1` to `0.0.0.0`, on the operator's decision,
+> made with the trade-off below understood: a remote Companion needing no `.env` change at all was
+> judged worth more than an unauthenticated admin UI staying off the network by default. The
+> startup warning (unchanged) is what now fires on every default install rather than only on an
+> explicit opt-in — this is the exact trigger ADR-0008's "Revisit when" names for adding real
+> authentication, still not done. Set `HOST=127.0.0.1` in `.env` to restore the old behavior.
 
 ## Consequences
 
@@ -92,9 +100,9 @@ We resolve it without adding an auth system:
 
 - **`GET` mutates state.** Defensible here, and it would not be in a public API. Recorded so nobody
   later "fixes" it and silently breaks every configured button.
-- **Anyone who can reach the port can control the overlays.** Loopback makes that acceptable by
-  default; opening `HOST` moves the burden to the operator, with a warning and an optional token as
-  the mitigation.
+- **Anyone who can reach the port can control the overlays.** Since 2026-08-29 the default
+  (`HOST=0.0.0.0`) already puts everyone on the LAN in that position; the warning and optional
+  token are the only mitigation. Restrict `HOST` to `127.0.0.1` for a closed, single-machine setup.
 - Visibility is not persisted. An app restart mid-show returns overlays to their default. This is
   deliberate — a restart should give a known state, not resurrect whatever was on screen when it
   crashed — but it does mean a restart is visible on air.
