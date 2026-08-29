@@ -225,4 +225,55 @@ describe('MatchStore', () => {
       expect(match.teams[0]?.totalPoints).toBe(12);
     });
   });
+
+  describe('suppressContributionFor', () => {
+    it('stops re-adding a just-closed match’s own points once the series total already includes them', () => {
+      // Regression: found live. A map auto-closes, its points get banked into the series total, but
+      // MatchStore keeps showing that same match's data (frozen) until the next match's first
+      // update — without suppression, that frozen window double-counted the closing map's points.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+
+      const beforeSuppression = store.project().match.teams[0];
+      expect(beforeSuppression?.totalPoints).toBe(18); // killPoints(8) + placementPoints[0] (10).
+
+      // The series total now includes this same match's 18 points, as it would right after close.
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+      store.suppressContributionFor('match-1');
+
+      const afterSuppression = store.project().match.teams[0];
+      expect(afterSuppression?.totalPoints).toBe(18); // Unchanged — not 36.
+    });
+
+    it('is a no-op for a match id other than the one currently being shown', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+
+      store.suppressContributionFor('some-other-match');
+
+      expect(store.project().match.teams[0]?.totalPoints).toBe(36); // Not suppressed.
+    });
+
+    it('clears itself once a genuinely new match starts', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+      store.suppressContributionFor('match-1');
+
+      store.applyUpdate(
+        update({ matchId: 'match-2', players: [player({ teamNo: 1, slot: 1, kills: 3 })] }),
+      );
+
+      // The new match's own contribution counts normally again, on top of the series total:
+      // 3 kill points + the guaranteed-minimum for the only team standing (10) + 18 series.
+      expect(store.project().match.teams[0]?.totalPoints).toBe(31);
+    });
+  });
 });

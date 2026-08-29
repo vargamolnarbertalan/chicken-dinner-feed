@@ -66,6 +66,14 @@ export class MatchStore {
    */
   private seriesPointsByTeam: ReadonlyMap<number, number> = new Map();
   private seriesHasAppeared: ReadonlySet<number> = new Set();
+  /**
+   * Set once a match has been banked into series history while its data is still what this store is
+   * showing (frozen, until the next map's first update arrives). Without this, the window between a
+   * map closing and the next match's first update would double-count that map's own points: once as
+   * "this match's own contribution" (this store has not seen anything new yet) and again via
+   * `seriesPointsByTeam`, which by then already includes it.
+   */
+  private suppressedMatchId: string | null = null;
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -84,6 +92,17 @@ export class MatchStore {
   ): void {
     this.seriesPointsByTeam = seriesPointsByTeam;
     this.seriesHasAppeared = seriesHasAppeared;
+  }
+
+  /**
+   * Call once `matchId` has been persisted into series history (a real `ended` close or a manual
+   * "close this map now"). A no-op if `matchId` is not the match this store is currently showing —
+   * it only ever suppresses its *own* current match, never a stale or future one.
+   */
+  suppressContributionFor(matchId: string): void {
+    if (this.lastUpdate?.matchId === matchId) {
+      this.suppressedMatchId = matchId;
+    }
   }
 
   /**
@@ -170,6 +189,8 @@ export class MatchStore {
       presentTeams: this.seenTeams,
       seriesPointsByTeam: this.seriesPointsByTeam,
       seriesHasAppeared: this.seriesHasAppeared,
+      suppressThisMapPoints:
+        this.suppressedMatchId !== null && update?.matchId === this.suppressedMatchId,
     });
 
     return {
@@ -195,6 +216,7 @@ export class MatchStore {
     this.eliminationOrder = [];
     this.eliminated.clear();
     this.seenTeams.clear();
+    this.suppressedMatchId = null;
   }
 
   /**

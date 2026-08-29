@@ -1,4 +1,4 @@
-import type { IngestSourceKind } from '@cdf/shared';
+import type { IngestSourceKind, TeamRosterEntry } from '@cdf/shared';
 import { MockSource } from './mock-source.js';
 import { PcobSource } from './pcob/pcob-source.js';
 import type { IngestSource } from './source.js';
@@ -13,6 +13,11 @@ export interface CreateIngestSourceOptions {
   pcobPollMs?: number;
   pcobTimeoutMs?: number;
   log?: (message: string) => void;
+  /**
+   * `mock` only: rehearse against the operator's actual configured roster. Ignored for `pcob`,
+   * which has no roster concept of its own — it just reports whichever teams the game sends.
+   */
+  roster?: readonly TeamRosterEntry[];
 }
 
 /**
@@ -26,7 +31,7 @@ export function createIngestSource(
 ): IngestSource {
   switch (kind) {
     case 'mock':
-      return new MockSource();
+      return new MockSource({ roster: options.roster });
     case 'pcob':
       if (!options.pcobBaseUrl) {
         throw new Error('PCOB_BASE_URL is required when INGEST_SOURCE=pcob.');

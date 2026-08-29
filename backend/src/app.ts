@@ -128,6 +128,10 @@ export async function buildApp(): Promise<AppContext> {
     // Field-mapping warnings go through the app logger so they land in the same place an operator
     // is already looking. Each distinct message is emitted once per run, not once per poll.
     log: (message) => app.log.warn({ source: 'pcob' }, message),
+    // Rehearsing with the mock should mean rehearsing with the operator's own configured roster
+    // (imported from an ini, typically), not the built-in stand-in names — otherwise editing the
+    // roster silently has no effect on what the mock actually simulates.
+    roster: configStore.teams.current.teams,
   });
 
   // Configuration changes have to reach the live path immediately: a new scoring ruleset changes
@@ -136,6 +140,7 @@ export async function buildApp(): Promise<AppContext> {
     switch (change) {
       case 'teams':
         store.setRoster(configStore.teams.current.teams);
+        ingestSource.setRoster?.(configStore.teams.current.teams);
         hub.schedulePublish();
         break;
       case 'scoring':
@@ -240,11 +245,20 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
+          const projection = store.project();
           // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
           // that one tick so a map that closes this instant goes out already reflecting its own
           // series total, rather than catching up only on the next poll.
           seriesStore
-            .observeMatch(store.project(), Date.now())
+            .observeMatch(projection, Date.now())
+            .then((closed) => {
+              // The window between a map closing and the next match's first update would otherwise
+              // double-count that map's points: once as "this match's own contribution" (store has
+              // not seen anything new yet) and again via the series total, which now includes them.
+              if (closed && projection.match.matchId !== null) {
+                store.suppressContributionFor(projection.match.matchId);
+              }
+            })
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
             .finally(() => {
               refreshSeriesContext();

@@ -29,6 +29,15 @@ export interface StandingsInput {
    * stays this-match-only because the overlay's grey-out relies on that exact meaning.
    */
   seriesHasAppeared?: ReadonlySet<number>;
+  /**
+   * True once this match's own result has already been banked into `seriesPointsByTeam` (a map that
+   * closed but whose data is still what `MatchStore` is showing, frozen, until the next map's first
+   * update arrives — ADR-0007's "freeze until the next map"). Suppresses this map's own kill and
+   * placement points from being added a *second* time on top of the series total that already
+   * includes them; `killPoints`/`placementPoints` are still computed and returned as normal; only
+   * `totalPoints` stops summing them in. Defaults to false.
+   */
+  suppressThisMapPoints?: boolean;
 }
 
 /**
@@ -78,6 +87,7 @@ export function computeStandings(input: StandingsInput): Team[] {
   const presentTeams = input.presentTeams ?? new Set(roster.map((entry) => entry.teamNo));
   const seriesPointsByTeam = input.seriesPointsByTeam;
   const seriesHasAppeared = input.seriesHasAppeared;
+  const suppressThisMapPoints = input.suppressThisMapPoints ?? false;
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -134,7 +144,7 @@ export function computeStandings(input: StandingsInput): Team[] {
       ...team,
       killPoints,
       placementPoints,
-      totalPoints: killPoints + placementPoints + seriesPoints,
+      totalPoints: (suppressThisMapPoints ? 0 : killPoints + placementPoints) + seriesPoints,
       placement: team.placement ?? null,
     };
   });

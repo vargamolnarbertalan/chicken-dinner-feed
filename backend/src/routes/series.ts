@@ -58,7 +58,13 @@ export const seriesRoutes: FastifyPluginAsyncZod<SeriesRoutesOptions> = async (a
       },
     },
     async () => {
-      await series.closeMapNow(match.projectAsEnded(), Date.now());
+      const projection = match.projectAsEnded();
+      await series.closeMapNow(projection, Date.now());
+      // Same reason as the auto-close path: without this, the window until the next match's first
+      // update would double-count this map's points via both "current match" and the series total.
+      if (projection.match.matchId !== null) {
+        match.suppressContributionFor(projection.match.matchId);
+      }
       onSeriesChanged();
       return series.getState();
     },

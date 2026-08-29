@@ -96,13 +96,17 @@ export class SeriesStore {
   /**
    * Call after every ingest update. Tracks match-id and `ended`-phase stability, and persists a
    * closed map, at most once per match id, once both are trusted.
+   *
+   * Returns whether this call is the one that just closed a map — the caller must, in that case,
+   * tell `MatchStore` to stop adding that same match's points a second time on top of the series
+   * total that now already includes them (`MatchStore.suppressContributionFor`).
    */
-  async observeMatch(projection: Projection, now: number): Promise<void> {
+  async observeMatch(projection: Projection, now: number): Promise<boolean> {
     const { matchId, phase } = projection.match;
 
     if (matchId === null) {
       this.resetObservation();
-      return;
+      return false;
     }
 
     if (matchId !== this.candidateMatchId) {
@@ -118,19 +122,20 @@ export class SeriesStore {
       this.endedStableCount = 0;
     }
 
-    if (this.trustedMatchId !== matchId) return; // Candidate not stable yet.
+    if (this.trustedMatchId !== matchId) return false; // Candidate not stable yet.
 
     if (phase !== 'ended') {
       this.endedStableCount = 0;
-      return;
+      return false;
     }
 
     this.endedStableCount += 1;
-    if (this.endedStableCount < this.stabilityTicks) return;
-    if (this.lastClosedMatchId === matchId) return; // Already closed, still polling while ended.
+    if (this.endedStableCount < this.stabilityTicks) return false;
+    if (this.lastClosedMatchId === matchId) return false; // Already closed, still polling while ended.
 
     this.lastClosedMatchId = matchId;
     await this.persistClosedMap(projection, now);
+    return true;
   }
 
   /**

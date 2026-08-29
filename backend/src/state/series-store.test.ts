@@ -136,10 +136,13 @@ describe('SeriesStore', () => {
       );
       await store.load();
 
-      await store.observeMatch(match.project(), 1_000); // match id sighting 1.
-      await store.observeMatch(match.project(), 1_100); // match id stable, ended sighting 1.
-      await store.observeMatch(match.project(), 1_200); // ended stable — closes here.
-      await store.observeMatch(match.project(), 1_300); // still polling while ended — must not duplicate.
+      // The return value is a real contract, not incidental: app.ts only calls
+      // MatchStore.suppressContributionFor (the fix for the double-counting bug found live) when
+      // this resolves true — a caller that missed a `true` here would silently reintroduce it.
+      expect(await store.observeMatch(match.project(), 1_000)).toBe(false); // match id sighting 1.
+      expect(await store.observeMatch(match.project(), 1_100)).toBe(false); // stable, ended sighting 1.
+      expect(await store.observeMatch(match.project(), 1_200)).toBe(true); // ended stable — closes here.
+      expect(await store.observeMatch(match.project(), 1_300)).toBe(false); // still polling — no duplicate.
 
       expect(store.getState().closedMaps).toHaveLength(1);
     });

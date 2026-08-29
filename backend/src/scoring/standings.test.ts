@@ -343,5 +343,26 @@ describe('computeStandings', () => {
       // The exposed `hasAppeared` stays this-match-only — the overlay's grey-out depends on that.
       expect(teams[0]?.hasAppeared).toBe(false);
     });
+
+    it('suppressThisMapPoints stops double-counting a just-closed map still frozen on screen', () => {
+      // Regression: found live, running the app — a map closing pushed its own points into the
+      // series total while MatchStore was still showing that same match's data (frozen, per
+      // ADR-0007, until the next map's first update). Without suppression, PTS briefly counted the
+      // closing map's points twice, then visibly dropped once the next match actually started.
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 8 })],
+        roster: roster(1),
+        ruleset: pubgmRuleset,
+        placements: new Map([[1, 1]]), // this map's own, now-final placement: 1st.
+        seriesPointsByTeam: new Map([[1, 121]]), // already includes this same map's 18 points.
+        suppressThisMapPoints: true,
+      });
+
+      // killPoints/placementPoints are still computed and returned normally for display...
+      expect(team?.killPoints).toBe(8);
+      expect(team?.placementPoints).toBe(10);
+      // ...but totalPoints only counts the series figure, not a second helping on top of it.
+      expect(team?.totalPoints).toBe(121);
+    });
   });
 });
