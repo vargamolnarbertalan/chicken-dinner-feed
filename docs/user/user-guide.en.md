@@ -208,21 +208,20 @@ this guide, `/feedback` tells you what else you can call.
 
 ### If Companion runs on a different computer
 
-By default the app only listens to the machine it is running on, so a Companion on another computer
-cannot reach it. To allow it:
-
-1. Open `backend\.env` in Notepad and change `HOST=127.0.0.1` to `HOST=0.0.0.0`.
-2. In Companion, use the overlay machine's network address instead of `127.0.0.1`.
-
-The addresses inside `/feedback` follow whatever address you used to ask, so if you open it as
-`http://192.168.1.50:4317/feedback`, everything it hands back is already written for that machine and
-can be copied straight into a button.
+By default the app listens on every network interface, so a Companion on another computer can
+already reach it — just use the overlay machine's network address instead of `127.0.0.1`, e.g.
+`http://192.168.1.50:4317/feedback`. The addresses inside `/feedback` follow whatever address you
+used to ask, so everything it hands back is already written for that machine and can be copied
+straight into a button.
 
 ⚠️ **This also makes the admin page reachable by anyone on the same network**, and the admin has no
 password. On a closed production network that is usually fine. If you want a little protection, set
 `CONTROL_TOKEN=something-you-choose` in `backend\.env` and append `?token=something-you-choose` to
 the addresses in Companion — **including `/feedback`**, which is protected by the same token. That
 protects the show/hide buttons and the feedback page, not the admin page.
+
+If you would rather keep the app off the network entirely (single-computer setup, no Companion on
+another machine), set `HOST=127.0.0.1` in `backend\.env`.
 
 ## 8. Configuring overlays
 

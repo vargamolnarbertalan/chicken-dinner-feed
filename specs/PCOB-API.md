@@ -682,3 +682,7 @@ client spells its fields the way the 3.0.0 dictionary says.** The adapter degrad
 field to a default plus one log line naming it, so a mismatch is a warning in the console rather
 than a blank overlay — but until a capture confirms otherwise, prefer `INGEST_SOURCE=mock` for
 anything going on air.
+
+**Closed 2026-08-28** — see [§8](#closed-on-2026-08-28-by-a-live-1v1-match-capture): a live 1v1
+match capture confirmed the field spellings this section flagged as untested. `INGEST_SOURCE=pcob`
+is the default from that point on.
