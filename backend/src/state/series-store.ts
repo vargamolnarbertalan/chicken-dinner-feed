@@ -160,6 +160,19 @@ export class SeriesStore {
   }
 
   /**
+   * Wholesale replace the persisted history — a full-backup import (specs, "Import & Export"), not
+   * an operator action on this page. `document` must already be schema-valid; the caller (the import
+   * pipeline) is responsible for validating and migrating it first, the same way a document loaded
+   * from disk normally is. Resets this store's own auto-detection tracking, same reasoning as
+   * `resetSeries`: the imported history knows nothing about whatever match is currently running on
+   * this machine.
+   */
+  async replaceState(document: SeriesDocument): Promise<SeriesDocument> {
+    this.resetObservation();
+    return this.document.write(document);
+  }
+
+  /**
    * Replaces one closed map's per-team results. `placement`/`eliminations` are the only inputs
    * accepted — points are always re-derived from the ruleset, never taken as a direct override, and
    * the edited team set must exactly match the map's original teams (this corrects a wrong result,

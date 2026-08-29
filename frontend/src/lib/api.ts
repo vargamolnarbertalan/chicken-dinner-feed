@@ -1,4 +1,5 @@
 import type {
+  BackupPreview,
   CustomFont,
   CustomFontsDocument,
   OverlayInstance,
@@ -19,11 +20,14 @@ import type {
  */
 export class ApiError extends Error {
   readonly status: number;
+  /** Every distinct problem found, when the server has more than one to report (a backup import). */
+  readonly errors?: string[];
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, errors?: string[]) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.errors = errors;
   }
 }
 
@@ -46,7 +50,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
         ? body.error
         : `Request failed (HTTP ${response.status})`;
-    throw new ApiError(response.status, message);
+    const errors =
+      body && typeof body === 'object' && 'errors' in body && Array.isArray(body.errors)
+        ? (body.errors as string[])
+        : undefined;
+    throw new ApiError(response.status, message, errors);
   }
 
   if (response.status === 204) return undefined as T;
@@ -137,4 +145,22 @@ export const api = {
 
   deleteClosedMap: (mapId: string) =>
     request<SeriesDocument>(`/series/maps/${mapId}`, { method: 'DELETE' }),
+
+  /** Not a fetch — a plain navigable URL, so the browser handles the download itself. */
+  backupExportUrl: '/api/backup/export',
+
+  previewImport: (file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<BackupPreview & { imported: false }>('/backup/import', { method: 'POST', body });
+  },
+
+  confirmImport: (file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<{ imported: true; summary: BackupPreview['summary'] }>(
+      '/backup/import?confirm=true',
+      { method: 'POST', body },
+    );
+  },
 };

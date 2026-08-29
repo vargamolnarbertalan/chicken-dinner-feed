@@ -13,6 +13,12 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ### Added
 
+- **Import & Export** (see ADR-0017): a new admin page downloads everything you have configured —
+  overlays, team logos, the scoring ruleset, custom fonts, and the full series/map history — as one
+  backup ZIP, and restores it on any machine (a fresh install included) with a couple of clicks.
+  Not included: this machine's own `.env` (network settings) and which overlays are currently on
+  air, neither of which is meant to travel. Importing is checked and shows you exactly what it
+  contains before anything is changed, and never partially applies a broken or incomplete backup.
 - Multi-map series scoring (see ADR-0015): a new **Series control** admin page tracks points across
   an entire tournament rather than one map at a time. A map closes automatically once the match
   data confirms it has ended, or manually from the new page; either way its final placements,
