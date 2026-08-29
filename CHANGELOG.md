@@ -25,6 +25,15 @@ release time — add to `[Unreleased]` in the same change that makes the change.
   (the worst position it could still possibly finish in, given how many teams remain) — so the
   leaderboard reflects a team's real standing sooner than waiting for it to actually place.
 
+### Fixed
+
+- The built-in fonts (Inter, Rajdhani, Barlow Condensed) previously depended on whatever happened to
+  be installed on the machine running the app — on a fresh Windows install, none of them are, so an
+  overlay quietly rendered in a different font than the one selected. They now load live from Google
+  Fonts (see ADR-0016), each a single named weight ("Inter Bold", "Rajdhani SemiBold", "Barlow
+  Condensed SemiBold") rather than a family, so the same choice looks the same everywhere. This needs
+  internet on the machine running the app; a new **Arial** choice needs none, for a venue without it.
+
 ## [1.0.2] - 2026-08-29
 
 ### Changed

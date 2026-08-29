@@ -5,6 +5,22 @@
     <link rel="icon" type="image/png" href="/images/app-logo-128.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PUBG overlays</title>
+
+    <!--
+      Built-in fonts, loaded live from Google Fonts rather than relying on whatever happens to be
+      installed on the operator's machine (a local install is exactly what made the same overlay
+      look different from one PC to the next). Deliberate trade-off, since ADR-0001 otherwise keeps
+      this app fully offline: without internet on first load, these three fall back to the next
+      font in their stack (see AppearanceEditor's FONT_OPTIONS) rather than failing outright.
+      One weight per family only — "Inter Bold" etc. in the admin's picker names the concrete font
+      this actually renders as, not a family with choices still open.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@700&family=Rajdhani:wght@600&family=Barlow+Condensed:wght@600&display=block"
+    />
   </head>
   <body>
     <div id="root"></div>
