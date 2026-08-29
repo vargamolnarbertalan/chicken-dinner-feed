@@ -52,9 +52,12 @@ describe('computeStandings', () => {
   });
 
   it('sums eliminations across the team and converts them at the configured rate', () => {
+    // A 4-team roster, not 1: with only one team possible in the match at all, it would trivially be
+    // "guaranteed" 1st place from the start (the series-scoring guaranteed-minimum credit — see the
+    // dedicated describe block below), which is not what this test means to exercise.
     const [team] = computeStandings({
       players: [player({ teamNo: 1, slot: 1, kills: 2 }), player({ teamNo: 1, slot: 2, kills: 3 })],
-      roster: roster(1),
+      roster: roster(1, 2, 3, 4),
       ruleset: { ...ruleset, pointsPerElimination: 2 },
       placements: new Map(),
     });
@@ -65,9 +68,10 @@ describe('computeStandings', () => {
   });
 
   it('awards no placement points while the team is still in the match', () => {
+    // Same reason for the 4-team roster as above.
     const [team] = computeStandings({
       players: [player({ teamNo: 1, slot: 1, kills: 1 })],
-      roster: roster(1),
+      roster: roster(1, 2, 3, 4),
       ruleset,
       placements: new Map(),
     });
