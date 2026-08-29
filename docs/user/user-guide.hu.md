@@ -240,6 +240,11 @@ Válassz ki balra egy overlayt, majd állítsd:
   jelentik.
 - **Type and rows** — betűtípus, hány csapat látszódjon, legyen-e színmagyarázat. A betűtípus-lista
   néhány beépített választást tartalmaz, plusz mindent, amit a **Fonts** fülön feltöltöttél.
+  ⚠️ **A beépített betűtípusok közül az Arial kivételével mindegyikhez internet kell** azon a gépen,
+  ahol az app fut — élőben töltődnek be, hogy mindenhol ugyanúgy nézzenek ki, ahelyett hogy attól
+  függenének, mi van éppen telepítve helyben. Internet nélkül csendben egy egyszerű betűtípusra esnek
+  vissza, nem hibáznak. Ha a helyszínen nincs internet, válaszd az **Arial**-t, vagy tölts fel saját
+  betűtípus-fájlt a **Fonts** fülön — mindkettő internet nélkül is működik.
 - **Colours** — a három játékos-állapot (élő, knocked, kiesett), plusz a szöveg- és kiemelő színek. A
   félig átlátszó panel-hátterek a _Panel backgrounds_ alatt vannak, szövegként szerkeszthetők, hogy
   megmaradjon az átlátszóság.
@@ -339,12 +344,23 @@ A mentés azonnal érvénybe lép, meccs közben is.
 
 ## 9. A beállításaid
 
-A konfiguráció fájlokban tárolódik, az alkalmazás mappáján belüli **`backend\data`** könyvtárban.
+### Import & Export fül
 
-- **Mentés:** másold ezt a mappát biztonságos helyre.
-- **Átvitel másik gépre:** telepítsd ott az alkalmazást, majd másold át a `backend\data` mappádat.
-- **Frissítéskor:** az új verziót csomagold ki egy _új_ mappába, majd indítás előtt másold bele a
-  régi `backend\data` mappát.
+A legegyszerűbb módja annak, hogy mindent lements vagy átvigyél egy másik gépre, az **Import &
+Export** fül: az **Export everything** letölt egy ZIP-et az overlayekkel, csapat-logókkal,
+pontszámítási szabályokkal, egyedi fontokkal és a teljes széria/pálya-előzményekkel. Az új gépen (egy
+frissen telepített app is megfelel) válaszd ki ezt a ZIP-et az **Import** alatt — előbb megmutatja,
+pontosan mit tartalmaz, és csak akkor alkalmazza, ha megerősíted.
+
+Szándékosan nincs benne: ennek a gépnek a saját hálózati beállításai, és hogy melyik overlay megy
+éppen élőben — egyik sem olyasmi, amit át akarnál vinni egy másik gépre.
+
+### A fájlok, ha közvetlenül kellenek
+
+A konfiguráció sima fájlokban is tárolódik, az alkalmazás mappáján belüli **`backend\data`**
+könyvtárban, ha inkább saját kezűleg kezelnéd a mentést: másold ezt a mappát a mentéshez, vagy másold
+be egy új telepítésbe, hogy kézzel vidd át a beállításaidat. Frissítéskor az új verziót csomagold ki
+egy _új_ mappába, majd indítás előtt másold bele a régi `backend\data` mappát, ahogy eddig is.
 
 ## 10. Hibaelhárítás
 

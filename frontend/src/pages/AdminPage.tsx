@@ -11,12 +11,14 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
 import { FontManager } from '@/features/admin/FontManager';
+import { ImportExport } from '@/features/admin/ImportExport';
 import { ImportIniButton } from '@/features/admin/ImportIniButton';
 import { InstanceToolbar } from '@/features/admin/InstanceToolbar';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
 import { OnAirBadge } from '@/features/admin/OnAirBadge';
 import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
+import { SeriesControl } from '@/features/admin/SeriesControl';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -27,7 +29,7 @@ import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
 
-type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts';
+type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts' | 'series' | 'importExport';
 
 const SIDEBAR_STORAGE_KEY = 'cdf.admin.sidebar';
 
@@ -291,6 +293,8 @@ export function AdminPage() {
               ['teams', 'Teams'],
               ['scoring', 'Scoring'],
               ['fonts', 'Fonts'],
+              ['series', 'Series control'],
+              ['importExport', 'Import & Export'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -565,6 +569,10 @@ export function AdminPage() {
             </button>
           </div>
         )}
+
+        {tab === 'series' && <SeriesControl />}
+
+        {tab === 'importExport' && <ImportExport />}
       </main>
     </div>
   );

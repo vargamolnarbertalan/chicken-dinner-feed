@@ -90,3 +90,19 @@ export {
   TEAM_NAME_MAX_LENGTH,
 } from './config/team-roster.js';
 export type { TeamRosterEntry, TeamRosterDocument } from './config/team-roster.js';
+
+export {
+  closedMapTeamResultSchema,
+  closedMapResultSchema,
+  seriesDocumentSchema,
+  createDefaultSeriesDocument,
+} from './domain/series.js';
+export type { ClosedMapTeamResult, ClosedMapResult, SeriesDocument } from './domain/series.js';
+
+export {
+  BACKUP_FORMAT_VERSION,
+  backupManifestSchema,
+  backupSummarySchema,
+  backupPreviewSchema,
+} from './domain/backup.js';
+export type { BackupManifest, BackupSummary, BackupPreview } from './domain/backup.js';

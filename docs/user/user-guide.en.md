@@ -236,6 +236,11 @@ Select an overlay on the left, then adjust:
   4K.
 - **Type and rows** — font, how many teams to show, whether the colour legend appears. The font
   list holds a few built-in choices plus anything you have uploaded on the **Fonts** tab.
+  ⚠️ **The built-in fonts other than Arial need internet on the machine running this app** — they
+  load live so they look the same on every PC, rather than depending on what happens to be installed
+  locally. With no internet, they quietly fall back to a plain font instead of failing. If the venue
+  has no internet, pick **Arial** or upload your own font file on the **Fonts** tab — both work with
+  no internet at all.
 - **Colours** — the three player states (alive, knocked, eliminated), plus text and accent colours.
   The translucent panel backgrounds are under _Panel backgrounds_ and are edited as text so you can
   keep them see-through.
@@ -331,12 +336,23 @@ Saving takes effect immediately, including mid-match.
 
 ## 9. Your settings
 
-Your configuration is stored as files in the **`backend\data`** folder inside the app folder.
+### Import & Export tab
 
-- **To back up:** copy that folder somewhere safe.
-- **To move to another computer:** install the app there, then copy your `backend\data` folder over.
-- **When upgrading:** unpack the new version to a _new_ folder, then copy your old `backend\data`
-  into it before starting.
+The easiest way to back up everything, or move it to another computer, is the **Import & Export**
+tab: **Export everything** downloads one ZIP with your overlays, team logos, scoring rules, custom
+fonts and full series/map history. On the new machine (a fresh install works fine), pick that ZIP
+under **Import** — it shows you exactly what it contains before changing anything, and only applies
+it once you confirm.
+
+Not included, on purpose: this machine's own network settings, and which overlays are currently on
+air — neither is something you would want carried over to a different PC.
+
+### The files, if you need them directly
+
+Your configuration is also stored as plain files in the **`backend\data`** folder inside the app
+folder, if you would rather handle a backup yourself: copy that folder to back it up, or copy it into
+a new install to move your settings there by hand. When upgrading, unpack the new version to a _new_
+folder and copy your old `backend\data` into it before starting, exactly as before.
 
 ## 10. Troubleshooting
 

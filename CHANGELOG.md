@@ -11,6 +11,37 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-29
+
+### Added
+
+- **Import & Export** (see ADR-0017): a new admin page downloads everything you have configured —
+  overlays, team logos, the scoring ruleset, custom fonts, and the full series/map history — as one
+  backup ZIP, and restores it on any machine (a fresh install included) with a couple of clicks.
+  Not included: this machine's own `.env` (network settings) and which overlays are currently on
+  air, neither of which is meant to travel. Importing is checked and shows you exactly what it
+  contains before anything is changed, and never partially applies a broken or incomplete backup.
+- Multi-map series scoring (see ADR-0015): a new **Series control** admin page tracks points across
+  an entire tournament rather than one map at a time. A map closes automatically once the match
+  data confirms it has ended, or manually from the new page; either way its final placements,
+  eliminations and points are recorded permanently, with start/end times shown in your own time zone
+  and a duration. Past maps can be corrected or deleted if auto-detection got one wrong. A series can
+  be reset at any time — this clears the recorded history only, not whatever map is currently being
+  played.
+- The PTS column now reflects the whole series: points already banked in earlier maps, plus this
+  map's own eliminations, plus a **guaranteed-minimum** placement credit for any team still alive
+  (the worst position it could still possibly finish in, given how many teams remain) — so the
+  leaderboard reflects a team's real standing sooner than waiting for it to actually place.
+
+### Fixed
+
+- The built-in fonts (Inter, Rajdhani, Barlow Condensed) previously depended on whatever happened to
+  be installed on the machine running the app — on a fresh Windows install, none of them are, so an
+  overlay quietly rendered in a different font than the one selected. They now load live from Google
+  Fonts (see ADR-0016), each a single named weight ("Inter Bold", "Rajdhani SemiBold", "Barlow
+  Condensed SemiBold") rather than a family, so the same choice looks the same everywhere. This needs
+  internet on the machine running the app; a new **Arial** choice needs none, for a venue without it.
+
 ## [1.0.2] - 2026-08-29
 
 ### Changed
@@ -74,7 +105,8 @@ was supposed to guarantee it had a gap.
 - Team placement now trusts PCOB's own `rank` field instead of only an internal elimination-order
   guess, and a roster team that never joined a match no longer outranks one that did.
 
-[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.1.0
 [1.0.2]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.2
 [1.0.1]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.1
 [1.0.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.0

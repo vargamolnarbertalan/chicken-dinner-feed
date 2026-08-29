@@ -2,6 +2,7 @@ import type {
   IngestConnectionState,
   IngestSourceKind,
   IngestStatus,
+  MatchPhase,
   MatchState,
   ScoringRuleset,
   TeamRosterEntry,
@@ -57,6 +58,23 @@ export class MatchStore {
    */
   private readonly seenTeams = new Set<number>();
 
+  /**
+   * Points already banked in earlier, closed maps of the series, and which teams have appeared in
+   * some earlier map even if not this one — set from outside by whatever owns the series history
+   * (specs/SCORING-LOGIC-UPDATE.md). Default to nothing, so a store nobody has told about a series
+   * behaves exactly as it always has: this-match-only points.
+   */
+  private seriesPointsByTeam: ReadonlyMap<number, number> = new Map();
+  private seriesHasAppeared: ReadonlySet<number> = new Set();
+  /**
+   * Set once a match has been banked into series history while its data is still what this store is
+   * showing (frozen, until the next map's first update arrives). Without this, the window between a
+   * map closing and the next match's first update would double-count that map's own points: once as
+   * "this match's own contribution" (this store has not seen anything new yet) and again via
+   * `seriesPointsByTeam`, which by then already includes it.
+   */
+  private suppressedMatchId: string | null = null;
+
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
     this.ruleset = options.ruleset ?? DEFAULT_SCORING_RULESET;
@@ -65,6 +83,26 @@ export class MatchStore {
 
   setRuleset(ruleset: ScoringRuleset): void {
     this.ruleset = ruleset;
+  }
+
+  /** See the field comments above. Called whenever the series history changes. */
+  setSeriesContext(
+    seriesPointsByTeam: ReadonlyMap<number, number>,
+    seriesHasAppeared: ReadonlySet<number>,
+  ): void {
+    this.seriesPointsByTeam = seriesPointsByTeam;
+    this.seriesHasAppeared = seriesHasAppeared;
+  }
+
+  /**
+   * Call once `matchId` has been persisted into series history (a real `ended` close or a manual
+   * "close this map now"). A no-op if `matchId` is not the match this store is currently showing —
+   * it only ever suppresses its *own* current match, never a stale or future one.
+   */
+  suppressContributionFor(matchId: string): void {
+    if (this.lastUpdate?.matchId === matchId) {
+      this.suppressedMatchId = matchId;
+    }
   }
 
   /**
@@ -125,8 +163,23 @@ export class MatchStore {
    * overlay re-animating twice a second for nothing (ADR-0007).
    */
   project(): Projection {
+    return this.buildProjection(this.lastUpdate?.phase ?? 'idle');
+  }
+
+  /**
+   * The match as it would resolve **right now**, as if it had just ended — reuses the exact same
+   * survivor-assignment logic as a real `ended` transition (`resolvePlacements`) instead of
+   * duplicating it. What a manual "close this map now" (specs/SCORING-LOGIC-UPDATE.md) needs: a
+   * still-alive team must get a real placement, not a guaranteed-minimum, once an operator has
+   * decided the map is over. Does not touch the store's own tracked phase or connection state — PCOB
+   * may yet report the real end, and this must not have lied to it.
+   */
+  projectAsEnded(): Projection {
+    return this.buildProjection('ended');
+  }
+
+  private buildProjection(phase: MatchPhase): Projection {
     const update = this.lastUpdate;
-    const phase = update?.phase ?? 'idle';
 
     const teams = computeStandings({
       players: update?.players ?? [],
@@ -134,6 +187,10 @@ export class MatchStore {
       ruleset: this.ruleset,
       placements: this.resolvePlacements(phase),
       presentTeams: this.seenTeams,
+      seriesPointsByTeam: this.seriesPointsByTeam,
+      seriesHasAppeared: this.seriesHasAppeared,
+      suppressThisMapPoints:
+        this.suppressedMatchId !== null && update?.matchId === this.suppressedMatchId,
     });
 
     return {
@@ -159,6 +216,7 @@ export class MatchStore {
     this.eliminationOrder = [];
     this.eliminated.clear();
     this.seenTeams.clear();
+    this.suppressedMatchId = null;
   }
 
   /**

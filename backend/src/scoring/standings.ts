@@ -16,6 +16,28 @@ export interface StandingsInput {
    * the roster" — defaults to exactly that, which reproduces the old behaviour.
    */
   presentTeams?: ReadonlySet<number>;
+  /**
+   * Points already banked in previous, closed maps of the series (specs/SCORING-LOGIC-UPDATE.md).
+   * Added on top of this map's own kill/placement points. Optional and defaults to nothing, so every
+   * existing caller — single-match tests included — keeps computing this-match-only points.
+   */
+  seriesPointsByTeam?: ReadonlyMap<number, number>;
+  /**
+   * Team numbers that have appeared in some *previous* map of the series, even if not in this one
+   * (a bye, or data lagging at the very start of a new map). Used only to break the "never appeared"
+   * sort tie correctly across a series — it does not change the `hasAppeared` field itself, which
+   * stays this-match-only because the overlay's grey-out relies on that exact meaning.
+   */
+  seriesHasAppeared?: ReadonlySet<number>;
+  /**
+   * True once this match's own result has already been banked into `seriesPointsByTeam` (a map that
+   * closed but whose data is still what `MatchStore` is showing, frozen, until the next map's first
+   * update arrives — ADR-0007's "freeze until the next map"). Suppresses this map's own kill and
+   * placement points from being added a *second* time on top of the series total that already
+   * includes them; `killPoints`/`placementPoints` are still computed and returned as normal; only
+   * `totalPoints` stops summing them in. Defaults to false.
+   */
+  suppressThisMapPoints?: boolean;
 }
 
 /**
@@ -33,9 +55,17 @@ function isStanding(player: { liveState: IngestPlayer['liveState'] }): boolean {
   );
 }
 
+/**
+ * A confirmed final placement scores its own row in the table; a placement that is not yet known
+ * scores the **guaranteed-minimum** row instead — the worst position any currently-alive team could
+ * still end up in, given how many teams remain (specs/SCORING-LOGIC-UPDATE.md). If 9 teams started
+ * and one has been eliminated, none of the 8 survivors can finish worse than 8th, so all 8 are
+ * credited with 8th-place points already, on top of whatever they bank later for their real,
+ * eventual placement. Positions past the end of the table score nothing either way, so a short table
+ * means "only the top N score" for both a real and a guaranteed-minimum placement.
+ */
 function placementPointsFor(placement: number | undefined, ruleset: ScoringRuleset): number {
   if (placement === undefined) return 0;
-  // Positions past the end of the table score nothing, so a short table means "only the top N score".
   return ruleset.placementPoints[placement - 1] ?? 0;
 }
 
@@ -55,6 +85,9 @@ function placementPointsFor(placement: number | undefined, ruleset: ScoringRules
 export function computeStandings(input: StandingsInput): Team[] {
   const { players, roster, ruleset, placements } = input;
   const presentTeams = input.presentTeams ?? new Set(roster.map((entry) => entry.teamNo));
+  const seriesPointsByTeam = input.seriesPointsByTeam;
+  const seriesHasAppeared = input.seriesHasAppeared;
+  const suppressThisMapPoints = input.suppressThisMapPoints ?? false;
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -66,7 +99,7 @@ export function computeStandings(input: StandingsInput): Team[] {
     }
   }
 
-  const unranked = roster.map((entry) => {
+  const base = roster.map((entry) => {
     const teamPlayers = (playersByTeam.get(entry.teamNo) ?? [])
       .slice()
       .sort((a, b) => a.slot - b.slot);
@@ -74,9 +107,7 @@ export function computeStandings(input: StandingsInput): Team[] {
     const eliminations = teamPlayers.reduce((total, player) => total + player.kills, 0);
     const standingPlayerCount = teamPlayers.filter(isStanding).length;
     const placement = placements.get(entry.teamNo);
-
-    const killPoints = eliminations * ruleset.pointsPerElimination;
-    const placementPoints = placementPointsFor(placement, ruleset);
+    const hasAppeared = presentTeams.has(entry.teamNo);
 
     return {
       teamNo: entry.teamNo,
@@ -85,28 +116,54 @@ export function computeStandings(input: StandingsInput): Team[] {
       players: teamPlayers satisfies Player[],
       standingPlayerCount,
       eliminations,
-      killPoints,
-      placementPoints,
-      totalPoints: killPoints + placementPoints,
-      placement: placement ?? null,
+      placement,
       // A team with no reported players has not been wiped out — it has not been seen. Treating
       // "unknown" as "eliminated" would black out the whole table before the first update arrives.
       isEliminated: teamPlayers.length > 0 && standingPlayerCount === 0,
-      hasAppeared: presentTeams.has(entry.teamNo),
+      hasAppeared,
     };
   });
 
-  // Present teams first, then points, then eliminations, then team number — deterministic, so equal
-  // teams never swap places between snapshots and trigger a pointless reorder animation on air. A
-  // roster team that never showed up this match must never outrank one that actually played, however
-  // few points the real one has earned so far.
-  const ranked = unranked.sort(
-    (a, b) =>
-      Number(b.hasAppeared) - Number(a.hasAppeared) ||
+  // How many currently-alive, present teams share the guaranteed-minimum placement described on
+  // `placementPointsFor`. A team that has not appeared at all cannot be "guaranteed" anything.
+  const standingCount = base.filter(
+    (team) => team.hasAppeared && team.placement === undefined,
+  ).length;
+
+  const unranked = base.map((team) => {
+    const killPoints = team.eliminations * ruleset.pointsPerElimination;
+    const placementPoints =
+      team.placement !== undefined
+        ? placementPointsFor(team.placement, ruleset)
+        : team.hasAppeared
+          ? placementPointsFor(standingCount, ruleset)
+          : 0;
+    const seriesPoints = seriesPointsByTeam?.get(team.teamNo) ?? 0;
+
+    return {
+      ...team,
+      killPoints,
+      placementPoints,
+      totalPoints: (suppressThisMapPoints ? 0 : killPoints + placementPoints) + seriesPoints,
+      placement: team.placement ?? null,
+    };
+  });
+
+  // Present teams first (this match, or anywhere earlier in the series), then points, then this
+  // map's eliminations, then team name — deterministic, so equal teams never swap places between
+  // snapshots and trigger a pointless reorder animation on air. A roster team that has never
+  // appeared, in this map or any earlier one in the series, must never outrank one that actually
+  // played, however few points the real one has earned so far.
+  const ranked = unranked.sort((a, b) => {
+    const aAppeared = a.hasAppeared || (seriesHasAppeared?.has(a.teamNo) ?? false);
+    const bAppeared = b.hasAppeared || (seriesHasAppeared?.has(b.teamNo) ?? false);
+    return (
+      Number(bAppeared) - Number(aAppeared) ||
       b.totalPoints - a.totalPoints ||
       b.eliminations - a.eliminations ||
-      a.teamNo - b.teamNo,
-  );
+      a.name.localeCompare(b.name)
+    );
+  });
 
   return ranked.map((team, index) => ({ ...team, rank: index + 1 }));
 }

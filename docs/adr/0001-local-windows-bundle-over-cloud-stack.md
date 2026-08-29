@@ -42,6 +42,9 @@ software's browser source.
 
 - The app sits on the same machine as the data source — no tunnel, no ingress, no cloud dependency.
 - Works fully offline during a broadcast. Internet is required only during installation.
+  > **2026-08-29:** one narrow, documented exception — the built-in font choices load live from
+  > Google Fonts (ADR-0016), so they need internet at page load. Everything else, including the
+  > "Arial" font choice, stays fully offline as described here.
 - No hosting cost, no TLS certificates, no attack surface exposed to the internet.
 - The whole live data path is in-process or over loopback: latency is negligible and predictable.
 - Dramatically simpler failure model to debug at a venue at 2am.

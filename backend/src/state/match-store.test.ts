@@ -162,4 +162,118 @@ describe('MatchStore', () => {
     // Team 1 appeared last match, not this one.
     expect(byTeam.get(1)?.hasAppeared).toBe(false);
   });
+
+  describe('projectAsEnded', () => {
+    it('gives every still-alive team a real, final placement instead of a guaranteed-minimum', () => {
+      // A manual "close this map now" needs the same survivor-assignment `resolvePlacements` already
+      // does for a real `ended` transition — reused rather than duplicated.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3) });
+
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, kills: 3, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, kills: 1, liveState: 'alive' }),
+            player({ teamNo: 3, slot: 1, kills: 0, liveState: 'dead' }),
+          ],
+        }),
+      );
+
+      const { match } = store.projectAsEnded();
+      const placements = match.teams.map((team) => team.placement).filter((p) => p !== null);
+
+      expect(match.phase).toBe('ended');
+      expect(new Set(placements).size).toBe(3); // Every team gets a distinct, real placement.
+      // The two survivors are ranked by kills for the slots the API/elimination order left open.
+      expect(match.teams.find((t) => t.teamNo === 1)?.placement).toBe(1);
+      expect(match.teams.find((t) => t.teamNo === 2)?.placement).toBe(2);
+    });
+
+    it('does not mutate the store’s own tracked phase or connection state', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1 })] }));
+
+      store.projectAsEnded();
+
+      // A real, later update for the same still-live match must not have been affected.
+      expect(store.project().match.phase).toBe('live');
+    });
+  });
+
+  describe('setSeriesContext', () => {
+    it('adds series points on top of this match and keeps a never-appeared team last', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      store.setSeriesContext(new Map([[1, 25]]), new Set());
+
+      store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 1 })] }));
+
+      const { match } = store.project();
+      const byTeam = new Map(match.teams.map((team) => [team.teamNo, team]));
+
+      // Default ruleset: 1 kill point + guaranteed-minimum for the 1 team standing (10) + 25 series.
+      expect(byTeam.get(1)?.totalPoints).toBe(36);
+      expect(match.teams[0]?.teamNo).toBe(1); // Team 2 never appeared, still sorts last.
+    });
+
+    it('defaults to no series context, adding nothing beyond this match on its own', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 2 })] }));
+
+      const { match } = store.project();
+
+      // 2 kill points + the guaranteed-minimum for the only team standing (10) + 0 series (unset).
+      expect(match.teams[0]?.totalPoints).toBe(12);
+    });
+  });
+
+  describe('suppressContributionFor', () => {
+    it('stops re-adding a just-closed match’s own points once the series total already includes them', () => {
+      // Regression: found live. A map auto-closes, its points get banked into the series total, but
+      // MatchStore keeps showing that same match's data (frozen) until the next match's first
+      // update — without suppression, that frozen window double-counted the closing map's points.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+
+      const beforeSuppression = store.project().match.teams[0];
+      expect(beforeSuppression?.totalPoints).toBe(18); // killPoints(8) + placementPoints[0] (10).
+
+      // The series total now includes this same match's 18 points, as it would right after close.
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+      store.suppressContributionFor('match-1');
+
+      const afterSuppression = store.project().match.teams[0];
+      expect(afterSuppression?.totalPoints).toBe(18); // Unchanged — not 36.
+    });
+
+    it('is a no-op for a match id other than the one currently being shown', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+
+      store.suppressContributionFor('some-other-match');
+
+      expect(store.project().match.teams[0]?.totalPoints).toBe(36); // Not suppressed.
+    });
+
+    it('clears itself once a genuinely new match starts', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(
+        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      );
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
+      store.suppressContributionFor('match-1');
+
+      store.applyUpdate(
+        update({ matchId: 'match-2', players: [player({ teamNo: 1, slot: 1, kills: 3 })] }),
+      );
+
+      // The new match's own contribution counts normally again, on top of the series total:
+      // 3 kill points + the guaranteed-minimum for the only team standing (10) + 18 series.
+      expect(store.project().match.teams[0]?.totalPoints).toBe(31);
+    });
+  });
 });

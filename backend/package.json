@@ -1,6 +1,6 @@
 {
   "name": "@cdf/backend",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "description": "Fastify service: ingests PCOB match data, holds live state, serves the admin API and the built frontend.",
   "type": "module",
@@ -22,6 +22,7 @@
     "@fastify/swagger": "^9.8.1",
     "@fastify/swagger-ui": "^6.1.1",
     "@fastify/websocket": "^11.3.0",
+    "adm-zip": "^0.6.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.11.3",
     "fastify-type-provider-zod": "^7.0.0",

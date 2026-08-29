@@ -88,7 +88,7 @@ function isStanding(player: SimPlayer): boolean {
 export class MockSource implements IngestSource {
   readonly kind: IngestSourceKind = 'mock';
 
-  private readonly roster: readonly TeamRosterEntry[];
+  private roster: readonly TeamRosterEntry[];
   private readonly tickMs: number;
   private readonly rng: () => number;
 
@@ -104,6 +104,15 @@ export class MockSource implements IngestSource {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
     this.tickMs = options.tickMs ?? 2000;
     this.rng = createRng(options.seed ?? 20260809);
+  }
+
+  /**
+   * Rehearse against whichever roster the operator has actually configured (imported from an ini,
+   * say) instead of the built-in stand-in names. Applied on the next `resetMatch()` — the match
+   * already in progress keeps its current player list rather than reshuffling mid-fight.
+   */
+  setRoster(roster: readonly TeamRosterEntry[]): void {
+    this.roster = roster;
   }
 
   start(events: IngestSourceEvents): void {

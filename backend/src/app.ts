@@ -17,14 +17,17 @@ import { createIngestSource } from './ingest/index.js';
 import { ConfigStore } from './persistence/config-store.js';
 import { FontStore, MAX_FONT_BYTES } from './persistence/font-store.js';
 import { LogoStore, MAX_LOGO_BYTES } from './persistence/logo-store.js';
+import { backupRoutes } from './routes/backup.js';
 import { configRoutes } from './routes/config.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { fontRoutes } from './routes/fonts.js';
 import { logoRoutes } from './routes/logos.js';
 import { healthRoutes } from './routes/health.js';
 import { overlayControlRoutes } from './routes/overlay-control.js';
+import { seriesRoutes } from './routes/series.js';
 import { MatchStore } from './state/match-store.js';
 import { OverlayControlStore } from './state/overlay-control-store.js';
+import { SeriesStore } from './state/series-store.js';
 import { LiveHub } from './ws/live-hub.js';
 import { liveRoutes } from './ws/routes.js';
 
@@ -97,6 +100,12 @@ export async function buildApp(): Promise<AppContext> {
   const fontStore = new FontStore(config.dataDir);
   await fontStore.init();
 
+  const seriesStore = new SeriesStore({
+    dataDir: config.dataDir,
+    onWarn: (message, detail) => app.log.error({ detail }, message),
+  });
+  await seriesStore.load();
+
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
   const store = new MatchStore({
@@ -104,6 +113,7 @@ export async function buildApp(): Promise<AppContext> {
     roster: configStore.teams.current.teams,
     ruleset: configStore.scoring.current,
   });
+  store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
   const overlayControl = new OverlayControlStore();
   const hub = new LiveHub({
     store,
@@ -119,6 +129,10 @@ export async function buildApp(): Promise<AppContext> {
     // Field-mapping warnings go through the app logger so they land in the same place an operator
     // is already looking. Each distinct message is emitted once per run, not once per poll.
     log: (message) => app.log.warn({ source: 'pcob' }, message),
+    // Rehearsing with the mock should mean rehearsing with the operator's own configured roster
+    // (imported from an ini, typically), not the built-in stand-in names — otherwise editing the
+    // roster silently has no effect on what the mock actually simulates.
+    roster: configStore.teams.current.teams,
   });
 
   // Configuration changes have to reach the live path immediately: a new scoring ruleset changes
@@ -127,6 +141,7 @@ export async function buildApp(): Promise<AppContext> {
     switch (change) {
       case 'teams':
         store.setRoster(configStore.teams.current.teams);
+        ingestSource.setRoster?.(configStore.teams.current.teams);
         hub.schedulePublish();
         break;
       case 'scoring':
@@ -159,6 +174,40 @@ export async function buildApp(): Promise<AppContext> {
     isConfigured: (instanceId) => configStore.findInstance(instanceId) !== null,
   });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
+
+  // Refreshes what `MatchStore` adds on top of this map's own points, after anything that can change
+  // the series total: a new ingest update (a map may have just auto-closed), or an operator action
+  // on the Series control page (close now, reset, edit, delete).
+  const refreshSeriesContext = (): void => {
+    store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
+  };
+
+  await app.register(seriesRoutes, {
+    prefix: '/api',
+    series: seriesStore,
+    match: store,
+    config: configStore,
+    onSeriesChanged: () => {
+      refreshSeriesContext();
+      hub.schedulePublish();
+    },
+  });
+
+  // Import & Export (specs, "Import & Export"): the four config documents an import writes go
+  // through ConfigStore's own save methods, so the subscribe listener above already refreshes the
+  // roster, ruleset and open browser sources exactly as a normal operator edit would. Only the
+  // series history bypasses ConfigStore, so it needs the same explicit refresh onSeriesChanged does.
+  await app.register(backupRoutes, {
+    prefix: '/api',
+    config: configStore,
+    series: seriesStore,
+    logos: logoStore,
+    fonts: fontStore,
+    onImported: () => {
+      refreshSeriesContext();
+      hub.schedulePublish();
+    },
+  });
 
   // Deliberately not under /api: this is the address an operator types into a Companion button.
   // Registered before the static plugin so its exact route wins over the SPA wildcard.
@@ -213,7 +262,25 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
-          hub.schedulePublish();
+          const projection = store.project();
+          // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
+          // that one tick so a map that closes this instant goes out already reflecting its own
+          // series total, rather than catching up only on the next poll.
+          seriesStore
+            .observeMatch(projection, Date.now())
+            .then((closed) => {
+              // The window between a map closing and the next match's first update would otherwise
+              // double-count that map's points: once as "this match's own contribution" (store has
+              // not seen anything new yet) and again via the series total, which now includes them.
+              if (closed && projection.match.matchId !== null) {
+                store.suppressContributionFor(projection.match.matchId);
+              }
+            })
+            .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
+            .finally(() => {
+              refreshSeriesContext();
+              hub.schedulePublish();
+            });
         },
         onStatus(state, message) {
           store.setStatus(state, message ?? null);
