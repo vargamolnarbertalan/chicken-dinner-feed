@@ -164,6 +164,20 @@ explicitly warning against exactly that kind of drift. Now read from `package.js
 None of this changes the branching, tagging or bundle-contents decisions above — it is the
 difference between a release process that reads correctly and one that has actually been run.
 
+## Hardened 2026-08-29 — a fifth first-run seed file broke the contamination check
+
+`v1.1.0`'s first tag attempt failed the smoke test's `diff -rq` check: `SeriesStore` (added the same
+release) creates `backend/data/series.json` on first boot, the same class of first-run seed file as
+the four `JsonDocument`s the check already excluded — but nobody had updated the check when the fifth
+one was added. Added `-x series.json` to the smoke-test diff and the equivalent pattern to "Verify the
+ZIP contains nothing it should not", matching the existing four. No release had actually been
+published under the failed tag (it failed before "Create ZIP"), so the tag was moved rather than
+bumping to a new patch version.
+
+The underlying lesson repeats the one from 2026-08-28: any new `JsonDocument`/store that seeds a file
+or directory on first run needs the release workflow's exclusion lists updated in the same change —
+this is not currently enforced by anything other than remembering to do it.
+
 ## Revisit when
 
 - The bundle needs to auto-update, or the ZIP becomes unwieldy for operators.

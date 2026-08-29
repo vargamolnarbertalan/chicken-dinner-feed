@@ -188,7 +188,7 @@ jobs:
           if ! diff -rq "$BUNDLE" "$SMOKE" \
                -x node_modules -x package-lock.json -x server.log \
                -x overlay-instances.json -x scoring-ruleset.json -x custom-fonts.json \
-               -x team-roster.json; then
+               -x team-roster.json -x series.json; then
             echo "::error::The smoke test changed files outside the paths it is allowed to touch."
             exit 1
           fi
@@ -222,7 +222,8 @@ jobs:
           FOUND=0
           for PATTERN in '/node_modules/' '/server\.log$' \
                          '/backend/data/overlay-instances\.json$' '/backend/data/scoring-ruleset\.json$' \
-                         '/backend/data/custom-fonts\.json$' '/backend/data/team-roster\.json$'; do
+                         '/backend/data/custom-fonts\.json$' '/backend/data/team-roster\.json$' \
+                         '/backend/data/series\.json$'; do
             if echo "$LISTING" | grep -qE "$PATTERN"; then
               echo "::error::The published ZIP contains something matching '$PATTERN'."
               echo "$LISTING" | grep -E "$PATTERN" | head -10
