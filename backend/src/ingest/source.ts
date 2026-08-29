@@ -3,6 +3,7 @@ import type {
   IngestSourceKind,
   MatchPhase,
   PlayerLiveState,
+  TeamRosterEntry,
 } from '@cdf/shared';
 
 /**
@@ -50,4 +51,10 @@ export interface IngestSource {
   readonly kind: IngestSourceKind;
   start(events: IngestSourceEvents): void;
   stop(): Promise<void>;
+  /**
+   * Rehearse against the operator's actual configured roster rather than a hardcoded stand-in.
+   * Mock-only — a real source has no roster concept of its own, it just reports whichever teams the
+   * game sends. Optional so `PcobSource` needs no no-op implementation.
+   */
+  setRoster?(roster: readonly TeamRosterEntry[]): void;
 }

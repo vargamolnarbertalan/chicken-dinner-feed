@@ -4,6 +4,8 @@ import type {
   OverlayInstance,
   OverlayInstancesDocument,
   ScoringRuleset,
+  SeriesDocument,
+  Team,
   TeamRosterDocument,
   TeamRosterEntry,
 } from '@cdf/shared';
@@ -117,4 +119,22 @@ export const api = {
       `/overlays/${instanceId}/${action}`,
       { method: 'POST' },
     ),
+
+  getSeries: () => request<{ document: SeriesDocument; standings: Team[] }>('/series'),
+
+  closeMapNow: () => request<SeriesDocument>('/series/close-map', { method: 'POST' }),
+
+  resetSeries: () => request<SeriesDocument>('/series/reset', { method: 'POST' }),
+
+  updateClosedMap: (
+    mapId: string,
+    teams: { teamNo: number; placement: number; eliminations: number }[],
+  ) =>
+    request<SeriesDocument>(`/series/maps/${mapId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ teams }),
+    }),
+
+  deleteClosedMap: (mapId: string) =>
+    request<SeriesDocument>(`/series/maps/${mapId}`, { method: 'DELETE' }),
 };
