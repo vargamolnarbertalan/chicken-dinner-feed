@@ -212,22 +212,20 @@ A válaszban az `actions` alatt minden cím szerepel, amit az alkalmazás kiszol
 
 ### Ha a Companion másik gépen fut
 
-Alapból az alkalmazás csak a saját gépéről érhető el, tehát egy másik gépen futó Companion nem éri
-el. Ha engedni akarod:
+Alapból az alkalmazás minden hálózati interfészen figyel, tehát egy másik gépen futó Companion már
+eleve eléri — csak a `127.0.0.1` helyett az overlay-gép hálózati címét használd, pl.
+`http://192.168.1.50:4317/feedback`. A `/feedback` válaszában szereplő címek ahhoz igazodnak, ahogy
+lekérdezted, tehát minden, amit visszaad, már arra a gépre van megírva, és egyenesen bemásolható
+egy gombba.
 
-1. Nyisd meg a `backend\.env` fájlt Jegyzettömbben, és írd át a `HOST=127.0.0.1` sort erre:
-   `HOST=0.0.0.0`.
-2. A Companionban a `127.0.0.1` helyett az overlay-gép hálózati címét használd.
-
-A `/feedback` válaszában szereplő címek ahhoz igazodnak, ahogy lekérdezted: ha
-`http://192.168.1.50:4317/feedback` címen nyitod meg, akkor minden, amit visszaad, már arra a gépre
-van megírva, és egyenesen bemásolható egy gombba.
-
-⚠️ **Ezzel az admin felület is elérhetővé válik mindenki számára a hálózaton**, és az adminon nincs
-jelszó. Zárt közvetítői hálózaton ez általában rendben van. Ha szeretnél némi védelmet, állíts be egy
+⚠️ **Ezzel az admin felület is elérhető mindenki számára a hálózaton**, és az adminon nincs jelszó.
+Zárt közvetítői hálózaton ez általában rendben van. Ha szeretnél némi védelmet, állíts be egy
 `CONTROL_TOKEN=valami-amit-te-választasz` értéket a `backend\.env` fájlban, és a Companionban fűzd a
 címek végére: `?token=valami-amit-te-választasz` — **a `/feedback` végére is**, mert azt ugyanez a
 token védi. Ez a show/hide gombokat és a feedback oldalt védi, az admin felületet nem.
+
+Ha inkább teljesen le akarod zárni a hálózat felé (egygépes felállás, nincs másik gépen Companion),
+állítsd be `HOST=127.0.0.1`-et a `backend\.env` fájlban.
 
 ## 8. Overlayek beállítása
 
