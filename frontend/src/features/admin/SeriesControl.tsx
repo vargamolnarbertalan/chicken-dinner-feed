@@ -35,6 +35,7 @@ export function SeriesControl() {
 
   const [seriesDocument, setSeriesDocument] = useState<SeriesDocument | null>(null);
   const [fallbackStandings, setFallbackStandings] = useState<Team[]>([]);
+  const [pendingCloseMap, setPendingCloseMap] = useState(false);
   const [pendingReset, setPendingReset] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ClosedMapResult | null>(null);
   const [editingMapId, setEditingMapId] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function SeriesControl() {
     currentStandings.find((team) => team.teamNo === teamNo)?.name ?? `Team ${teamNo}`;
 
   const closeMapNow = async () => {
+    setPendingCloseMap(false);
     try {
       setSeriesDocument(await api.closeMapNow());
       toast.success('Map closed', 'It is now part of the series history below.');
@@ -136,6 +138,20 @@ export function SeriesControl() {
   return (
     <div className="grid max-w-4xl gap-6">
       <ConfirmDialog
+        open={pendingCloseMap}
+        title="Close the current map?"
+        confirmLabel="Close it"
+        onCancel={() => setPendingCloseMap(false)}
+        onConfirm={() => void closeMapNow()}
+      >
+        <p>
+          Every currently alive team gets its final placement for this map now, ranked by
+          eliminations — the same as if the match had actually ended. This becomes a permanent entry
+          in the series history below, though it can still be corrected or deleted afterward.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
         open={pendingReset}
         title="Reset the series?"
         confirmLabel="Reset it"
@@ -171,7 +187,7 @@ export function SeriesControl() {
         <button
           type="button"
           className="border-border rounded border px-3 py-1.5 text-sm"
-          onClick={() => void closeMapNow()}
+          onClick={() => setPendingCloseMap(true)}
         >
           Close current map now
         </button>
