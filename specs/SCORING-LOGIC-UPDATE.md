@@ -6,7 +6,7 @@ Legyen különálló táblázatokban megjelenítve a jelenlegi összesített ál
 
 ## Automata meccs lezárás
 
-Ha az API vagy valami egyéb logika alapján el tudjuk dönteni, hogy a futó pálya véget ért, akkor mentsük el, mint lezárt pálya. Erre a funkcióra a Series control aloldalon legyen manuális gomb is, és azt is tegyük lehetővé, hogy a korábbi pályák eredményeit visszamenőlegesen átírjuk, ha esetleg az automata felismerés hibát vét. 
+Ha az API vagy valami egyéb logika alapján el tudjuk dönteni, hogy a futó pálya véget ért, akkor mentsük el, mint lezárt pálya. Erre a funkcióra a Series control aloldalon legyen manuális gomb is, és azt is tegyük lehetővé, hogy a korábbi pályák eredményeit visszamenőlegesen átírjuk, ha esetleg az automata felismerés hibát vét.
 
 Ha az API streameli, hogy milyen páylán (pl. Erangel, Miramar stb) vagyunk akkor mentsük el, ha nem, nem érdekes.
 
@@ -26,11 +26,12 @@ Ez azt is jelenti, hogy live-table szerűen az admin által konfigurált placeme
 
 Ezeket a real time live update-eket az eredeti, meccs előtti pontjukhoz adjuk, tehát nem duplán adjuk hozzá, hogy előbb hozzáadunk top 8-ban 1-et, utána top 6-ban kettőt stb, hanem minden kiesésnél deltát számolunk, vagy az eredetihez képest újraszámoljuk.
 
-Ezen mutató alapján történik a csapatok rendezése. 
+Ezen mutató alapján történik a csapatok rendezése.
 
 Ha két ugyanannyi PTS van, akkor az ELIMS a tiebreaker, ha az is egyezik, akkor csapatnév ABC.
 
- Azt, hogy melyik csapat él még és melyik esett már ki, azt csak az jelzi, hogy ki van szürkítve, de nem kell minden élő csapatnak a felső blokkban lennie és minden kiesett csapatnak alul tömbösítve, simán a PTS a sorrend meghatározója. Tehát lehet, hogy valaki az első, hiába a futó pályából már kiesett, mert olyan sok pontja van. Ez esetben első, csak simán szürke.
+Azt, hogy melyik csapat él még és melyik esett már ki, azt csak az jelzi, hogy ki van szürkítve, de nem kell minden élő csapatnak a felső blokkban lennie és minden kiesett csapatnak alul tömbösítve, simán a PTS a sorrend meghatározója. Tehát lehet, hogy valaki az első, hiába a futó pályából már kiesett, mert olyan sok pontja van. Ez esetben első, csak simán szürke.
 
- ## Spreadsheet, amit használhatsz puskának, mert versenybírók töltötték, bár új infót nem biztos, hogy tartalmaz számunkra:
- https://docs.google.com/spreadsheets/d/1mKfiI0hfOJgCIPXW2Cvqf62QyP2PWbUo-qSOmmWRyKc/edit?pli=1&gid=192081450#gid=192081450
+## Spreadsheet, amit használhatsz puskának, mert versenybírók töltötték, bár új infót nem biztos, hogy tartalmaz számunkra:
+
+https://docs.google.com/spreadsheets/d/1mKfiI0hfOJgCIPXW2Cvqf62QyP2PWbUo-qSOmmWRyKc/edit?pli=1&gid=192081450#gid=192081450
