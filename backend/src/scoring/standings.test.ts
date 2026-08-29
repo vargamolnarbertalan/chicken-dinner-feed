@@ -158,9 +158,11 @@ describe('computeStandings', () => {
     expect(teams.map((team) => team.teamNo).sort()).toEqual([1, 2, 3]);
   });
 
-  it('breaks ties by eliminations, then by team number, so equal teams never swap places', () => {
+  it('breaks ties by eliminations, then by team name, so equal teams never swap places', () => {
     // A non-deterministic tie-break would reorder rows between identical snapshots and trigger
-    // reorder animations on air for no reason.
+    // reorder animations on air for no reason. T1/T2/T3 happen to sort the same way alphabetically
+    // as by team number, so this alone would not catch a regression to number-based sorting — see
+    // the next test for that.
     const teams = computeStandings({
       players: [
         player({ teamNo: 3, slot: 1, kills: 1 }),
@@ -173,6 +175,20 @@ describe('computeStandings', () => {
     });
 
     expect(teams.map((team) => team.teamNo)).toEqual([1, 2, 3]);
+  });
+
+  it('breaks a final tie alphabetically by name, even when that disagrees with team number order', () => {
+    const teams = computeStandings({
+      players: [],
+      roster: [
+        { teamNo: 1, name: 'Zebra', logoUrl: null },
+        { teamNo: 2, name: 'Alpha', logoUrl: null },
+      ],
+      ruleset,
+      placements: new Map(),
+    });
+
+    expect(teams.map((team) => team.name)).toEqual(['Alpha', 'Zebra']);
   });
 
   it('orders players within a team by slot, so each player keeps the same bar', () => {
@@ -229,5 +245,103 @@ describe('computeStandings', () => {
     expect(teams.map((team) => team.teamNo)).toEqual([1, 2]);
     expect(teams[0]?.hasAppeared).toBe(true);
     expect(teams[1]?.hasAppeared).toBe(false);
+  });
+
+  describe('multi-map series scoring (specs/SCORING-LOGIC-UPDATE.md)', () => {
+    const pubgmRuleset: ScoringRuleset = {
+      schemaVersion: 1,
+      id: 'pubgm',
+      name: 'PUBGM standard',
+      pointsPerElimination: 1,
+      placementPoints: [10, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    };
+
+    it('credits every still-alive team the guaranteed-minimum placement for 8 survivors out of 9', () => {
+      // The spec's own example: 9 teams started, 1 has been eliminated (placed 9th), so none of the
+      // remaining 8 can finish worse than 8th — all 8 are credited that now, on top of kills.
+      const teamNos = Array.from({ length: 9 }, (_, i) => i + 1);
+      const teams = computeStandings({
+        players: teamNos.map((teamNo) => player({ teamNo, slot: 1 })),
+        roster: roster(...teamNos),
+        ruleset: pubgmRuleset,
+        placements: new Map([[9, 9]]), // team 9 is the only one eliminated so far.
+      });
+
+      const survivors = teams.filter((team) => team.teamNo !== 9);
+      expect(survivors).toHaveLength(8);
+      for (const team of survivors) {
+        expect(team.placement).toBeNull();
+        expect(team.placementPoints).toBe(1); // placementPoints[8 - 1]
+      }
+      expect(teams.find((team) => team.teamNo === 9)?.placementPoints).toBe(0); // 9th scores nothing.
+    });
+
+    it('credits both remaining teams the 2nd-place guarantee once only 2 are left alive', () => {
+      const teams = computeStandings({
+        players: [player({ teamNo: 1, slot: 1 }), player({ teamNo: 2, slot: 1 })],
+        roster: roster(1, 2),
+        ruleset: pubgmRuleset,
+        placements: new Map(),
+      });
+
+      expect(teams.every((team) => team.placement === null)).toBe(true);
+      expect(teams.every((team) => team.placementPoints === 6)).toBe(true); // placementPoints[2 - 1]
+    });
+
+    it('replaces the guaranteed-minimum with the real placement once it is known, never less', () => {
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 3 })],
+        roster: roster(1),
+        ruleset: pubgmRuleset,
+        placements: new Map([[1, 1]]), // finished 1st.
+      });
+
+      expect(team?.placementPoints).toBe(10); // the real 1st-place value, not a guaranteed-minimum.
+      expect(team?.totalPoints).toBe(13);
+    });
+
+    it('adds series points from closed maps on top of this map, recomputed fresh rather than accumulated', () => {
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 2 })],
+        roster: roster(1),
+        ruleset: pubgmRuleset,
+        placements: new Map(),
+        seriesPointsByTeam: new Map([[1, 17]]),
+      });
+
+      // killPoints (2) + guaranteed-minimum for 1 team standing (placementPoints[0] = 10) + series (17).
+      expect(team?.placementPoints).toBe(10);
+      expect(team?.totalPoints).toBe(29);
+    });
+
+    it('does not credit a guaranteed-minimum to a team that has not appeared in this map at all', () => {
+      const teams = computeStandings({
+        players: [player({ teamNo: 1, slot: 1 })],
+        roster: roster(1, 2),
+        ruleset: pubgmRuleset,
+        placements: new Map(),
+        presentTeams: new Set([1]),
+      });
+
+      expect(teams.find((team) => team.teamNo === 2)?.placementPoints).toBe(0);
+    });
+
+    it('sorts a team that sat out this map, but appeared earlier in the series, ahead of a true ghost', () => {
+      // A bye or a data lag at the very start of a new map must not drop a real, scoring team behind
+      // a roster slot that has never once appeared, anywhere in the series.
+      const teams = computeStandings({
+        players: [],
+        roster: roster(1, 2),
+        ruleset: pubgmRuleset,
+        placements: new Map(),
+        presentTeams: new Set(), // neither team has appeared in THIS map yet.
+        seriesPointsByTeam: new Map([[1, 12]]),
+        seriesHasAppeared: new Set([1]), // team 1 played (and scored) in an earlier map.
+      });
+
+      expect(teams.map((team) => team.teamNo)).toEqual([1, 2]);
+      // The exposed `hasAppeared` stays this-match-only — the overlay's grey-out depends on that.
+      expect(teams[0]?.hasAppeared).toBe(false);
+    });
   });
 });

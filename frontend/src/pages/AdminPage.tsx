@@ -17,6 +17,7 @@ import { CopyableUrl } from '@/features/admin/CopyableUrl';
 import { OnAirBadge } from '@/features/admin/OnAirBadge';
 import { OverlayPreview } from '@/features/admin/OverlayPreview';
 import { ScoringEditor } from '@/features/admin/ScoringEditor';
+import { SeriesControl } from '@/features/admin/SeriesControl';
 import { TeamRosterEditor } from '@/features/admin/TeamRosterEditor';
 import { api, ApiError } from '@/lib/api';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -27,7 +28,7 @@ import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
 
-type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts';
+type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts' | 'series';
 
 const SIDEBAR_STORAGE_KEY = 'cdf.admin.sidebar';
 
@@ -291,6 +292,7 @@ export function AdminPage() {
               ['teams', 'Teams'],
               ['scoring', 'Scoring'],
               ['fonts', 'Fonts'],
+              ['series', 'Series control'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -565,6 +567,8 @@ export function AdminPage() {
             </button>
           </div>
         )}
+
+        {tab === 'series' && <SeriesControl />}
       </main>
     </div>
   );

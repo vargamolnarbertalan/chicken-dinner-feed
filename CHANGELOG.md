@@ -11,6 +11,20 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+### Added
+
+- Multi-map series scoring (see ADR-0015): a new **Series control** admin page tracks points across
+  an entire tournament rather than one map at a time. A map closes automatically once the match
+  data confirms it has ended, or manually from the new page; either way its final placements,
+  eliminations and points are recorded permanently, with start/end times shown in your own time zone
+  and a duration. Past maps can be corrected or deleted if auto-detection got one wrong. A series can
+  be reset at any time — this clears the recorded history only, not whatever map is currently being
+  played.
+- The PTS column now reflects the whole series: points already banked in earlier maps, plus this
+  map's own eliminations, plus a **guaranteed-minimum** placement credit for any team still alive
+  (the worst position it could still possibly finish in, given how many teams remain) — so the
+  leaderboard reflects a team's real standing sooner than waiting for it to actually place.
+
 ## [1.0.2] - 2026-08-29
 
 ### Changed

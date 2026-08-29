@@ -23,8 +23,10 @@ import { fontRoutes } from './routes/fonts.js';
 import { logoRoutes } from './routes/logos.js';
 import { healthRoutes } from './routes/health.js';
 import { overlayControlRoutes } from './routes/overlay-control.js';
+import { seriesRoutes } from './routes/series.js';
 import { MatchStore } from './state/match-store.js';
 import { OverlayControlStore } from './state/overlay-control-store.js';
+import { SeriesStore } from './state/series-store.js';
 import { LiveHub } from './ws/live-hub.js';
 import { liveRoutes } from './ws/routes.js';
 
@@ -97,6 +99,12 @@ export async function buildApp(): Promise<AppContext> {
   const fontStore = new FontStore(config.dataDir);
   await fontStore.init();
 
+  const seriesStore = new SeriesStore({
+    dataDir: config.dataDir,
+    onWarn: (message, detail) => app.log.error({ detail }, message),
+  });
+  await seriesStore.load();
+
   // The live pipeline: adapter → store → hub → sockets. Assembled here so nothing downstream has to
   // know which ingestion source is in use (ADR-0006).
   const store = new MatchStore({
@@ -104,6 +112,7 @@ export async function buildApp(): Promise<AppContext> {
     roster: configStore.teams.current.teams,
     ruleset: configStore.scoring.current,
   });
+  store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
   const overlayControl = new OverlayControlStore();
   const hub = new LiveHub({
     store,
@@ -160,6 +169,24 @@ export async function buildApp(): Promise<AppContext> {
   });
   await app.register(configRoutes, { prefix: '/api', store: configStore });
 
+  // Refreshes what `MatchStore` adds on top of this map's own points, after anything that can change
+  // the series total: a new ingest update (a map may have just auto-closed), or an operator action
+  // on the Series control page (close now, reset, edit, delete).
+  const refreshSeriesContext = (): void => {
+    store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
+  };
+
+  await app.register(seriesRoutes, {
+    prefix: '/api',
+    series: seriesStore,
+    match: store,
+    config: configStore,
+    onSeriesChanged: () => {
+      refreshSeriesContext();
+      hub.schedulePublish();
+    },
+  });
+
   // Deliberately not under /api: this is the address an operator types into a Companion button.
   // Registered before the static plugin so its exact route wins over the SPA wildcard.
   await app.register(feedbackRoutes, {
@@ -213,7 +240,16 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
-          hub.schedulePublish();
+          // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
+          // that one tick so a map that closes this instant goes out already reflecting its own
+          // series total, rather than catching up only on the next poll.
+          seriesStore
+            .observeMatch(store.project(), Date.now())
+            .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
+            .finally(() => {
+              refreshSeriesContext();
+              hub.schedulePublish();
+            });
         },
         onStatus(state, message) {
           store.setStatus(state, message ?? null);
