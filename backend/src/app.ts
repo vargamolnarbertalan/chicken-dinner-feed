@@ -17,6 +17,7 @@ import { createIngestSource } from './ingest/index.js';
 import { ConfigStore } from './persistence/config-store.js';
 import { FontStore, MAX_FONT_BYTES } from './persistence/font-store.js';
 import { LogoStore, MAX_LOGO_BYTES } from './persistence/logo-store.js';
+import { backupRoutes } from './routes/backup.js';
 import { configRoutes } from './routes/config.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { fontRoutes } from './routes/fonts.js';
@@ -187,6 +188,22 @@ export async function buildApp(): Promise<AppContext> {
     match: store,
     config: configStore,
     onSeriesChanged: () => {
+      refreshSeriesContext();
+      hub.schedulePublish();
+    },
+  });
+
+  // Import & Export (specs, "Import & Export"): the four config documents an import writes go
+  // through ConfigStore's own save methods, so the subscribe listener above already refreshes the
+  // roster, ruleset and open browser sources exactly as a normal operator edit would. Only the
+  // series history bypasses ConfigStore, so it needs the same explicit refresh onSeriesChanged does.
+  await app.register(backupRoutes, {
+    prefix: '/api',
+    config: configStore,
+    series: seriesStore,
+    logos: logoStore,
+    fonts: fontStore,
+    onImported: () => {
       refreshSeriesContext();
       hub.schedulePublish();
     },

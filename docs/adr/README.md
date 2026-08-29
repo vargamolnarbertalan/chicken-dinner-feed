@@ -24,6 +24,7 @@ decision changes, write a new ADR and mark the old one `Superseded by ADR-XXXX`.
 | [0014](0014-feedback-document-as-a-stable-projection.md)     | `/feedback` is a stable projection, not a config view         | Accepted |
 | [0015](0015-multi-map-series-scoring.md)                     | Multi-map series scoring, persisted separately from the match | Accepted |
 | [0016](0016-built-in-fonts-loaded-live-from-google-fonts.md) | Built-in fonts load live from Google Fonts                    | Accepted |
+| [0017](0017-import-and-export-as-one-backup-zip.md)          | Import & Export carries every setting as one backup ZIP       | Accepted |
 
 ## Writing a new one
 

@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Toaster } from '@/components/Toaster';
 import { AppearanceEditor } from '@/features/admin/AppearanceEditor';
 import { FontManager } from '@/features/admin/FontManager';
+import { ImportExport } from '@/features/admin/ImportExport';
 import { ImportIniButton } from '@/features/admin/ImportIniButton';
 import { InstanceToolbar } from '@/features/admin/InstanceToolbar';
 import { CopyableUrl } from '@/features/admin/CopyableUrl';
@@ -28,7 +29,7 @@ import { toInstanceId } from '@/lib/instance-id';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
 
-type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts' | 'series';
+type Tab = 'overlays' | 'teams' | 'scoring' | 'fonts' | 'series' | 'importExport';
 
 const SIDEBAR_STORAGE_KEY = 'cdf.admin.sidebar';
 
@@ -293,6 +294,7 @@ export function AdminPage() {
               ['scoring', 'Scoring'],
               ['fonts', 'Fonts'],
               ['series', 'Series control'],
+              ['importExport', 'Import & Export'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -569,6 +571,8 @@ export function AdminPage() {
         )}
 
         {tab === 'series' && <SeriesControl />}
+
+        {tab === 'importExport' && <ImportExport />}
       </main>
     </div>
   );

@@ -98,3 +98,11 @@ export {
   createDefaultSeriesDocument,
 } from './domain/series.js';
 export type { ClosedMapTeamResult, ClosedMapResult, SeriesDocument } from './domain/series.js';
+
+export {
+  BACKUP_FORMAT_VERSION,
+  backupManifestSchema,
+  backupSummarySchema,
+  backupPreviewSchema,
+} from './domain/backup.js';
+export type { BackupManifest, BackupSummary, BackupPreview } from './domain/backup.js';
