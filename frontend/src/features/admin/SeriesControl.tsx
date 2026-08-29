@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { api, ApiError } from '@/lib/api';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
+import { EditMapDialog } from './EditMapDialog';
 
 function describe(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -38,7 +39,7 @@ export function SeriesControl() {
   const [pendingCloseMap, setPendingCloseMap] = useState(false);
   const [pendingReset, setPendingReset] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ClosedMapResult | null>(null);
-  const [editingMapId, setEditingMapId] = useState<string | null>(null);
+  const [editingMap, setEditingMap] = useState<ClosedMapResult | null>(null);
   const [editValues, setEditValues] = useState<Record<number, EditValue>>({});
 
   const currentStandings = liveTeams ?? fallbackStandings;
@@ -94,7 +95,7 @@ export function SeriesControl() {
   };
 
   const startEditing = (map: ClosedMapResult) => {
-    setEditingMapId(map.id);
+    setEditingMap(map);
     setEditValues(
       Object.fromEntries(
         map.teams.map((team) => [
@@ -105,38 +106,47 @@ export function SeriesControl() {
     );
   };
 
-  const patchEdit = (
-    teamNo: number,
-    team: ClosedMapResult['teams'][number],
-    changes: Partial<EditValue>,
-  ) => {
-    setEditValues((previous) => ({
-      ...previous,
-      [teamNo]: {
-        placement: previous[teamNo]?.placement ?? team.placement,
-        eliminations: previous[teamNo]?.eliminations ?? team.eliminations,
-        ...changes,
-      },
-    }));
+  const patchEdit = (teamNo: number, changes: Partial<EditValue>) => {
+    setEditValues((previous) => {
+      const team = editingMap?.teams.find((entry) => entry.teamNo === teamNo);
+      return {
+        ...previous,
+        [teamNo]: {
+          placement: previous[teamNo]?.placement ?? team?.placement ?? 1,
+          eliminations: previous[teamNo]?.eliminations ?? team?.eliminations ?? 0,
+          ...changes,
+        },
+      };
+    });
   };
 
-  const saveEdit = async (map: ClosedMapResult) => {
+  const saveEdit = async () => {
+    if (!editingMap) return;
     try {
-      const teams = map.teams.map((team) => ({
+      const teams = editingMap.teams.map((team) => ({
         teamNo: team.teamNo,
         placement: editValues[team.teamNo]?.placement ?? team.placement,
         eliminations: editValues[team.teamNo]?.eliminations ?? team.eliminations,
       }));
-      setSeriesDocument(await api.updateClosedMap(map.id, teams));
-      setEditingMapId(null);
-      toast.success(`Map ${map.mapNumber} updated`, 'Series totals were recalculated.');
+      setSeriesDocument(await api.updateClosedMap(editingMap.id, teams));
+      toast.success(`Map ${editingMap.mapNumber} updated`, 'Series totals were recalculated.');
+      setEditingMap(null);
     } catch (error) {
       toast.error('Could not save the correction', describe(error));
     }
   };
 
   return (
-    <div className="grid max-w-4xl gap-6">
+    <div className="grid max-w-6xl gap-6">
+      <EditMapDialog
+        map={editingMap}
+        values={editValues}
+        teamName={teamName}
+        onChange={patchEdit}
+        onCancel={() => setEditingMap(null)}
+        onSave={() => void saveEdit()}
+      />
+
       <ConfirmDialog
         open={pendingCloseMap}
         title="Close the current map?"
@@ -230,11 +240,11 @@ export function SeriesControl() {
           <p className="text-muted-foreground text-sm">No map has finished yet this series.</p>
         )}
 
-        <div className="grid gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {seriesDocument?.closedMaps.map((map) => (
-            <div key={map.id} className="border-border grid gap-2 rounded border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="font-medium">
+            <div key={map.id} className="border-border grid content-start gap-2 rounded border p-3">
+              <div className="grid gap-0.5">
+                <span className="text-sm font-medium">
                   Map {map.mapNumber}
                   {map.mapName ? ` — ${map.mapName}` : ''}
                 </span>
@@ -245,92 +255,40 @@ export function SeriesControl() {
                 </span>
               </div>
 
-              {editingMapId === map.id ? (
-                <div className="grid gap-2">
-                  {map.teams.map((team) => (
+              <div className="grid gap-1">
+                {[...map.teams]
+                  .sort((a, b) => a.placement - b.placement)
+                  .map((team) => (
                     <div
                       key={team.teamNo}
-                      className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2 text-sm"
+                      className="grid grid-cols-[2rem_1fr_3rem_3rem] items-center gap-2 text-sm"
                     >
+                      <span className="tabular-nums">{team.placement}</span>
                       <span className="truncate">{teamName(team.teamNo)}</span>
-                      <label className="grid gap-0.5 text-xs">
-                        <span className="text-muted-foreground">Placement</span>
-                        <input
-                          type="number"
-                          min={1}
-                          className="border-border bg-background rounded border px-2 py-1 text-sm"
-                          value={editValues[team.teamNo]?.placement ?? team.placement}
-                          onChange={(event) =>
-                            patchEdit(team.teamNo, team, { placement: Number(event.target.value) })
-                          }
-                        />
-                      </label>
-                      <label className="grid gap-0.5 text-xs">
-                        <span className="text-muted-foreground">Elims</span>
-                        <input
-                          type="number"
-                          min={0}
-                          className="border-border bg-background rounded border px-2 py-1 text-sm"
-                          value={editValues[team.teamNo]?.eliminations ?? team.eliminations}
-                          onChange={(event) =>
-                            patchEdit(team.teamNo, team, {
-                              eliminations: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </label>
+                      <span className="text-right tabular-nums font-semibold">
+                        {team.totalPoints}
+                      </span>
+                      <span className="text-right tabular-nums">{team.eliminations}</span>
                     </div>
                   ))}
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      className="bg-primary text-primary-foreground rounded px-3 py-1.5 text-xs"
-                      onClick={() => void saveEdit(map)}
-                    >
-                      Save correction
-                    </button>
-                    <button
-                      type="button"
-                      className="border-border rounded border px-3 py-1.5 text-xs"
-                      onClick={() => setEditingMapId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-1">
-                  {[...map.teams]
-                    .sort((a, b) => a.placement - b.placement)
-                    .map((team) => (
-                      <div
-                        key={team.teamNo}
-                        className="grid grid-cols-[2.5rem_1fr_5rem_5rem] items-center gap-2 text-sm"
-                      >
-                        <span className="tabular-nums">{team.placement}</span>
-                        <span className="truncate">{teamName(team.teamNo)}</span>
-                        <span className="tabular-nums font-semibold">{team.totalPoints}</span>
-                        <span className="tabular-nums">{team.eliminations}</span>
-                      </div>
-                    ))}
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      className="border-border rounded border px-3 py-1.5 text-xs"
-                      onClick={() => startEditing(map)}
-                    >
-                      Correct this map
-                    </button>
-                    <button
-                      type="button"
-                      className="text-destructive rounded px-3 py-1.5 text-xs"
-                      onClick={() => setPendingDelete(map)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  className="border-border rounded border px-3 py-1.5 text-xs"
+                  onClick={() => startEditing(map)}
+                >
+                  Correct this map
+                </button>
+                <button
+                  type="button"
+                  className="text-destructive rounded px-3 py-1.5 text-xs"
+                  onClick={() => setPendingDelete(map)}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
