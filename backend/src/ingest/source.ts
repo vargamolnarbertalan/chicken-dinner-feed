@@ -32,6 +32,15 @@ export interface IngestUpdate {
   matchId: string | null;
   phase: MatchPhase;
   players: IngestPlayer[];
+  /**
+   * True while players are reported but the round itself has not begun — the pre-match warmup
+   * island, where they can shoot each other with none of it counting.
+   *
+   * Nothing about that period may reach the series history: an elimination there is not an
+   * elimination, and a map must not be closed out of it. Optional, defaulting to false, so a source
+   * with no warmup concept of its own (the mock) and every existing test keep their behaviour.
+   */
+  inWarmup?: boolean;
 }
 
 export interface IngestSourceEvents {

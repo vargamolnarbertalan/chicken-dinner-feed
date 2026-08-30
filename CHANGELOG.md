@@ -11,6 +11,33 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+### Added
+
+- **Add map by hand**, on the Series control page: record a map the app never saw played — one from
+  before it was running, or from another machine — at any position in the series, not just at the
+  end. Inserting one between two existing maps renumbers everything after it and recalculates every
+  team's series total. Enter placements and eliminations only; points come from your scoring
+  ruleset, exactly as they do for a correction.
+
+### Fixed
+
+- **The PTS column stopped counting after "Close current map now".** If you closed a map while the
+  game was still running, every elimination scored afterwards was thrown away — the column sat at
+  the series total until an entirely new match started. It now keeps counting what is earned after
+  the close, while still not counting the closed map twice.
+- **Warmup no longer creates anything.** Before the plane launches, players are already reported and
+  the app treated that as a match: it could record a finished map — final placements and all, for a
+  round nobody had played — into the series history, and a team wiped on the warmup island was
+  logged as eliminated, which stuck for the whole round that followed. Nothing is recorded now until
+  the round genuinely starts. The leaderboard still shows normally during warmup, with the series
+  standings so far.
+- **Closing the same match twice, or with nothing running, is refused** instead of writing a
+  duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
+  record an extra map deliberately.
+- **A restart just after a map ended no longer records that map a second time**, which used to
+  double every team's points for it. PUBG keeps serving a finished match's stats until the next game
+  starts, and the app had no memory across the restart that it had already recorded that map.
+
 ## [1.1.0] - 2026-08-29
 
 ### Added

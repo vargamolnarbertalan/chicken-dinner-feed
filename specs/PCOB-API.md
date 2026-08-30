@@ -646,6 +646,39 @@ Also newly seen, not previously documented anywhere: **`PoisonTotalDamage`, `Use
 ([§7.1](#71-parse-tolerantly-at-the-boundary-validate-strictly-after-mapping)), so this needed no
 code change — recorded here so nobody rediscovers them from scratch.
 
+### Closed on 2026-08-30 — warmup is distinguishable from the live round, by `liveState`
+
+Two `gettotalplayerlist` captures from a real tournament lobby, one taken during warmup and one the
+instant the plane launched, kept as [`warmup.txt`](warmup.txt) and [`plane.txt`](plane.txt). Both are
+the player list alone (`{"playerInfoList": [...]}`), so neither says anything about `GameID` or
+`isingame` — see the still-open item below.
+
+| Signal                        | Warmup                                            | Plane                                                    |
+| ----------------------------- | ------------------------------------------------- | -------------------------------------------------------- |
+| `liveState`, every player     | **`0`** (Normal), 51/51                           | **`1`** (On Plane), 52/52                                |
+| `location`                    | each player's own, scattered, `z` between 501–625 | **one shared coordinate** for all, `z: 150000` (~1500 m) |
+| `killNum`, `rank`, `bHasDied` | all zero / false                                  | all zero / false                                         |
+| `health`                      | 100/100 for every player                          | 100/100 for every player                                 |
+
+**Why this matters more than it looks.** Before this, the app had no way to tell a warmup lobby from
+a live round, and the consequences were not cosmetic. With `isingame` false and players present,
+[§7.6](#76-match-boundaries)'s phase rule read a warmup lobby as an **ended match** — closing a map,
+with final placements for a round nobody had played, into the permanent series history. Separately, a
+team wiped on the warmup island was recorded as eliminated, and elimination order is append-only:
+that team would have carried a last-place finish through the entire real round.
+
+The whole lobby changing `liveState` at once is what makes this usable — a transition across 50+
+players simultaneously has no plausible false positive, unlike any per-player heuristic. It is
+treated as a **starting gun, not a state**: players are back to `liveState: 0` within seconds of
+landing, so the signal is latched for the match rather than polled. For the case the plane cannot
+answer — the app started, or reconnected, after everyone had already landed — the fallback is any
+evidence the round is past its start (a kill, a decided `rank`, anyone dead or knocked), none of
+which the warmup capture contains.
+
+**Still open, and deliberately not guessed at:** whether `isingame` and `GameID` are already set
+during warmup. Answering it needs a `getallinfo` capture from those same two moments. The detection
+above is built to be correct either way, so this is a documentation gap rather than a blocking one.
+
 ### Closed on 2026-08-17 by reading ob.js
 
 | Was                                                         | Answer                                                                                                                                                               |

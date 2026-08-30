@@ -139,8 +139,14 @@ export class MatchStore {
     this.connectionState = 'connected';
     this.statusMessage = null;
 
+    // Teams are recorded as present even during warmup, deliberately: the lobby is assembled, and
+    // the leaderboard is genuinely useful on air at that point, showing the series standings so far.
     for (const player of update.players) this.seenTeams.add(player.teamNo);
-    this.recordNewlyEliminatedTeams(update);
+
+    // Eliminations are not. A team wiped on the warmup island has not been eliminated from anything,
+    // and `eliminationOrder` is append-only — recording one there would hand that team a last-place
+    // finish for the whole round that follows, with no way back short of restarting the app.
+    if (!update.inWarmup) this.recordNewlyEliminatedTeams(update);
   }
 
   /**

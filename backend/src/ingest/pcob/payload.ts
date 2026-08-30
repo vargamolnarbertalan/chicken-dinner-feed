@@ -20,6 +20,16 @@ const LIVE_STATE: Record<number, PlayerLiveState> = {
 };
 
 /**
+ * The raw `liveState` values that mean a player is in the air on the way in — the round has started.
+ *
+ * Captured from a real tournament lobby (`specs/PCOB-API.md` §8): during warmup every one of 51
+ * players reported `liveState: 0` at a scattered ground position; the moment the plane launched all
+ * 52 reported `liveState: 1` at one shared coordinate 1500 m up. A whole-lobby transition like that
+ * has no plausible false positive, which is what makes it usable as the "this is real now" signal.
+ */
+const IN_FLIGHT_STATES = new Set([1, 2]); // On Plane, On Parachute.
+
+/**
  * Field aliases, newest spelling first.
  *
  * ob.js passes the game client's payload through untouched, so these names belong to the game, not
@@ -81,6 +91,11 @@ export class PcobMapper {
   private readonly slots = new Map<number, Map<string, number>>();
   /** playerId → highest kill count seen this match. */
   private readonly maxKills = new Map<string, number>();
+  /**
+   * Latched once the round has started, and never unlatched for the same match: players leave the
+   * air within seconds of the drop, so the in-flight signal is a starting gun, not a state to poll.
+   */
+  private started = false;
 
   constructor(options: PcobMapperOptions = {}) {
     const log = options.log ?? (() => {});
@@ -99,18 +114,27 @@ export class PcobMapper {
       this.matchId = matchId;
       this.slots.clear();
       this.maxKills.clear();
+      this.started = false;
     }
 
     const players = this.mapPlayers(root.raw(F.players));
 
+    if (!this.started) this.started = hasRoundStarted(players, this.sawFlight);
+    const inWarmup = players.length > 0 && !this.started;
+
     return {
       matchId,
-      phase: derivePhase(root, snapshot.isInGame, players.length),
+      phase: derivePhase(root, snapshot.isInGame, players.length, inWarmup),
       players,
+      inWarmup,
     };
   }
 
+  /** Set by `mapPlayers` for the poll it is mapping — see `IN_FLIGHT_STATES`. */
+  private sawFlight = false;
+
   private mapPlayers(raw: unknown): IngestPlayer[] {
+    this.sawFlight = false;
     if (!Array.isArray(raw)) {
       // Not a warning: before the observer joins a room the list is legitimately absent, and that
       // is the normal state for most of the time the app is running.
@@ -144,12 +168,15 @@ export class PcobMapper {
 
       const healthMax = reader.number(F.healthMax, DEFAULT_HEALTH_MAX);
 
+      const rawLiveState = reader.number(F.liveState, -1);
+      if (IN_FLIGHT_STATES.has(rawLiveState)) this.sawFlight = true;
+
       players.push({
         id: stableId,
         name: name !== '' ? name : stableId,
         teamNo,
         slot,
-        liveState: this.liveStateFor(reader),
+        liveState: this.liveStateFor(rawLiveState),
         health: Math.max(0, reader.number(F.health, 0)),
         // A zero or negative maximum would make the bar's fraction meaningless, and healthMax is
         // the denominator everywhere downstream.
@@ -162,8 +189,7 @@ export class PcobMapper {
     return players;
   }
 
-  private liveStateFor(reader: FieldReader): PlayerLiveState {
-    const raw = reader.number(F.liveState, -1);
+  private liveStateFor(raw: number): PlayerLiveState {
     const mapped = LIVE_STATE[raw];
     if (mapped) return mapped;
 
@@ -243,14 +269,52 @@ export class PcobMapper {
 }
 
 /**
+ * Whether the round proper is under way, as opposed to the lobby still warming up.
+ *
+ * The plane is the signal we trust, because a whole lobby entering the air at once cannot be
+ * mistaken for anything else. The rest is a fallback for the case the plane cannot answer: the app
+ * started, or reconnected, after everyone had already landed. Anything scored, anyone out, or any
+ * placement decided means the round is long past its start — none of which is true of a warmup
+ * lobby, where the captured payload had every player untouched at full health with nothing recorded.
+ *
+ * Getting this wrong in the cautious direction is cheap and in the other direction is not, which is
+ * why the fallback is deliberately broad: holding off while nobody has done anything yet costs
+ * nothing (there is nothing to record), whereas ignoring a real round would blank the leaderboard.
+ */
+function hasRoundStarted(players: readonly IngestPlayer[], sawFlight: boolean): boolean {
+  if (sawFlight) return true;
+
+  return players.some(
+    (player) =>
+      player.kills > 0 ||
+      player.rank > 0 ||
+      player.liveState === 'dead' ||
+      player.liveState === 'knocked',
+  );
+}
+
+/**
  * Which phase the match is in.
  *
  * `isInGame` is the signal ob.js actually serves, and it is the one we trust. `FinishedStartTime` —
  * documented as the moment WWCD appears — refines it when present, because a match that has ended
  * but whose room is still open should not keep reading as live. Only source B documents that field,
  * so its absence is expected rather than exceptional and simply leaves `isInGame` in charge.
+ *
+ * Warmup outranks all of it, in one direction only: a lobby that has not dropped yet must never
+ * read as `ended`. Whether `isInGame` is already true during warmup is still unconfirmed
+ * (`specs/PCOB-API.md` §8), and if it is false the `playerCount > 0` fallback below would otherwise
+ * call a warmup lobby a finished match — closing a map, with final placements for a round nobody
+ * has played, into the permanent series history.
  */
-function derivePhase(root: FieldReader, isInGame: boolean, playerCount: number): MatchPhase {
+function derivePhase(
+  root: FieldReader,
+  isInGame: boolean,
+  playerCount: number,
+  inWarmup: boolean,
+): MatchPhase {
+  if (inWarmup) return 'live';
+
   const finishedAt = root.has(F.finishedAt) ? root.string(F.finishedAt, '') : '';
   if (finishedAt !== '') return 'ended';
   if (isInGame) return 'live';

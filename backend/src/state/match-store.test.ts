@@ -278,6 +278,42 @@ describe('MatchStore', () => {
       expect(store.project().match.teams[0]?.totalPoints).toBe(31);
     });
 
+    it('records no elimination during warmup, and none of it sticks afterwards', () => {
+      // A team wiped on the warmup island has not been eliminated from anything. `eliminationOrder`
+      // is append-only, so recording one there would hand that team a last-place finish for the
+      // whole round that follows — irreversible short of restarting the app.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+
+      store.applyUpdate(
+        update({
+          inWarmup: true,
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }), // "wiped" in warmup.
+          ],
+        }),
+      );
+
+      const warmup = store.project();
+      expect(warmup.match.teams.every((team) => team.placement === null)).toBe(true);
+      // Both teams still render normally — the leaderboard is useful on air during warmup.
+      expect(warmup.match.teams.every((team) => team.hasAppeared)).toBe(true);
+
+      // The round starts and team 2 is alive again, as it would be after the real drop.
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'alive' }),
+          ],
+        }),
+      );
+
+      const live = store.project();
+      expect(live.match.teams.every((team) => team.placement === null)).toBe(true);
+      expect(live.match.standingTeamCount).toBe(2);
+    });
+
     it('reports the match it is showing, so the caller can look up what is banked for it', () => {
       const store = new MatchStore({ source: 'pcob', roster: roster(1) });
       expect(store.currentMatchId()).toBeNull();

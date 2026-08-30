@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PcobMapper, type PcobSnapshot } from './payload.js';
 
@@ -283,6 +284,94 @@ describe('PcobMapper', () => {
       );
 
       expect(update.players[0]).toMatchObject({ id: 'Nameless', name: 'Nameless' });
+    });
+  });
+
+  describe('warmup', () => {
+    /**
+     * The two real tournament-lobby captures this detection was built from, one taken during warmup
+     * and one the moment the plane launched (`specs/PCOB-API.md` §8). Asserting against the actual
+     * payloads rather than a hand-written imitation is the whole point: an imitation would only
+     * prove the code agrees with my reading of the format.
+     */
+    function capture(name: 'warmup' | 'plane'): Record<string, unknown>[] {
+      const file = new URL(`../../../../specs/${name}.txt`, import.meta.url);
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
+        playerInfoList: Record<string, unknown>[];
+      };
+      return parsed.playerInfoList;
+    }
+
+    it('reads the real warmup capture as warmup', () => {
+      const players = capture('warmup');
+      expect(players.every((entry) => entry['liveState'] === 0)).toBe(true);
+
+      const update = new PcobMapper().map(snapshot(players));
+
+      expect(update.inWarmup).toBe(true);
+    });
+
+    it('reads the real plane capture as the round having started', () => {
+      const players = capture('plane');
+      expect(players.every((entry) => entry['liveState'] === 1)).toBe(true);
+
+      const update = new PcobMapper().map(snapshot(players));
+
+      expect(update.inWarmup).toBe(false);
+    });
+
+    it('never reports a warmup lobby as ended, whatever isInGame says', () => {
+      // The dangerous path: with `isInGame` false and players present, the mapper used to call that
+      // an ended match — which auto-closes a map, with final placements for a round nobody has
+      // played, into the permanent series history. Whether `isInGame` is true during warmup is
+      // still unconfirmed, so this must hold either way.
+      const warmup = capture('warmup');
+
+      expect(new PcobMapper().map(snapshot(warmup, {}, false)).phase).toBe('live');
+      expect(new PcobMapper().map(snapshot(warmup, {}, true)).phase).toBe('live');
+    });
+
+    it('stays started once the lobby has dropped, as players land back to liveState 0', () => {
+      // The in-flight signal is a starting gun, not a state to poll: everyone is back on the ground
+      // within seconds, and falling back to "warmup" then would stop recording the whole round.
+      const mapper = new PcobMapper();
+      expect(mapper.map(snapshot(capture('plane'))).inWarmup).toBe(false);
+
+      expect(mapper.map(snapshot(capture('warmup'))).inWarmup).toBe(false);
+    });
+
+    it('starts fresh for a new match, so the next warmup is caught too', () => {
+      const mapper = new PcobMapper();
+      mapper.map(snapshot(capture('plane')));
+
+      const next = mapper.map({
+        allInfo: { TotalPlayerList: capture('warmup'), GameID: 'room-2' },
+        isInGame: true,
+      });
+
+      expect(next.inWarmup).toBe(true);
+    });
+
+    it.each([
+      ['a scored elimination', { killNum: 1 }],
+      ['a decided placement', { rank: 4 }],
+      ['a player already out', { liveState: 5 }],
+      ['a player knocked', { liveState: 4 }],
+    ])('treats %s as the round being under way, with no plane in sight', (_label, overrides) => {
+      // The fallback for connecting after everyone has landed. Broad on purpose: holding off while
+      // nobody has done anything costs nothing, ignoring a real round blanks the leaderboard.
+      const update = new PcobMapper().map(
+        snapshot([player(), player({ playerKey: 2, playerName: 'Other', ...overrides })]),
+      );
+
+      expect(update.inWarmup).toBe(false);
+    });
+
+    it('is not warmup when there are no players at all', () => {
+      const update = new PcobMapper().map(snapshot([]));
+
+      expect(update.inWarmup).toBe(false);
+      expect(update.phase).toBe('live');
     });
   });
 });
