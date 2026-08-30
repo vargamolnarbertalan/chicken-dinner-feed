@@ -176,8 +176,9 @@ export async function buildApp(): Promise<AppContext> {
   await app.register(configRoutes, { prefix: '/api', store: configStore });
 
   // Refreshes what `MatchStore` adds on top of this map's own points, after anything that can change
-  // the series total: a new ingest update (a map may have just auto-closed), or an operator action
-  // on the Series control page (close now, add by hand, reset, edit, delete).
+  // the series total: a new ingest update, or an operator action on the Series control page (close
+  // now, add by hand, reset, edit, delete) — maps are recorded only by an explicit operator action,
+  // never on their own; see the note on `SeriesStore.observeMatch`.
   //
   // Also re-derives how much of the currently displayed match is *already* in that total, which is
   // why this must run on every ingest update and not only on an operator action — the displayed
@@ -270,10 +271,9 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
-          // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
-          // that one tick so a map that closes this instant goes out already reflecting its own
-          // series total, rather than catching up only on the next poll. `refreshSeriesContext`
-          // then nets that map back out of the still-displayed match, so it counts exactly once.
+          // Never closes a map itself — see the note on `SeriesStore.observeMatch`. Only tracks the
+          // current match's start time for a later manual close, which is why nothing here reads a
+          // return value or needs to hold broadcasting for it.
           seriesStore
             .observeMatch(store.project(), Date.now())
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))

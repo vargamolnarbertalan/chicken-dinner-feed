@@ -96,9 +96,6 @@ export class SeriesStore {
   private candidateStableCount = 0;
   private trustedMatchId: string | null = null;
   private currentMapStartedAt: number | null = null;
-  private endedStableCount = 0;
-  /** The match id a map has already been persisted for, so continued `ended` polling never repeats it. */
-  private lastClosedMatchId: string | null = null;
 
   constructor(options: SeriesStoreOptions) {
     this.stabilityTicks = options.stabilityTicks ?? DEFAULT_STABILITY_TICKS;
@@ -168,13 +165,22 @@ export class SeriesStore {
   }
 
   /**
-   * Call after every ingest update. Tracks match-id and `ended`-phase stability, and persists a
-   * closed map, at most once per match id, once both are trusted.
+   * Call after every ingest update. Tracks match-id stability (for `currentMapStartedAt`, read by a
+   * manual close) — nothing here ever persists a map on its own.
    *
-   * Returns the map it just closed, or `null` if this call closed nothing.
+   * **Automatic closing on the `ended` phase was removed live, during the first real tournament
+   * match this ran against.** `ended` fired — via `FinishedStartTime`, specifically — while 11 of 13
+   * teams were still fighting, and every one of them was immediately handed a full, final placement
+   * on air. `specs/PCOB-API.md` §7.6 assumed the field resets per match; in practice, at least once,
+   * it did not, and there is no second independent signal to cross-check it against that has not
+   * also just failed once tonight. A wrong number on a live broadcast is a worse failure than an
+   * operator's extra click, so closing a map is now **always** an explicit action — `closeMapNow`,
+   * from the Series control page — and this method no longer calls it. Kept only for the map-start
+   * timestamp, which the same restart-that-caused-this incident already required for correctness
+   * (it survives a `GameID` flap without resetting the observation).
    */
-  async observeMatch(projection: Projection, now: number): Promise<ClosedMapResult | null> {
-    const { matchId, phase } = projection.match;
+  async observeMatch(projection: Projection, now: number): Promise<null> {
+    const { matchId } = projection.match;
 
     if (matchId === null) {
       this.resetObservation();
@@ -191,28 +197,9 @@ export class SeriesStore {
     if (this.candidateStableCount >= this.stabilityTicks && this.trustedMatchId !== matchId) {
       this.trustedMatchId = matchId;
       this.currentMapStartedAt = now;
-      this.endedStableCount = 0;
     }
 
-    if (this.trustedMatchId !== matchId) return null; // Candidate not stable yet.
-
-    if (phase !== 'ended') {
-      this.endedStableCount = 0;
-      return null;
-    }
-
-    this.endedStableCount += 1;
-    if (this.endedStableCount < this.stabilityTicks) return null;
-
-    // Both guards are needed, and neither is redundant. The in-memory one is the hot path while
-    // polling continues through the `ended` phase; the persisted one is what survives a restart in
-    // that same window — PCOB keeps serving a finished match's final stats until the next game
-    // starts, so a backend restarted mid-recap would otherwise re-run the whole stability check and
-    // record the same map a second time, silently doubling every team's points for it.
-    if (this.lastClosedMatchId === matchId || this.hasClosedMapFor(matchId)) return null;
-
-    this.lastClosedMatchId = matchId;
-    return this.persistClosedMap(projection, now);
+    return null;
   }
 
   /**
@@ -246,7 +233,6 @@ export class SeriesStore {
       throw new Error('No team has played this map yet, so there is nothing to record.');
     }
 
-    this.lastClosedMatchId = matchId;
     return this.persistClosedMap(projection, now);
   }
 
@@ -368,8 +354,6 @@ export class SeriesStore {
     this.candidateStableCount = 0;
     this.trustedMatchId = null;
     this.currentMapStartedAt = null;
-    this.endedStableCount = 0;
-    this.lastClosedMatchId = null;
   }
 
   private async persistClosedMap(projection: Projection, now: number): Promise<ClosedMapResult> {

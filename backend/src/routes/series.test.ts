@@ -182,9 +182,9 @@ describe('series routes', () => {
   });
 
   it('POST /series/close-map responds 400 during warmup, never recording an unplayed round', async () => {
-    // The automatic close is gated by the phase, which can never read `ended` during warmup. This
-    // path is not: it forces `projectAsEnded()`, which hands every team in the lobby a final
-    // placement — a fabricated map, worth real points, in the permanent history.
+    // Manual close forces `projectAsEnded()`, which hands every team in the lobby a final
+    // placement regardless of what the real phase reads — a fabricated map, worth real points, in
+    // the permanent history, unless this check stops it.
     match.applyUpdate(
       update({
         inWarmup: true,

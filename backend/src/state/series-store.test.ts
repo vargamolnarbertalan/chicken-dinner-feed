@@ -113,8 +113,14 @@ describe('SeriesStore', () => {
     expect(store.getSeriesTotals().get(1)).toBe(27);
   });
 
-  describe('observeMatch (auto-close)', () => {
-    it('does not close on a single ended tick — requires stability first', async () => {
+  describe('observeMatch', () => {
+    // Automatic closing on the `ended` phase was removed live, mid-tournament: `ended` (via
+    // `FinishedStartTime`) fired while most of the lobby was still fighting, and every team still
+    // alive was immediately handed a full, final placement on air. `observeMatch` now only tracks a
+    // match id's stability for `currentMapStartedAt` — a map is recorded only by an explicit
+    // `closeMapNow` or `insertManualMap` call, never on its own, whatever the phase reports.
+
+    it('never closes a map on its own, `ended` phase or not', async () => {
       const store = makeStore(2);
       const match = new MatchStore({ source: 'pcob', roster: roster(1) });
       match.applyUpdate(
@@ -122,47 +128,9 @@ describe('SeriesStore', () => {
       );
       await store.load();
 
-      await store.observeMatch(match.project(), 1_000);
-      await store.observeMatch(match.project(), 1_100); // matchId stable now, but ended just 1 tick.
-
-      expect(store.getState().closedMaps).toEqual([]);
-    });
-
-    it('closes once the match id and the ended phase are both stable, exactly once', async () => {
-      const store = makeStore(2);
-      const match = new MatchStore({ source: 'pcob', roster: roster(1) });
-      match.applyUpdate(
-        update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1, kills: 1 })] }),
-      );
-      await store.load();
-
-      // Closing exactly once per match id is the contract: the projection reports a match's points
-      // cumulatively from its own start, so a second record for the same match would repeat
-      // everything the first one already banked.
-      expect(await store.observeMatch(match.project(), 1_000)).toBeNull(); // match id sighting 1.
-      expect(await store.observeMatch(match.project(), 1_100)).toBeNull(); // stable, ended sighting 1.
-      expect(await store.observeMatch(match.project(), 1_200)).not.toBeNull(); // ended stable — closes.
-      expect(await store.observeMatch(match.project(), 1_300)).toBeNull(); // still polling — no duplicate.
-
-      expect(store.getState().closedMaps).toHaveLength(1);
-    });
-
-    it('a matchId that flaps back and forth never gets treated as stable', async () => {
-      const store = makeStore(2);
-      await store.load();
-
-      const a = new MatchStore({ source: 'pcob', roster: roster(1) });
-      a.applyUpdate(
-        update({ matchId: 'a', phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }),
-      );
-      const b = new MatchStore({ source: 'pcob', roster: roster(1) });
-      b.applyUpdate(
-        update({ matchId: 'b', phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }),
-      );
-
-      await store.observeMatch(a.project(), 1_000);
-      await store.observeMatch(b.project(), 1_100); // flap to a different id resets the candidate.
-      await store.observeMatch(a.project(), 1_200); // back to "a", but stability restarts from here.
+      for (const now of [1_000, 1_100, 1_200, 1_300, 1_400, 1_500]) {
+        expect(await store.observeMatch(match.project(), now)).toBeNull();
+      }
 
       expect(store.getState().closedMaps).toEqual([]);
     });
@@ -176,11 +144,27 @@ describe('SeriesStore', () => {
       await store.observeMatch(match.project(), 1_000); // sighting 1.
       await store.observeMatch(match.project(), 1_100); // stable as of here.
 
-      match.applyUpdate(update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }));
-      await store.observeMatch(match.project(), 1_200); // ended sighting 1.
-      await store.observeMatch(match.project(), 1_300); // ended stable — closes.
+      const closed = await store.closeMapNow(match.projectAsEnded(), 1_500);
 
-      expect(store.getState().closedMaps[0]?.startedAt).toBe(1_100);
+      expect(closed.startedAt).toBe(1_100);
+    });
+
+    it('a matchId that flaps back and forth never gets treated as stable', async () => {
+      const store = makeStore(2);
+      await store.load();
+
+      const a = new MatchStore({ source: 'pcob', roster: roster(1) });
+      a.applyUpdate(update({ matchId: 'a', players: [player({ teamNo: 1, slot: 1 })] }));
+      const b = new MatchStore({ source: 'pcob', roster: roster(1) });
+      b.applyUpdate(update({ matchId: 'b', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      await store.observeMatch(a.project(), 1_000);
+      await store.observeMatch(b.project(), 1_100); // flap to a different id resets the candidate.
+      await store.observeMatch(a.project(), 1_200); // back to "a", but stability restarts from here.
+
+      const closed = await store.closeMapNow(a.projectAsEnded(), 1_500);
+      // Never became stable within this window, so no start time was ever recorded for it.
+      expect(closed.startedAt).toBeNull();
     });
   });
 
@@ -413,28 +397,27 @@ describe('SeriesStore', () => {
       expect(store.getState().closedMaps).toEqual([]);
     });
 
-    it('does not auto-close a match a restart already recorded', async () => {
-      // A restart mid-`ended` loses the in-memory guard, and PCOB keeps serving a finished match's
-      // final stats until the next game starts — so the fresh store re-runs the whole stability
-      // check on a match that is already in the history and would record it a second time.
+    it('refuses a manual close of the same match again after a restart', async () => {
+      // The persisted guard (`hasClosedMapFor`), not the in-memory `lastClosedMatchId` this replaced
+      // — that field only ever protected the auto-close path, which no longer exists. A restart
+      // loses all in-memory state, but the operator clicking "Close current map now" a second time
+      // for a match already in the history must still be refused: the projection reports the
+      // match's points cumulatively from its own start, so a second record would repeat everything
+      // the first one already banked.
       const match = new MatchStore({ source: 'pcob', roster: roster(1) });
-      match.applyUpdate(
-        update({ matchId: 'm1', phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }),
-      );
+      match.applyUpdate(update({ matchId: 'm1', players: [player({ teamNo: 1, slot: 1 })] }));
 
       const before = makeStore();
       await before.load();
-      await before.observeMatch(match.project(), 1_000);
-      await before.observeMatch(match.project(), 1_100);
-      await before.observeMatch(match.project(), 1_200);
+      await before.closeMapNow(match.projectAsEnded(), 1_000);
       expect(before.getState().closedMaps).toHaveLength(1);
 
-      const after = makeStore(); // Same data directory: a restarted backend.
+      const after = makeStore(); // Same data directory: a restarted backend, no in-memory state.
       await after.load();
-      expect(await after.observeMatch(match.project(), 2_000)).toBeNull();
-      expect(await after.observeMatch(match.project(), 2_100)).toBeNull();
-      expect(await after.observeMatch(match.project(), 2_200)).toBeNull();
 
+      await expect(after.closeMapNow(match.projectAsEnded(), 2_000)).rejects.toThrow(
+        /already been closed/,
+      );
       expect(after.getState().closedMaps).toHaveLength(1);
     });
   });

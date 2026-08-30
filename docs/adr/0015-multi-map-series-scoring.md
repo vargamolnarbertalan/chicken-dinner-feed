@@ -118,9 +118,55 @@ Rejected: a transient disconnect that reconnects moments later would wrongly fre
 The manual "close now" button exists precisely to cover the case where the real `ended` signal never
 arrives.
 
+## Amended 2026-08-30 — automatic closing removed, live, mid-tournament
+
+Automatic closing on `phase: 'ended'` was decided above on the assumption that `FinishedStartTime`
+and `isInGame` reset per match, per `specs/PCOB-API.md` §7.6. Both assumptions failed on the same
+real tournament match this feature ran against for the first time, in two different ways:
+
+- Warmup-island PvP (a real, playable pre-drop area) tripped the round-started fallback signal
+  (`kills > 0`/dead/knocked), which made `phase` read `ended` for a lobby that had not dropped yet —
+  closing a fabricated map, full placement table, real points, out of a round nobody had played.
+- After that was fixed, `phase` locked to `ended` a second time — apparently via a `FinishedStartTime`
+  that did not clear — while 11 of 13 teams were still fighting. Every alive team was immediately
+  handed a full, final placement on air, live: `resolvePlacements('ended')` treats every present team
+  without a decided placement as a survivor and ranks it, the instant phase reads `ended`, regardless
+  of whether the round has anywhere near actually concluded.
+
+The second failure is the one that forced the decision here: it does not only threaten the auto-close
+feature, it corrupts the **live overlay's own standings** for as long as phase misreads `ended` —
+independent of whether closing is automatic or manual. A defensive gate was added regardless
+(`derivePhase` now also requires `standingTeamCount <= 1` — the literal definition of a battle royale
+round actually having concluded — before honoring either signal), but with two upstream signals now
+each independently demonstrated unreliable on the very first live match, and no third one to
+cross-check against, automatic closing itself is removed rather than patched a second time under the
+same pressure that produced the first patch.
+
+**Closing a map is now always an explicit operator action** — `POST /series/close-map`, unchanged in
+every other respect (still forces `projectAsEnded()`'s survivor resolution, still refuses to fire
+during warmup or with no match running, still refuses a second close of the same match). Automatic
+match-_start_ detection (a new `GameID`) is kept: nothing failed there tonight, it is a narrower claim
+than "the round has ended", and `MatchStore` already depends on it for resetting elimination tracking
+independent of anything in this file.
+
+**Consequence accepted, not yet mitigated in code:** if the operator forgets to close before the next
+`GameID` appears, `MatchStore.resetMatch()` discards the finished map's elimination tracking with no
+automatic recovery — there is no longer an automatic backstop. For tonight this was covered by an
+external snapshot log (polling `/api/series` every 2s to a file) and a live reminder once
+`standingTeamCount` reaches 1, specifically so a forgotten close could be reconstructed with "Add map
+by hand" from the last good snapshot. Whether that deserves becoming a real, in-app feature — a
+warning banner, or a short grace window before `resetMatch()` discards anything — is open; see
+Revisit when.
+
 ## Revisit when
 
 - The PCOB API ever exposes which map is being played — `mapName` is already modelled, nothing else
   needs to change.
 - A tournament format needs something other than "every map counts equally toward one flat total"
   (best-of-N drops, weighted maps, etc.) — out of scope for this decision.
+- An operator forgetting to close before the next `GameID` appears turns out to happen often enough
+  in practice to warrant an in-app safeguard (a warning banner, a short grace window) rather than an
+  external snapshot log — see the amendment above.
+- A confirmed `getallinfo` capture answers whether `isInGame`/`GameID` are already set during warmup,
+  or whether `FinishedStartTime` genuinely never clears — either would let automatic closing be
+  reconsidered on firmer evidence than tonight's.

@@ -26,18 +26,29 @@ release time — add to `[Unreleased]` in the same change that makes the change.
   the series total until an entirely new match started. It now keeps counting what is earned after
   the close, while still not counting the closed map twice.
 - **Warmup no longer creates anything.** Before the plane launches, players are already reported and
-  the app treated that as a match: it could record a finished map — final placements and all, for a
-  round nobody had played — into the series history, and a team wiped on the warmup island was
-  logged as eliminated, which stuck for the whole round that followed. Nothing is recorded now until
-  the round genuinely starts, and no team greys out or drops off the "teams remaining" count for
-  being wiped on the warmup island — they respawn there. The leaderboard still shows normally during
-  warmup, with the series standings so far.
+  the app could treat that as a match: recording a finished map — final placements and all, for a
+  round nobody had played — into the series history, and logging a team wiped on the warmup island
+  as eliminated, which stuck for the whole round that followed. Nothing is recorded now until the
+  round genuinely starts (the whole lobby entering the air at once, or — if the app connects after
+  everyone has already landed — a team's real placement becoming known, never a kill or a knockout,
+  since PUBG Mobile's warmup island allows real PvP and either can happen there too), and no team
+  greys out or drops off the "teams remaining" count for being wiped on the warmup island. Any kills
+  scored on the warmup island are also netted out of the round's kill count the moment it starts,
+  even if the API itself keeps reporting them. The leaderboard still shows normally during warmup,
+  with the series standings so far.
+- **A map no longer closes on its own.** Two upstream signals this depended on — one for detecting
+  warmup (above) and, separately, `isInGame`/`FinishedStartTime` for detecting a match's real end —
+  each turned out unreliable in practice: the second one locked onto "the match has ended" while
+  most of the lobby was still fighting, instantly handing every team still alive a full final
+  placement live on air. **Closing a map is now always an explicit click** on "Close current map
+  now" — nothing closes automatically anymore, so this can no longer happen regardless of what
+  either upstream signal reports. Detecting a _new_ match starting is unaffected. One consequence to
+  know about: if you forget to close before the next match starts, that map's result is gone from
+  the live standings with no automatic recovery — there is no longer an automatic backstop for a
+  forgotten close.
 - **Closing the same match twice, or with nothing running, is refused** instead of writing a
   duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
   record an extra map deliberately.
-- **A restart just after a map ended no longer records that map a second time**, which used to
-  double every team's points for it. PUBG keeps serving a finished match's stats until the next game
-  starts, and the app had no memory across the restart that it had already recorded that map.
 
 ## [1.1.0] - 2026-08-29
 
