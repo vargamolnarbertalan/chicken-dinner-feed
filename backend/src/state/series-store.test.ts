@@ -168,6 +168,110 @@ describe('SeriesStore', () => {
     });
   });
 
+  describe('shouldAutoCloseNow', () => {
+    // Reintroduced after `observeMatch`'s removal above, trusting a different signal:
+    // `standingTeamCount <= 1`, a fact about the actual player data rather than an upstream field.
+
+    it('requires standingTeamCount <= 1 stable for two consecutive polls before closing', () => {
+      const store = makeStore(2);
+      const match = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+
+      match.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false); // sighting 1.
+      expect(store.shouldAutoCloseNow(match.project())).toBe(true); // stable — close now.
+    });
+
+    it('a single glitched poll (briefly down to 1 standing) does not trigger a close', () => {
+      // The same protection `observeMatch` applies to a new match id, applied here: an incomplete
+      // player list for one poll must not read as the round having ended.
+      const store = makeStore(2);
+      const match = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3) });
+
+      match.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+            player({ teamNo: 3, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false); // sighting 1.
+
+      match.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'alive' }), // recovers.
+            player({ teamNo: 3, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false); // back above 1 — no close.
+    });
+
+    it('never fires during warmup, whatever a team’s live state looks like', async () => {
+      // No team ever reads as not-standing during warmup (standings.ts) — this depends on that,
+      // rather than checking `inWarmup` a second time itself.
+      const store = makeStore(2);
+      const match = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+
+      match.applyUpdate(
+        update({
+          inWarmup: true,
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }), // "wiped" on the warmup island.
+          ],
+        }),
+      );
+
+      expect(match.project().match.standingTeamCount).toBe(2); // Not 1 — warmup never eliminates.
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false);
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false);
+    });
+
+    it('does not fire again once the match has already been closed', async () => {
+      const store = makeStore(2);
+      await store.load();
+      const match = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      match.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+
+      store.shouldAutoCloseNow(match.project());
+      expect(store.shouldAutoCloseNow(match.project())).toBe(true);
+      await store.closeMapNow(match.projectAsEnded(), 1_000);
+
+      // Same projection, same standing count — but the history already holds this match.
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false);
+    });
+
+    it('resets the candidate on a new match id, same as observeMatch does', () => {
+      const store = makeStore(2);
+      const a = new MatchStore({ source: 'pcob', roster: roster(1) });
+      a.applyUpdate(update({ matchId: 'a', players: [player({ teamNo: 1, slot: 1 })] }));
+      const b = new MatchStore({ source: 'pcob', roster: roster(1) });
+      b.applyUpdate(update({ matchId: 'b', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      expect(store.shouldAutoCloseNow(a.project())).toBe(false); // "a", sighting 1.
+      expect(store.shouldAutoCloseNow(b.project())).toBe(false); // flap to "b" resets the candidate.
+      expect(store.shouldAutoCloseNow(a.project())).toBe(false); // back to "a", restarts from here.
+    });
+  });
+
   describe('resetSeries', () => {
     it('clears history, assigns a new series id, and does not touch MatchStore', async () => {
       const store = makeStore();

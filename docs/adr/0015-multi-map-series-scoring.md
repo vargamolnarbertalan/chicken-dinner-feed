@@ -158,6 +158,26 @@ by hand" from the last good snapshot. Whether that deserves becoming a real, in-
 warning banner, or a short grace window before `resetMatch()` discards anything — is open; see
 Revisit when.
 
+## Amended again, same session — automatic closing reinstated on a different signal
+
+Minutes after the amendment above, with the same match still running: the operator asked whether
+`standingTeamCount <= 1` — a fact about the actual player data, checked directly — was solid enough
+to re-enable automatic closing, given the amendment's own new phase-gate already required exactly
+that condition. It is: unlike `isInGame`/`FinishedStartTime`, `standingTeamCount` is derived from
+player `liveState` alone, is the literal definition of a battle royale round having concluded (WWCD),
+and cannot read `<= 1` during warmup — no team can ever count as not-standing while `inWarmup` is
+true (`standings.ts`'s own fix from earlier the same night). Reinstated as `shouldAutoCloseNow`,
+checked alongside `observeMatch` on every ingest update: two-consecutive-poll stability, same
+protection as a new match id gets, then a close using `MatchStore.projectAsEnded()` — the exact same
+resolution manual close already uses, so there remains exactly one implementation of "how the last
+team gets its placement." `phase` itself is not consulted by this check at all, so neither of
+tonight's two failures can reach it. The manual button stays, as the explicit backup the operator
+asked for, and is what covers everything this signal cannot: a round that ends in some way that
+never drives `standingTeamCount` to exactly 1 (e.g., a stopped scrim), or any future case not yet
+seen. Verified against the built store before redeploying, mid-match: a normal 4→1 death sequence
+closes exactly once with correct placements, a one-tick glitch back up to full does not, warmup does
+not, and a match already closed does not fire again.
+
 ## Revisit when
 
 - The PCOB API ever exposes which map is being played — `mapName` is already modelled, nothing else

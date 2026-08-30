@@ -271,11 +271,22 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
+          const projection = store.project();
+
           // Never closes a map itself — see the note on `SeriesStore.observeMatch`. Only tracks the
-          // current match's start time for a later manual close, which is why nothing here reads a
-          // return value or needs to hold broadcasting for it.
-          seriesStore
-            .observeMatch(store.project(), Date.now())
+          // current match's start time for a close, manual or automatic.
+          const observed = seriesStore.observeMatch(projection, Date.now());
+
+          // The one signal trusted to close a map on its own — see `shouldAutoCloseNow`. Reuses
+          // `closeMapNow` (same validation, same duplicate-close guard) with an ended-forced
+          // projection, exactly like a manual click, just triggered here instead of by hand.
+          const autoClose = seriesStore.shouldAutoCloseNow(projection)
+            ? seriesStore
+                .closeMapNow(store.projectAsEnded(), Date.now())
+                .catch((error: unknown) => app.log.error({ error }, 'Failed to auto-close the map'))
+            : Promise.resolve();
+
+          Promise.all([observed, autoClose])
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
             .finally(() => {
               refreshSeriesContext();

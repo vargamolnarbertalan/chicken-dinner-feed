@@ -97,6 +97,9 @@ export class SeriesStore {
   private trustedMatchId: string | null = null;
   private currentMapStartedAt: number | null = null;
 
+  private standingCandidateMatchId: string | null = null;
+  private standingStableCount = 0;
+
   constructor(options: SeriesStoreOptions) {
     this.stabilityTicks = options.stabilityTicks ?? DEFAULT_STABILITY_TICKS;
     this.document = new JsonDocument({
@@ -166,18 +169,15 @@ export class SeriesStore {
 
   /**
    * Call after every ingest update. Tracks match-id stability (for `currentMapStartedAt`, read by a
-   * manual close) — nothing here ever persists a map on its own.
+   * close) — nothing here ever persists a map on its own; see `shouldAutoCloseNow`, called
+   * separately, for the one signal trusted enough to trigger a close automatically.
    *
    * **Automatic closing on the `ended` phase was removed live, during the first real tournament
-   * match this ran against.** `ended` fired — via `FinishedStartTime`, specifically — while 11 of 13
-   * teams were still fighting, and every one of them was immediately handed a full, final placement
-   * on air. `specs/PCOB-API.md` §7.6 assumed the field resets per match; in practice, at least once,
-   * it did not, and there is no second independent signal to cross-check it against that has not
-   * also just failed once tonight. A wrong number on a live broadcast is a worse failure than an
-   * operator's extra click, so closing a map is now **always** an explicit action — `closeMapNow`,
-   * from the Series control page — and this method no longer calls it. Kept only for the map-start
-   * timestamp, which the same restart-that-caused-this incident already required for correctness
-   * (it survives a `GameID` flap without resetting the observation).
+   * match this ran against**, and is not what `shouldAutoCloseNow` re-adds. `ended` fired — via
+   * `FinishedStartTime`, specifically — while 11 of 13 teams were still fighting, and every one of
+   * them was immediately handed a full, final placement on air. `specs/PCOB-API.md` §7.6 assumed the
+   * field resets per match; in practice, at least once, it did not. `phase` itself is not trusted by
+   * either method here any more.
    */
   async observeMatch(projection: Projection, now: number): Promise<null> {
     const { matchId } = projection.match;
@@ -200,6 +200,42 @@ export class SeriesStore {
     }
 
     return null;
+  }
+
+  /**
+   * Whether now is the moment to auto-close — call once per ingest update, alongside
+   * `observeMatch`. Trusts exactly one thing: `standingTeamCount <= 1`, a fact about the actual
+   * player data (who is alive), not about an upstream field whose reset behaviour turned out
+   * unreliable twice on the same match this method was built for. This is the literal definition of
+   * a battle royale round having concluded (WWCD) — not a proxy for it — so nothing else is checked.
+   *
+   * Requires it stable for a couple of consecutive polls, the same guard `observeMatch` applies to
+   * a new match id and for the same reason: a single glitched poll with an incomplete player list
+   * must not be mistaken for the round ending. Returns `true` at most once per match id — the caller
+   * closes with an ended-forced projection (`MatchStore.projectAsEnded()`) when it does, exactly as
+   * a manual close already does, so there is exactly one implementation of "how the last team gets
+   * its placement", not two. Safe during warmup without checking it separately: no team can ever
+   * read as not-standing while `inWarmup` is true (`standings.ts`), so this cannot fire before the
+   * round has actually started.
+   */
+  shouldAutoCloseNow(projection: Projection): boolean {
+    const { matchId, standingTeamCount } = projection.match;
+
+    if (matchId === null || standingTeamCount > 1) {
+      this.standingCandidateMatchId = null;
+      this.standingStableCount = 0;
+      return false;
+    }
+
+    if (matchId !== this.standingCandidateMatchId) {
+      this.standingCandidateMatchId = matchId;
+      this.standingStableCount = 1;
+    } else if (this.standingStableCount < this.stabilityTicks) {
+      this.standingStableCount += 1;
+    }
+
+    if (this.standingStableCount < this.stabilityTicks) return false;
+    return !this.hasClosedMapFor(matchId);
   }
 
   /**
@@ -354,6 +390,8 @@ export class SeriesStore {
     this.candidateStableCount = 0;
     this.trustedMatchId = null;
     this.currentMapStartedAt = null;
+    this.standingCandidateMatchId = null;
+    this.standingStableCount = 0;
   }
 
   private async persistClosedMap(projection: Projection, now: number): Promise<ClosedMapResult> {

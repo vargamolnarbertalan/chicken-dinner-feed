@@ -36,16 +36,14 @@ release time — add to `[Unreleased]` in the same change that makes the change.
   scored on the warmup island are also netted out of the round's kill count the moment it starts,
   even if the API itself keeps reporting them. The leaderboard still shows normally during warmup,
   with the series standings so far.
-- **A map no longer closes on its own.** Two upstream signals this depended on — one for detecting
-  warmup (above) and, separately, `isInGame`/`FinishedStartTime` for detecting a match's real end —
-  each turned out unreliable in practice: the second one locked onto "the match has ended" while
-  most of the lobby was still fighting, instantly handing every team still alive a full final
-  placement live on air. **Closing a map is now always an explicit click** on "Close current map
-  now" — nothing closes automatically anymore, so this can no longer happen regardless of what
-  either upstream signal reports. Detecting a _new_ match starting is unaffected. One consequence to
-  know about: if you forget to close before the next match starts, that map's result is gone from
-  the live standings with no automatic recovery — there is no longer an automatic backstop for a
-  forgotten close.
+- **A map no longer closes on `isInGame`/`FinishedStartTime` reporting the match has ended.** That
+  signal turned out unreliable in practice — it locked onto "ended" while most of the lobby was
+  still fighting, instantly handing every team still alive a full final placement live on air.
+  Automatic closing now trusts a single, different signal instead: only one team having any player
+  left standing, checked directly against the actual player data rather than an upstream field —
+  the literal definition of a battle royale round having concluded. "Close current map now" remains
+  as an explicit backup for anything this does not catch (a stopped scrim, or any other way a round
+  can end without coming down to one team).
 - **Closing the same match twice, or with nothing running, is refused** instead of writing a
   duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
   record an extra map deliberately.
