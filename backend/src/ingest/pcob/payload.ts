@@ -339,20 +339,6 @@ function hasRoundStartedByFallback(players: readonly IngestPlayer[]): boolean {
 }
 
 /**
- * Which phase the match is in.
- *
- * `isInGame` is the signal ob.js actually serves, and it is the one we trust. `FinishedStartTime` —
- * documented as the moment WWCD appears — refines it when present, because a match that has ended
- * but whose room is still open should not keep reading as live. Only source B documents that field,
- * so its absence is expected rather than exceptional and simply leaves `isInGame` in charge.
- *
- * Warmup outranks all of it, in one direction only: a lobby that has not dropped yet must never
- * read as `ended`. Whether `isInGame` is already true during warmup is still unconfirmed
- * (`specs/PCOB-API.md` §8), and if it is false the `playerCount > 0` fallback below would otherwise
- * call a warmup lobby a finished match — closing a map, with final placements for a round nobody
- * has played, into the permanent series history.
- */
-/**
  * How many distinct teams still have a standing player — the same predicate `MatchStore` and
  * `standings.ts` use for "still in the fight" (knocked and disconnected both count; only dead does
  * not).

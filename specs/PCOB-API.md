@@ -671,13 +671,27 @@ The whole lobby changing `liveState` at once is what makes this usable — a tra
 players simultaneously has no plausible false positive, unlike any per-player heuristic. It is
 treated as a **starting gun, not a state**: players are back to `liveState: 0` within seconds of
 landing, so the signal is latched for the match rather than polled. For the case the plane cannot
-answer — the app started, or reconnected, after everyone had already landed — the fallback is any
-evidence the round is past its start (a kill, a decided `rank`, anyone dead or knocked), none of
-which the warmup capture contains.
+answer — the app started, or reconnected, after everyone had already landed — the fallback is a
+decided `rank` **only**, not a kill or a dead/knocked state: PUBG Mobile's warmup island is itself a
+playable pre-drop area, confirmed live the same night this detection first ran against a real
+tournament match, when a warmup kill tripped an earlier, broader version of this fallback (kills, or
+anyone dead/knocked) and got the lobby misread as a live round before the plane had even launched.
+`rank` is different in kind: it is a team's placement in the battle-royale round proper, a concept
+warmup has no equivalent of.
 
 **Still open, and deliberately not guessed at:** whether `isingame` and `GameID` are already set
 during warmup. Answering it needs a `getallinfo` capture from those same two moments. The detection
 above is built to be correct either way, so this is a documentation gap rather than a blocking one.
+
+**A second, related failure the same night:** even with warmup correctly detected, `phase` locked
+onto `ended` — apparently via a `FinishedStartTime` that did not clear per match the way §7.6 above
+assumed — while most of a 13-team lobby was still fighting, handing every alive team a fabricated
+final placement live on air. `derivePhase` now also requires `standingTeamCount(players) <= 1` (this
+poll's own player data, not `isingame`/`FinishedStartTime`) before honoring either signal as `ended`,
+and automatic map-closing was rebuilt around that same standing-count signal directly rather than
+`phase` at all — see `docs/adr/0015-multi-map-series-scoring.md`'s two same-night amendments for the
+full account, including a further hardening in `MatchStore` itself against a single partial PCOB
+response (§6) under-reporting how many teams are still in the fight.
 
 ### Closed on 2026-08-17 by reading ob.js
 

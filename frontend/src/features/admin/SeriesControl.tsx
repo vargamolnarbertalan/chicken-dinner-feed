@@ -129,6 +129,13 @@ export function SeriesControl() {
   };
 
   const startAdding = () => {
+    if (rosterTeamNos.length === 0) {
+      toast.error(
+        'No teams to add a map for',
+        'Configure the team roster first, on the Teams tab.',
+      );
+      return;
+    }
     setForm({ mode: 'add', position: closedMaps.length + 1 });
     // Seeded with distinct placements in team order so an untouched form is already valid — the
     // server rejects two teams sharing a placement, and a blank form that cannot be saved without

@@ -1,5 +1,16 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
+/**
+ * An emptied field or a pasted non-numeric string yields `NaN` from `Number(...)`. The server
+ * already rejects a non-integer with a clear 400, but that is a round-trip away — falling back to
+ * the previous value keeps the input visibly a number the whole time instead of silently going
+ * blank/`NaN` until the operator notices the confirm failed.
+ */
+function parsedOr(raw: string, fallback: number): number {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export interface MapTeamResultValue {
   placement: number;
   eliminations: number;
@@ -90,7 +101,11 @@ export function MapResultDialog({
                   aria-label={`${teamName(teamNo)} placement`}
                   className="border-border bg-background rounded border px-2 py-1.5 text-sm"
                   value={values[teamNo]?.placement ?? 1}
-                  onChange={(event) => onChange(teamNo, { placement: Number(event.target.value) })}
+                  onChange={(event) =>
+                    onChange(teamNo, {
+                      placement: parsedOr(event.target.value, values[teamNo]?.placement ?? 1),
+                    })
+                  }
                 />
                 <input
                   type="number"
@@ -99,7 +114,9 @@ export function MapResultDialog({
                   className="border-border bg-background rounded border px-2 py-1.5 text-sm"
                   value={values[teamNo]?.eliminations ?? 0}
                   onChange={(event) =>
-                    onChange(teamNo, { eliminations: Number(event.target.value) })
+                    onChange(teamNo, {
+                      eliminations: parsedOr(event.target.value, values[teamNo]?.eliminations ?? 0),
+                    })
                   }
                 />
               </div>
