@@ -172,8 +172,9 @@ describe('SeriesStore', () => {
     // Reintroduced after `observeMatch`'s removal above, trusting a different signal:
     // `standingTeamCount <= 1`, a fact about the actual player data rather than an upstream field.
 
-    it('requires standingTeamCount <= 1 stable for two consecutive polls before closing', () => {
+    it('requires standingTeamCount <= 1 stable for two consecutive polls before closing', async () => {
       const store = makeStore(2);
+      await store.load(); // Reaches the stability threshold below, which reads `document.current`.
       const match = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
 
       match.applyUpdate(
@@ -244,6 +245,7 @@ describe('SeriesStore', () => {
       // cannot distinguish that from a genuine late-round 1-survivor situation on its own; it is
       // the caller's job (app.ts) to also check `MatchStore.isInWarmup()` before trusting this.
       const store = makeStore(2);
+      await store.load(); // Reaches the stability threshold below, which reads `document.current`.
       const match = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3) });
 
       // Only team 1 has been reported so far — 2 and 3 have not appeared yet, this early in warmup.
@@ -460,8 +462,14 @@ describe('SeriesStore', () => {
       await store.closeMapNow(match.projectAsEnded(), 1_000);
 
       // killPoints(2) + placementPoints(10) for the winner; the wiped team took 2nd for 6.
-      expect(store.getBankedPointsForMatch('m1').get(1)).toBe(12);
-      expect(store.getBankedPointsForMatch('m1').get(2)).toBe(6);
+      expect(store.getBankedPointsForMatch('m1').get(1)).toEqual({
+        killPoints: 2,
+        placementPoints: 10,
+      });
+      expect(store.getBankedPointsForMatch('m1').get(2)).toEqual({
+        killPoints: 0,
+        placementPoints: 6,
+      });
       // Nothing is banked against a different match, or against no match at all.
       expect(store.getBankedPointsForMatch('m2').size).toBe(0);
       expect(store.getBankedPointsForMatch(null).size).toBe(0);
@@ -474,7 +482,10 @@ describe('SeriesStore', () => {
       match.applyUpdate(update({ matchId: 'm1', players: [player({ teamNo: 1, slot: 1 })] }));
       const closed = await store.closeMapNow(match.projectAsEnded(), 1_000);
 
-      expect(store.getBankedPointsForMatch('m1').get(1)).toBe(10);
+      expect(store.getBankedPointsForMatch('m1').get(1)).toEqual({
+        killPoints: 0,
+        placementPoints: 10,
+      });
       await store.deleteClosedMap(closed.id);
 
       // Derived fresh from the history every call, so a deleted map cannot leave the live PTS

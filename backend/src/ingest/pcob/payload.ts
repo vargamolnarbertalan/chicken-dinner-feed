@@ -371,13 +371,17 @@ function derivePhase(
   inWarmup: boolean,
 ): MatchPhase {
   if (inWarmup) return 'live';
-  if (players.length === 0) return 'idle';
 
   const roundCouldHaveConcluded = standingTeamCount(players) <= 1;
 
   const finishedAt = root.has(F.finishedAt) ? root.string(F.finishedAt, '') : '';
-  if (finishedAt !== '' && roundCouldHaveConcluded) return 'ended';
+  if (finishedAt !== '' && players.length > 0 && roundCouldHaveConcluded) return 'ended';
   if (isInGame) return 'live';
+
+  // No players at all: nothing to report either way. Distinct from the "players present but the
+  // standings disagree it has ended" case just below — that one is `live`, not `idle`, so as not to
+  // make MatchStore drop tracking for a match that is demonstrably still going.
+  if (players.length === 0) return 'idle';
 
   // Not in a game but players are still being reported: the match just ended and the payload has
   // not been cleared. Reporting `idle` here would make MatchStore drop the final standings. But

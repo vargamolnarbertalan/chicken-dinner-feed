@@ -228,14 +228,20 @@ describe('PcobMapper', () => {
     });
 
     it('is ended once FinishedStartTime is set, even while isInGame lingers', () => {
-      const update = new PcobMapper().map(snapshot([player()], { FinishedStartTime: '1820' }, true));
+      const mapper = new PcobMapper();
+      mapper.map(snapshot([player({ liveState: 1 })])); // Primes "started" — the plane has flown.
+
+      const update = mapper.map(snapshot([player()], { FinishedStartTime: '1820' }, true));
 
       expect(update.phase).toBe('ended');
     });
 
     it('is ended, not idle, when the game drops out but players are still reported', () => {
       // Reporting idle here would make MatchStore reset and discard the final standings.
-      const update = new PcobMapper().map(snapshot([player()], {}, false));
+      const mapper = new PcobMapper();
+      mapper.map(snapshot([player({ liveState: 1 })])); // Primes "started" — the plane has flown.
+
+      const update = mapper.map(snapshot([player()], {}, false));
 
       expect(update.phase).toBe('ended');
     });
