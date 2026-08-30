@@ -178,6 +178,44 @@ seen. Verified against the built store before redeploying, mid-match: a normal 4
 closes exactly once with correct placements, a one-tick glitch back up to full does not, warmup does
 not, and a match already closed does not fire again.
 
+## Amended, post-match review before the v1.2.0 tag — three gaps closed, one left open
+
+Reviewed the whole night's changes (three code-reviewer passes) before merging to `main`. Three real
+gaps found, all fixed here; one accepted and left open.
+
+- **Automatic closing was missing the warmup guard the manual route already had.** The manual
+  `POST /series/close-map` checks `MatchStore.isInWarmup()` before forcing a close; the automatic
+  path added the same night did not. Early in warmup, before every team's players have arrived even
+  once, `standingTeamCount` (built from which teams have _appeared_) can genuinely read `<= 1` for a
+  couple of polls simply because most teams have not shown up yet — nothing to do with anyone having
+  won. `shouldAutoCloseNow`'s own doc comment had claimed this was already safe by construction; it
+  was not. `app.ts`'s auto-close call now checks `!store.isInWarmup()` too.
+- **Two overlapping close attempts (an auto-close tick racing another, or racing a manual click)
+  could both pass the "not already closed" guard against the same stale snapshot and both persist,
+  the second silently overwriting the first.** `JsonDocument.write()` gained an in-process queue
+  (ADR-0004's amendment) that stops the _corruption_ this could cause, but not the _duplicate
+  attempt_ itself — a second mutation could still read `this.document.current` before the first
+  one's write had landed. `SeriesStore` now serializes every mutating method's whole read-then-write
+  body (not just the underlying write) behind its own queue, so a second call's own guards see the
+  first call's actual result.
+- **The phase-gate added earlier the same night (`standingTeamCount(players) <= 1` in
+  `payload.ts`) only ever sees one poll's raw player list.** `specs/PCOB-API.md` §6 documents that a
+  single PCOB response can be a _partial_ object — "everything absent from that POST vanishes from
+  the next response" — so a momentary glitched poll reporting only a handful of teams could still
+  make that gate misfire, the same class of failure it was built to prevent, just via the display
+  path rather than the auto-close path. `MatchStore.project()` (not `projectAsEnded()`, which an
+  explicit operator/auto-close trigger must still fully trust) now additionally downgrades a natural
+  `'ended'` back to `'live'` if more than one team present has neither a confirmed API placement nor
+  our own elimination-order fallback — using everything accumulated across the whole match, which
+  one bad poll cannot erase.
+
+**Left open, deliberately:** a match transition arriving before `shouldAutoCloseNow`'s own
+2-consecutive-poll stability completes for the outgoing match silently drops that map — no auto-close
+fires for it, and manual reconstruction (`insertManualMap`) is the only recovery. Judged rare (needs
+the next `GameID` within roughly one poll interval of the round concluding) and already covered by
+the same operational gap the previous amendment already listed below; not fixed under further review
+pressure the night the code needs to ship.
+
 ## Revisit when
 
 - The PCOB API ever exposes which map is being played — `mapName` is already modelled, nothing else
@@ -185,8 +223,9 @@ not, and a match already closed does not fire again.
 - A tournament format needs something other than "every map counts equally toward one flat total"
   (best-of-N drops, weighted maps, etc.) — out of scope for this decision.
 - An operator forgetting to close before the next `GameID` appears turns out to happen often enough
-  in practice to warrant an in-app safeguard (a warning banner, a short grace window) rather than an
-  external snapshot log — see the amendment above.
+  in practice to warrant an in-app safeguard (a warning banner, a short grace window, a log line when
+  a standing-close candidate is dropped by a match transition) rather than an external snapshot log —
+  see the amendments above.
 - A confirmed `getallinfo` capture answers whether `isInGame`/`GameID` are already set during warmup,
   or whether `FinishedStartTime` genuinely never clears — either would let automatic closing be
   reconsidered on firmer evidence than tonight's.

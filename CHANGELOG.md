@@ -47,6 +47,17 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 - **Closing the same match twice, or with nothing running, is refused** instead of writing a
   duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
   record an extra map deliberately.
+- **Automatic closing could have fired early in warmup**, before every team's players had even
+  arrived once, for the same reason automatic closing generally needed hardening above. It now
+  checks the same "still warming up" state the manual button already refused to act on.
+- **Two overlapping attempts to close a map — automatic racing another automatic, or racing a
+  manual click — could both succeed and silently overwrite each other**, in the rare case one
+  started before the other had fully finished. Every change to your series history (closing,
+  correcting, deleting, adding by hand, resetting) is now processed one at a time.
+- **The overlay could momentarily show a false "match ended" state** — full placements for every
+  team, before anyone had actually placed — on a single glitched update where the app briefly saw
+  fewer teams than are actually playing. It now cross-checks against everything it has already
+  observed this match before ever treating a "the match ended" signal as real.
 
 ## [1.1.0] - 2026-08-29
 

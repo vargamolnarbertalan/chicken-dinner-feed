@@ -100,6 +100,19 @@ export class SeriesStore {
   private standingCandidateMatchId: string | null = null;
   private standingStableCount = 0;
 
+  /**
+   * Every mutating call (`closeMapNow`, `insertManualMap`, `resetSeries`, `replaceState`,
+   * `editClosedMap`, `deleteClosedMap`) chains onto this — see `mutate`. `JsonDocument.write` itself
+   * queues concurrent writes so two overlapping ones cannot corrupt the file (confirmed by
+   * reproducing that directly before it was fixed there), but that alone does not stop a second
+   * mutation here from *reading* `this.document.current` before the first one's write has landed:
+   * two auto-close ticks racing (the second poll arriving before the first's write completes) would
+   * both pass `hasClosedMapFor`'s check against the same stale snapshot and both build a closed-map
+   * entry, the second silently overwriting the first's on disk. Serializing the whole read-then-write
+   * body, not just the write, is what makes the second call's own guard see the first call's result.
+   */
+  private mutationQueue: Promise<unknown> = Promise.resolve();
+
   constructor(options: SeriesStoreOptions) {
     this.stabilityTicks = options.stabilityTicks ?? DEFAULT_STABILITY_TICKS;
     this.document = new JsonDocument({
@@ -167,6 +180,19 @@ export class SeriesStore {
     return this.document.current.closedMaps.some((entry) => entry.matchId === matchId);
   }
 
+  /** Runs `fn` after every earlier mutation on this instance has settled — see `mutationQueue`. */
+  private mutate<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.mutationQueue.then(fn, fn);
+    // Only the queue link swallows a failure — never `run`, which the caller awaits and must still
+    // see fail. Without this, one failed mutation would wedge every mutation after it, since a
+    // rejected promise short-circuits every `.then()` chained onto it.
+    this.mutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   /**
    * Call after every ingest update. Tracks match-id stability (for `currentMapStartedAt`, read by a
    * close) — nothing here ever persists a map on its own; see `shouldAutoCloseNow`, called
@@ -214,9 +240,16 @@ export class SeriesStore {
    * must not be mistaken for the round ending. Returns `true` at most once per match id — the caller
    * closes with an ended-forced projection (`MatchStore.projectAsEnded()`) when it does, exactly as
    * a manual close already does, so there is exactly one implementation of "how the last team gets
-   * its placement", not two. Safe during warmup without checking it separately: no team can ever
-   * read as not-standing while `inWarmup` is true (`standings.ts`), so this cannot fire before the
-   * round has actually started.
+   * its placement", not two.
+   *
+   * **Not warmup-safe on its own — the caller must also check `MatchStore.isInWarmup()`.**
+   * `standingTeamCount` counts teams that have *appeared* (been seen at all this match) and are not
+   * eliminated; a team wiped on the warmup island correctly never counts as eliminated, but a team
+   * that simply has not been reported yet — normal early in warmup, before every team's players have
+   * arrived even once — does not count as "appeared" either. `standingTeamCount` can genuinely read
+   * `<= 1` for a couple of polls purely because most teams have not shown up yet, with nothing to do
+   * with anyone having won. `app.ts`'s call site checks `!store.isInWarmup()` before ever calling
+   * this, the same way `routes/series.ts` already guards the manual close.
    */
   shouldAutoCloseNow(projection: Projection): boolean {
     const { matchId, standingTeamCount } = projection.match;
@@ -243,33 +276,36 @@ export class SeriesStore {
    * an explicit action is trusted immediately — and reuses `MatchStore.projectAsEnded()`'s survivor
    * resolution via the `projection` the caller passes in.
    */
-  async closeMapNow(projection: Projection, now: number): Promise<ClosedMapResult> {
-    const { matchId } = projection.match;
+  closeMapNow(projection: Projection, now: number): Promise<ClosedMapResult> {
+    return this.mutate(async () => {
+      const { matchId } = projection.match;
 
-    // Without this a click with no match running records an empty map, which then has to be found
-    // and deleted by hand before the series totals read correctly again.
-    if (matchId === null) {
-      throw new Error('There is no match running to close. Add the map by hand instead.');
-    }
+      // Without this a click with no match running records an empty map, which then has to be
+      // found and deleted by hand before the series totals read correctly again.
+      if (matchId === null) {
+        throw new Error('There is no match running to close. Add the map by hand instead.');
+      }
 
-    // A second close of the same PCOB match would record that match's points twice: the projection
-    // reports them cumulatively from the match's own start, so the second map would repeat
-    // everything the first one already banked. Adding the map by hand is the supported way to record
-    // a result the app did not observe.
-    if (this.hasClosedMapFor(matchId)) {
-      throw new Error(
-        'This match has already been closed into the series. Add a map by hand if you need another entry.',
-      );
-    }
+      // A second close of the same PCOB match would record that match's points twice: the
+      // projection reports them cumulatively from the match's own start, so the second map would
+      // repeat everything the first one already banked. Adding the map by hand is the supported
+      // way to record a result the app did not observe. Queued behind `mutate`, so this check sees
+      // the result of any close still in flight rather than a stale pre-write snapshot.
+      if (this.hasClosedMapFor(matchId)) {
+        throw new Error(
+          'This match has already been closed into the series. Add a map by hand if you need another entry.',
+        );
+      }
 
-    // A match id can outlive the player list it belongs to. Recording the empty map that results is
-    // the same nuisance as recording one with no match at all: a zero-point entry that has to be
-    // hunted down and deleted before the totals read correctly again.
-    if (!projection.match.teams.some((team) => team.hasAppeared && team.placement !== null)) {
-      throw new Error('No team has played this map yet, so there is nothing to record.');
-    }
+      // A match id can outlive the player list it belongs to. Recording the empty map that results
+      // is the same nuisance as recording one with no match at all: a zero-point entry that has to
+      // be hunted down and deleted before the totals read correctly again.
+      if (!projection.match.teams.some((team) => team.hasAppeared && team.placement !== null)) {
+        throw new Error('No team has played this map yet, so there is nothing to record.');
+      }
 
-    return this.persistClosedMap(projection, now);
+      return this.persistClosedMap(projection, now);
+    });
   }
 
   /**
@@ -280,39 +316,41 @@ export class SeriesStore {
    * current length appends. Every map is renumbered afterwards, which is what makes inserting
    * between two existing maps meaningful at all.
    */
-  async insertManualMap(
+  insertManualMap(
     position: number,
     teams: readonly ClosedMapTeamEdit[],
     ruleset: ScoringRuleset,
   ): Promise<ClosedMapResult> {
-    if (teams.length === 0) {
-      throw new Error('A map needs at least one team result.');
-    }
+    return this.mutate(async () => {
+      if (teams.length === 0) {
+        throw new Error('A map needs at least one team result.');
+      }
 
-    const current = this.document.current;
-    const map: ClosedMapResult = {
-      id: randomUUID(),
-      // Overwritten by `renumber` below; the array position is the real source of truth.
-      mapNumber: 1,
-      mapName: null,
-      // Never observed, so there is no match to attribute it to and no clock to report. See
-      // `closedMapResultSchema` on why a fabricated `endedAt` would be worse than none.
-      matchId: null,
-      startedAt: null,
-      endedAt: null,
-      teams: resultsFromEdits(teams, ruleset),
-    };
+      const current = this.document.current;
+      const map: ClosedMapResult = {
+        id: randomUUID(),
+        // Overwritten by `renumber` below; the array position is the real source of truth.
+        mapNumber: 1,
+        mapName: null,
+        // Never observed, so there is no match to attribute it to and no clock to report. See
+        // `closedMapResultSchema` on why a fabricated `endedAt` would be worse than none.
+        matchId: null,
+        startedAt: null,
+        endedAt: null,
+        teams: resultsFromEdits(teams, ruleset),
+      };
 
-    const index = Math.max(0, Math.min(current.closedMaps.length, position - 1));
-    const closedMaps = renumber([
-      ...current.closedMaps.slice(0, index),
-      map,
-      ...current.closedMaps.slice(index),
-    ]);
+      const index = Math.max(0, Math.min(current.closedMaps.length, position - 1));
+      const closedMaps = renumber([
+        ...current.closedMaps.slice(0, index),
+        map,
+        ...current.closedMaps.slice(index),
+      ]);
 
-    await this.document.write({ ...current, closedMaps });
-    // The renumbered copy, not the local `map` — its `mapNumber` is only correct after renumbering.
-    return closedMaps[index] as ClosedMapResult;
+      await this.document.write({ ...current, closedMaps });
+      // The renumbered copy, not the local `map` — its `mapNumber` is only correct after renumbering.
+      return closedMaps[index] as ClosedMapResult;
+    });
   }
 
   /**
@@ -321,9 +359,11 @@ export class SeriesStore {
    * currently running map's own elimination tracking untouched; it becomes map 1 of the new series
    * once it closes (confirmed with the operator rather than assumed).
    */
-  async resetSeries(): Promise<SeriesDocument> {
-    this.resetObservation();
-    return this.document.write(createDefaultSeriesDocument(randomUUID()));
+  resetSeries(): Promise<SeriesDocument> {
+    return this.mutate(async () => {
+      this.resetObservation();
+      return this.document.write(createDefaultSeriesDocument(randomUUID()));
+    });
   }
 
   /**
@@ -334,9 +374,11 @@ export class SeriesStore {
    * `resetSeries`: the imported history knows nothing about whatever match is currently running on
    * this machine.
    */
-  async replaceState(document: SeriesDocument): Promise<SeriesDocument> {
-    this.resetObservation();
-    return this.document.write(document);
+  replaceState(document: SeriesDocument): Promise<SeriesDocument> {
+    return this.mutate(async () => {
+      this.resetObservation();
+      return this.document.write(document);
+    });
   }
 
   /**
@@ -345,44 +387,48 @@ export class SeriesStore {
    * the edited team set must exactly match the map's original teams (this corrects a wrong result,
    * it does not redefine who played).
    */
-  async editClosedMap(
+  editClosedMap(
     mapId: string,
     edits: readonly ClosedMapTeamEdit[],
     ruleset: ScoringRuleset,
   ): Promise<SeriesDocument> {
-    const current = this.document.current;
-    const map = current.closedMaps.find((entry) => entry.id === mapId);
-    if (!map) throw new Error(`No closed map with the id "${mapId}".`);
+    return this.mutate(async () => {
+      const current = this.document.current;
+      const map = current.closedMaps.find((entry) => entry.id === mapId);
+      if (!map) throw new Error(`No closed map with the id "${mapId}".`);
 
-    const originalTeamNos = new Set(map.teams.map((team) => team.teamNo));
-    const editedTeamNos = new Set(edits.map((edit) => edit.teamNo));
-    if (
-      originalTeamNos.size !== editedTeamNos.size ||
-      [...originalTeamNos].some((teamNo) => !editedTeamNos.has(teamNo))
-    ) {
-      throw new Error('An edit must cover exactly the teams already recorded for this map.');
-    }
+      const originalTeamNos = new Set(map.teams.map((team) => team.teamNo));
+      const editedTeamNos = new Set(edits.map((edit) => edit.teamNo));
+      if (
+        originalTeamNos.size !== editedTeamNos.size ||
+        [...originalTeamNos].some((teamNo) => !editedTeamNos.has(teamNo))
+      ) {
+        throw new Error('An edit must cover exactly the teams already recorded for this map.');
+      }
 
-    const teams = resultsFromEdits(edits, ruleset);
+      const teams = resultsFromEdits(edits, ruleset);
 
-    return this.document.write({
-      ...current,
-      closedMaps: current.closedMaps.map((entry) =>
-        entry.id === mapId ? { ...entry, teams } : entry,
-      ),
+      return this.document.write({
+        ...current,
+        closedMaps: current.closedMaps.map((entry) =>
+          entry.id === mapId ? { ...entry, teams } : entry,
+        ),
+      });
     });
   }
 
   /** Removes a closed map (a bogus auto-detected entry, most likely) and renumbers the rest. */
-  async deleteClosedMap(mapId: string): Promise<SeriesDocument> {
-    const current = this.document.current;
-    if (!current.closedMaps.some((entry) => entry.id === mapId)) {
-      throw new Error(`No closed map with the id "${mapId}".`);
-    }
+  deleteClosedMap(mapId: string): Promise<SeriesDocument> {
+    return this.mutate(async () => {
+      const current = this.document.current;
+      if (!current.closedMaps.some((entry) => entry.id === mapId)) {
+        throw new Error(`No closed map with the id "${mapId}".`);
+      }
 
-    const remaining = renumber(current.closedMaps.filter((entry) => entry.id !== mapId));
+      const remaining = renumber(current.closedMaps.filter((entry) => entry.id !== mapId));
 
-    return this.document.write({ ...current, closedMaps: remaining });
+      return this.document.write({ ...current, closedMaps: remaining });
+    });
   }
 
   private resetObservation(): void {

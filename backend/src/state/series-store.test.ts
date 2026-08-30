@@ -217,9 +217,8 @@ describe('SeriesStore', () => {
       expect(store.shouldAutoCloseNow(match.project())).toBe(false); // back above 1 — no close.
     });
 
-    it('never fires during warmup, whatever a team’s live state looks like', async () => {
-      // No team ever reads as not-standing during warmup (standings.ts) — this depends on that,
-      // rather than checking `inWarmup` a second time itself.
+    it('does not fire from a team wiped on the warmup island once every team has appeared', async () => {
+      // No team reads as not-standing during warmup once it has actually appeared (standings.ts).
       const store = makeStore(2);
       const match = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
 
@@ -236,6 +235,26 @@ describe('SeriesStore', () => {
       expect(match.project().match.standingTeamCount).toBe(2); // Not 1 — warmup never eliminates.
       expect(store.shouldAutoCloseNow(match.project())).toBe(false);
       expect(store.shouldAutoCloseNow(match.project())).toBe(false);
+    });
+
+    it('CAN read <= 1 early in warmup, before every team has appeared — the caller must gate on isInWarmup() separately', async () => {
+      // Regression against a real gap: standingTeamCount counts teams that have *appeared* and are
+      // not eliminated. Early in warmup, before every team's players have arrived even once, only
+      // a handful may have appeared at all — nothing to do with anyone having won. This method
+      // cannot distinguish that from a genuine late-round 1-survivor situation on its own; it is
+      // the caller's job (app.ts) to also check `MatchStore.isInWarmup()` before trusting this.
+      const store = makeStore(2);
+      const match = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3) });
+
+      // Only team 1 has been reported so far — 2 and 3 have not appeared yet, this early in warmup.
+      match.applyUpdate(
+        update({ inWarmup: true, players: [player({ teamNo: 1, slot: 1, liveState: 'alive' })] }),
+      );
+
+      expect(match.project().match.standingTeamCount).toBe(1); // Not because anyone has won.
+      expect(store.shouldAutoCloseNow(match.project())).toBe(false); // sighting 1.
+      expect(store.shouldAutoCloseNow(match.project())).toBe(true); // stable — this method fires.
+      // A caller that skips the `isInWarmup()` check would now record a fabricated result here.
     });
 
     it('does not fire again once the match has already been closed', async () => {
@@ -487,6 +506,26 @@ describe('SeriesStore', () => {
       await expect(store.closeMapNow(match.projectAsEnded(), 2_000)).rejects.toThrow(
         /already been closed/,
       );
+      expect(store.getState().closedMaps).toHaveLength(1);
+    });
+
+    it('refuses the second of two closes fired without awaiting the first — the actual race', async () => {
+      // Regression: this is the shape a real auto-close race takes — two ticks a poll apart, the
+      // second fired before the first's write has landed, both reading the same "not yet closed"
+      // snapshot. Without serializing the whole read-then-write body (not just the write itself),
+      // both would pass the `hasClosedMapFor` guard and both persist, the second silently
+      // overwriting the first on disk.
+      const store = makeStore();
+      await store.load();
+      const match = new MatchStore({ source: 'pcob', roster: roster(1) });
+      match.applyUpdate(update({ matchId: 'm1', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      const projection = match.projectAsEnded();
+      const first = store.closeMapNow(projection, 1_000);
+      const second = store.closeMapNow(projection, 1_000); // No await between them.
+
+      await expect(first).resolves.toBeTruthy();
+      await expect(second).rejects.toThrow(/already been closed/);
       expect(store.getState().closedMaps).toHaveLength(1);
     });
 

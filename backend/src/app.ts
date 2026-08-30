@@ -280,11 +280,22 @@ export async function buildApp(): Promise<AppContext> {
           // The one signal trusted to close a map on its own — see `shouldAutoCloseNow`. Reuses
           // `closeMapNow` (same validation, same duplicate-close guard) with an ended-forced
           // projection, exactly like a manual click, just triggered here instead of by hand.
-          const autoClose = seriesStore.shouldAutoCloseNow(projection)
-            ? seriesStore
-                .closeMapNow(store.projectAsEnded(), Date.now())
-                .catch((error: unknown) => app.log.error({ error }, 'Failed to auto-close the map'))
-            : Promise.resolve();
+          //
+          // `!store.isInWarmup()` is not redundant with `shouldAutoCloseNow`'s own reasoning about
+          // `isEliminated`. Early in warmup, before every team's players have arrived even once,
+          // `standingTeamCount` (built from `hasAppeared`) can genuinely read <= 1 simply because
+          // most teams have not been *seen* yet, not because they are down to one survivor — and
+          // that can hold stable for a couple of polls while the lobby is still filling in. The
+          // manual route (`routes/series.ts`) already checks this before forcing a close; the
+          // automatic path needs the exact same guard.
+          const autoClose =
+            !store.isInWarmup() && seriesStore.shouldAutoCloseNow(projection)
+              ? seriesStore
+                  .closeMapNow(store.projectAsEnded(), Date.now())
+                  .catch((error: unknown) =>
+                    app.log.error({ error }, 'Failed to auto-close the map'),
+                  )
+              : Promise.resolve();
 
           Promise.all([observed, autoClose])
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
