@@ -212,6 +212,7 @@ export class MatchStore {
       seriesPointsByTeam: this.seriesPointsByTeam,
       seriesHasAppeared: this.seriesHasAppeared,
       bankedPointsByTeam: this.bankedPointsByTeam,
+      inWarmup: this.lastUpdate?.inWarmup ?? false,
     });
 
     return {

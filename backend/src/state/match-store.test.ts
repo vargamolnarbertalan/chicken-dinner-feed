@@ -310,6 +310,11 @@ describe('MatchStore', () => {
       expect(warmup.match.teams.every((team) => team.placement === null)).toBe(true);
       // Both teams still render normally — the leaderboard is useful on air during warmup.
       expect(warmup.match.teams.every((team) => team.hasAppeared)).toBe(true);
+      // And neither greys out: they respawn on the island, so a wipe there is not a wipe. The
+      // count a director reads off a Stream Deck button must not drop and climb back with the
+      // warmup scuffle either.
+      expect(warmup.match.teams.every((team) => !team.isEliminated)).toBe(true);
+      expect(warmup.match.standingTeamCount).toBe(2);
 
       // The round starts and team 2 is alive again, as it would be after the real drop.
       store.applyUpdate(

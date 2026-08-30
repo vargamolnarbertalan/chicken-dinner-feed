@@ -29,8 +29,9 @@ release time — add to `[Unreleased]` in the same change that makes the change.
   the app treated that as a match: it could record a finished map — final placements and all, for a
   round nobody had played — into the series history, and a team wiped on the warmup island was
   logged as eliminated, which stuck for the whole round that followed. Nothing is recorded now until
-  the round genuinely starts. The leaderboard still shows normally during warmup, with the series
-  standings so far.
+  the round genuinely starts, and no team greys out or drops off the "teams remaining" count for
+  being wiped on the warmup island — they respawn there. The leaderboard still shows normally during
+  warmup, with the series standings so far.
 - **Closing the same match twice, or with nothing running, is refused** instead of writing a
   duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
   record an extra map deliberately.

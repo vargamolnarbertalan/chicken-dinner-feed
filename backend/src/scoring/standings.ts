@@ -60,6 +60,15 @@ export interface StandingsInput {
    * match, which has not restarted. Only `totalPoints` nets this out. Defaults to nothing banked.
    */
   bankedPointsByTeam?: ReadonlyMap<number, BankedPoints>;
+  /**
+   * True while the lobby is still warming up — see `IngestUpdate.inWarmup`.
+   *
+   * No team counts as eliminated then, however many of its players are down: they respawn on the
+   * warmup island, so a wipe there is not a wipe. Without this a team greys out on air and
+   * `standingTeamCount` — which a director reads off a Stream Deck button through `/feedback` —
+   * drops and climbs back with the warmup scuffle. Defaults to false.
+   */
+  inWarmup?: boolean;
 }
 
 /**
@@ -110,6 +119,7 @@ export function computeStandings(input: StandingsInput): Team[] {
   const seriesPointsByTeam = input.seriesPointsByTeam;
   const seriesHasAppeared = input.seriesHasAppeared;
   const bankedPointsByTeam = input.bankedPointsByTeam;
+  const inWarmup = input.inWarmup ?? false;
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -141,7 +151,8 @@ export function computeStandings(input: StandingsInput): Team[] {
       placement,
       // A team with no reported players has not been wiped out — it has not been seen. Treating
       // "unknown" as "eliminated" would black out the whole table before the first update arrives.
-      isEliminated: teamPlayers.length > 0 && standingPlayerCount === 0,
+      // Nor has a team wiped on the warmup island: it respawns.
+      isEliminated: !inWarmup && teamPlayers.length > 0 && standingPlayerCount === 0,
       hasAppeared,
     };
   });
