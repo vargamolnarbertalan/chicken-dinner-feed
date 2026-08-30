@@ -9,7 +9,7 @@ import type {
 } from '@cdf/shared';
 import { DEFAULT_SCORING_RULESET, DEFAULT_TEAM_ROSTER } from '@cdf/shared';
 import type { IngestUpdate } from '../ingest/source.js';
-import { computeStandings } from '../scoring/standings.js';
+import { computeStandings, type BankedPoints } from '../scoring/standings.js';
 
 export interface MatchStoreOptions {
   source: IngestSourceKind;
@@ -67,13 +67,17 @@ export class MatchStore {
   private seriesPointsByTeam: ReadonlyMap<number, number> = new Map();
   private seriesHasAppeared: ReadonlySet<number> = new Set();
   /**
-   * Set once a match has been banked into series history while its data is still what this store is
-   * showing (frozen, until the next map's first update arrives). Without this, the window between a
-   * map closing and the next match's first update would double-count that map's own points: once as
-   * "this match's own contribution" (this store has not seen anything new yet) and again via
-   * `seriesPointsByTeam`, which by then already includes it.
+   * How much of the currently displayed match is already banked in `seriesPointsByTeam`, per team,
+   * because a map was closed from this same match. Without it, the window between a map closing and
+   * the next match's first update double-counts that map's points: once as "this match's own
+   * contribution" (this store has seen nothing new yet) and again via the series total.
+   *
+   * Held as a plain value set from outside, and **derived** by the caller from the persisted series
+   * history rather than accumulated here. That is what keeps it honest across a series reset, a
+   * deleted map or an imported backup: whatever the history says is banked right now is what gets
+   * netted out, with no stale flag of our own to go wrong.
    */
-  private suppressedMatchId: string | null = null;
+  private bankedPointsByTeam: ReadonlyMap<number, BankedPoints> = new Map();
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -85,24 +89,36 @@ export class MatchStore {
     this.ruleset = ruleset;
   }
 
-  /** See the field comments above. Called whenever the series history changes. */
+  /**
+   * See the field comments above. Called whenever the series history changes — and on every ingest
+   * update, since `bankedPointsByTeam` is only meaningful against the match currently displayed and
+   * that can change from one update to the next.
+   */
   setSeriesContext(
     seriesPointsByTeam: ReadonlyMap<number, number>,
     seriesHasAppeared: ReadonlySet<number>,
+    bankedPointsByTeam: ReadonlyMap<number, BankedPoints> = new Map(),
   ): void {
     this.seriesPointsByTeam = seriesPointsByTeam;
     this.seriesHasAppeared = seriesHasAppeared;
+    this.bankedPointsByTeam = bankedPointsByTeam;
+  }
+
+  /** The match this store is currently showing, so a caller can ask the series what it has banked for it. */
+  currentMatchId(): string | null {
+    return this.lastUpdate?.matchId ?? null;
   }
 
   /**
-   * Call once `matchId` has been persisted into series history (a real `ended` close or a manual
-   * "close this map now"). A no-op if `matchId` is not the match this store is currently showing —
-   * it only ever suppresses its *own* current match, never a stale or future one.
+   * Whether the lobby is still warming up — see `IngestUpdate.inWarmup`.
+   *
+   * Exposed because `projectAsEnded()` deliberately reports the match *as if* it had ended, which is
+   * exactly right for closing a real map and exactly wrong during warmup: it would hand every team
+   * in the lobby a final placement for a round nobody has played. The phase gate that stops the
+   * automatic close cannot stop that one, so the caller has to ask.
    */
-  suppressContributionFor(matchId: string): void {
-    if (this.lastUpdate?.matchId === matchId) {
-      this.suppressedMatchId = matchId;
-    }
+  isInWarmup(): boolean {
+    return this.lastUpdate?.inWarmup ?? false;
   }
 
   /**
@@ -135,8 +151,14 @@ export class MatchStore {
     this.connectionState = 'connected';
     this.statusMessage = null;
 
+    // Teams are recorded as present even during warmup, deliberately: the lobby is assembled, and
+    // the leaderboard is genuinely useful on air at that point, showing the series standings so far.
     for (const player of update.players) this.seenTeams.add(player.teamNo);
-    this.recordNewlyEliminatedTeams(update);
+
+    // Eliminations are not. A team wiped on the warmup island has not been eliminated from anything,
+    // and `eliminationOrder` is append-only — recording one there would hand that team a last-place
+    // finish for the whole round that follows, with no way back short of restarting the app.
+    if (!update.inWarmup) this.recordNewlyEliminatedTeams(update);
   }
 
   /**
@@ -161,9 +183,36 @@ export class MatchStore {
    * Deliberately carries no timestamp: the broadcaster stamps that. If the projection contained
    * `Date.now()` it would differ on every call, defeating the change detection that stops the
    * overlay re-animating twice a second for nothing (ADR-0007).
+   *
+   * `phase` is taken from the ingest source, except a natural `'ended'` is downgraded back to
+   * `'live'` here if too many teams are still unresolved — see `hasTooManyUnresolvedTeams`. This is
+   * a second, independent layer under the ingest adapter's own `standingTeamCount`-based phase gate
+   * (`payload.ts`), not a replacement for it: that check only ever sees one poll's raw player list,
+   * and `specs/PCOB-API.md` §6 documents that a single PCOB response can be a *partial* object —
+   * "everything absent from that POST vanishes from the next response" — which could momentarily
+   * under-report how many teams are actually still in the fight. This check instead uses everything
+   * `MatchStore` has accumulated across every poll of this match, which one bad poll cannot erase.
+   * `projectAsEnded()` deliberately does not apply this — an explicit operator/auto-close trigger is
+   * trusted to mean "resolve everyone now", not "only if few enough are technically unresolved".
    */
   project(): Projection {
-    return this.buildProjection(this.lastUpdate?.phase ?? 'idle');
+    const phase = this.lastUpdate?.phase ?? 'idle';
+    const trustworthy = phase !== 'ended' || !this.hasTooManyUnresolvedTeams();
+    return this.buildProjection(trustworthy ? phase : 'live');
+  }
+
+  /**
+   * Whether more than one team present this match has neither a confirmed API placement
+   * (`apiRankByTeam`) nor our own elimination-order fallback — i.e., whether trusting `ended` at
+   * face value right now would fabricate final placements for teams nobody has actually confirmed
+   * are out. A real battle royale conclusion leaves at most one team in this state (the winner).
+   */
+  private hasTooManyUnresolvedTeams(): boolean {
+    const ranked = this.apiRankByTeam();
+    const unresolved = [...this.seenTeams].filter(
+      (teamNo) => !ranked.has(teamNo) && !this.eliminated.has(teamNo),
+    ).length;
+    return unresolved > 1;
   }
 
   /**
@@ -189,8 +238,8 @@ export class MatchStore {
       presentTeams: this.seenTeams,
       seriesPointsByTeam: this.seriesPointsByTeam,
       seriesHasAppeared: this.seriesHasAppeared,
-      suppressThisMapPoints:
-        this.suppressedMatchId !== null && update?.matchId === this.suppressedMatchId,
+      bankedPointsByTeam: this.bankedPointsByTeam,
+      inWarmup: this.lastUpdate?.inWarmup ?? false,
     });
 
     return {
@@ -216,7 +265,8 @@ export class MatchStore {
     this.eliminationOrder = [];
     this.eliminated.clear();
     this.seenTeams.clear();
-    this.suppressedMatchId = null;
+    // `bankedPointsByTeam` is deliberately not cleared here: it is owned by whoever set it and is
+    // re-derived from the series history on the very same update that triggered this reset.
   }
 
   /**

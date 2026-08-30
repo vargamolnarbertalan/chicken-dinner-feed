@@ -200,6 +200,98 @@ describe('MatchStore', () => {
     });
   });
 
+  describe('project() distrusting an untrustworthy "ended"', () => {
+    // A second, independent layer under the ingest adapter's own phase gate (`payload.ts`), which
+    // only ever sees one poll's raw player list. `specs/PCOB-API.md` §6 documents that a single PCOB
+    // response can be a *partial* object, so a momentary glitch reporting only a handful of teams
+    // could make the adapter's own gate misfire too. This uses everything MatchStore has
+    // accumulated across the whole match instead, which one bad poll cannot erase.
+
+    it('downgrades phase back to live when more than one team is still unresolved', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3, 4) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1 }),
+            player({ teamNo: 2, slot: 1 }),
+            player({ teamNo: 3, slot: 1 }),
+            player({ teamNo: 4, slot: 1 }),
+          ],
+        }),
+      );
+
+      // A glitched poll reports only team 1 and claims the round has ended — but teams 2, 3 and 4
+      // have neither an API rank nor our own elimination-order fallback, so this cannot be real.
+      store.applyUpdate(update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      const { match } = store.project();
+      expect(match.phase).toBe('live');
+      expect(match.teams.find((t) => t.teamNo === 4)?.placement).toBeNull();
+    });
+
+    it('does not downgrade projectAsEnded — an explicit trigger is always trusted', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3, 4) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1 }),
+            player({ teamNo: 2, slot: 1 }),
+            player({ teamNo: 3, slot: 1 }),
+            player({ teamNo: 4, slot: 1 }),
+          ],
+        }),
+      );
+      store.applyUpdate(update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      const { match } = store.projectAsEnded();
+      expect(match.phase).toBe('ended');
+      expect(match.teams.find((t) => t.teamNo === 4)?.placement).not.toBeNull();
+    });
+
+    it('still resolves a genuine one-survivor conclusion normally', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+      store.applyUpdate(
+        update({
+          phase: 'ended',
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+
+      const { match } = store.project();
+      expect(match.phase).toBe('ended');
+      expect(match.teams.find((t) => t.teamNo === 1)?.placement).toBe(1);
+    });
+
+    it('does not count against a team the API has already ranked, even if we have not detected it as eliminated', () => {
+      // A team resolved via API rank should not itself count as "unresolved" just because our own
+      // elimination-order fallback has not (yet, or ever) caught up to it independently.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      store.applyUpdate(
+        update({
+          phase: 'ended',
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'alive', rank: 2 }), // Ranked, not "eliminated".
+          ],
+        }),
+      );
+
+      const { match } = store.project();
+      expect(match.phase).toBe('ended');
+    });
+  });
+
   describe('setSeriesContext', () => {
     it('adds series points on top of this match and keeps a never-appeared team last', () => {
       const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
@@ -226,54 +318,118 @@ describe('MatchStore', () => {
     });
   });
 
-  describe('suppressContributionFor', () => {
+  describe('banked points from a map closed out of this same match', () => {
     it('stops re-adding a just-closed match’s own points once the series total already includes them', () => {
       // Regression: found live. A map auto-closes, its points get banked into the series total, but
       // MatchStore keeps showing that same match's data (frozen) until the next match's first
-      // update — without suppression, that frozen window double-counted the closing map's points.
+      // update — without netting, that frozen window double-counted the closing map's points.
       const store = new MatchStore({ source: 'pcob', roster: roster(1) });
       store.applyUpdate(
         update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
       );
 
-      const beforeSuppression = store.project().match.teams[0];
-      expect(beforeSuppression?.totalPoints).toBe(18); // killPoints(8) + placementPoints[0] (10).
+      const beforeClose = store.project().match.teams[0];
+      expect(beforeClose?.totalPoints).toBe(18); // killPoints(8) + placementPoints[0] (10).
 
       // The series total now includes this same match's 18 points, as it would right after close.
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
-      store.suppressContributionFor('match-1');
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
+      );
 
-      const afterSuppression = store.project().match.teams[0];
-      expect(afterSuppression?.totalPoints).toBe(18); // Unchanged — not 36.
+      expect(store.project().match.teams[0]?.totalPoints).toBe(18); // Unchanged — not 36.
     });
 
-    it('is a no-op for a match id other than the one currently being shown', () => {
+    it('keeps counting eliminations scored after the close, instead of freezing the column', () => {
+      // Regression: closing a map while the game was still running froze PTS for the rest of that
+      // match. Reported after colleagues faked a few maps of history and then found that a fresh
+      // kill moved nothing at all.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })] }));
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
+      );
+      expect(store.project().match.teams[0]?.totalPoints).toBe(18);
+
+      // Same match, same id — the game did not restart, a player just got two more kills.
+      store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 10 })] }));
+
+      // 10 kills + guaranteed-minimum 10 = 20 earned, 18 already banked → 2 new points on top.
+      expect(store.project().match.teams[0]?.totalPoints).toBe(20);
+    });
+
+    it('counts a genuinely new match in full, once nothing is banked against it', () => {
       const store = new MatchStore({ source: 'pcob', roster: roster(1) });
       store.applyUpdate(
         update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
       );
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
-
-      store.suppressContributionFor('some-other-match');
-
-      expect(store.project().match.teams[0]?.totalPoints).toBe(36); // Not suppressed.
-    });
-
-    it('clears itself once a genuinely new match starts', () => {
-      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
-      store.applyUpdate(
-        update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
       );
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]));
-      store.suppressContributionFor('match-1');
 
       store.applyUpdate(
         update({ matchId: 'match-2', players: [player({ teamNo: 1, slot: 1, kills: 3 })] }),
       );
+      // Nothing is banked against match-2 — this is what the caller re-derives per update.
+      store.setSeriesContext(new Map([[1, 18]]), new Set([1]), new Map());
 
-      // The new match's own contribution counts normally again, on top of the series total:
       // 3 kill points + the guaranteed-minimum for the only team standing (10) + 18 series.
       expect(store.project().match.teams[0]?.totalPoints).toBe(31);
+    });
+
+    it('records no elimination during warmup, and none of it sticks afterwards', () => {
+      // A team wiped on the warmup island has not been eliminated from anything. `eliminationOrder`
+      // is append-only, so recording one there would hand that team a last-place finish for the
+      // whole round that follows — irreversible short of restarting the app.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+
+      store.applyUpdate(
+        update({
+          inWarmup: true,
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }), // "wiped" in warmup.
+          ],
+        }),
+      );
+
+      const warmup = store.project();
+      expect(warmup.match.teams.every((team) => team.placement === null)).toBe(true);
+      // Both teams still render normally — the leaderboard is useful on air during warmup.
+      expect(warmup.match.teams.every((team) => team.hasAppeared)).toBe(true);
+      // And neither greys out: they respawn on the island, so a wipe there is not a wipe. The
+      // count a director reads off a Stream Deck button must not drop and climb back with the
+      // warmup scuffle either.
+      expect(warmup.match.teams.every((team) => !team.isEliminated)).toBe(true);
+      expect(warmup.match.standingTeamCount).toBe(2);
+
+      // The round starts and team 2 is alive again, as it would be after the real drop.
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'alive' }),
+          ],
+        }),
+      );
+
+      const live = store.project();
+      expect(live.match.teams.every((team) => team.placement === null)).toBe(true);
+      expect(live.match.standingTeamCount).toBe(2);
+    });
+
+    it('reports the match it is showing, so the caller can look up what is banked for it', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1) });
+      expect(store.currentMatchId()).toBeNull();
+
+      store.applyUpdate(update({ matchId: 'match-7', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      expect(store.currentMatchId()).toBe('match-7');
     });
   });
 });

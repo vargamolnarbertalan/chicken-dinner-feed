@@ -20,6 +20,16 @@ const LIVE_STATE: Record<number, PlayerLiveState> = {
 };
 
 /**
+ * The raw `liveState` values that mean a player is in the air on the way in — the round has started.
+ *
+ * Captured from a real tournament lobby (`specs/PCOB-API.md` §8): during warmup every one of 51
+ * players reported `liveState: 0` at a scattered ground position; the moment the plane launched all
+ * 52 reported `liveState: 1` at one shared coordinate 1500 m up. A whole-lobby transition like that
+ * has no plausible false positive, which is what makes it usable as the "this is real now" signal.
+ */
+const IN_FLIGHT_STATES = new Set([1, 2]); // On Plane, On Parachute.
+
+/**
  * Field aliases, newest spelling first.
  *
  * ob.js passes the game client's payload through untouched, so these names belong to the game, not
@@ -70,8 +80,11 @@ export interface PcobMapperOptions {
  *   a stable one (`specs/PCOB-API.md` §7.2).
  * - **Kill high-water marks.** `killNum` versus `killNumBeforeDie` behaviour after death is not
  *   documented, so we keep the maximum ever seen.
+ * - **A kill baseline**, netted against the high-water mark above, so nothing scored before the
+ *   round is judged to have started (warmup, most likely) reaches the scoreboard — see
+ *   `killBaseline`.
  *
- * Both are per match and are dropped when `GameID` changes.
+ * All three are per match and are dropped when `GameID` changes.
  */
 export class PcobMapper {
   private readonly warn: FieldWarner;
@@ -79,8 +92,24 @@ export class PcobMapper {
   private matchId: string | null = null;
   /** teamNo → (playerId → slot). Assignment order is arrival order, then frozen. */
   private readonly slots = new Map<number, Map<string, number>>();
-  /** playerId → highest kill count seen this match. */
+  /** playerId → highest raw kill count seen this match — never itself reduced, see `killsFor`. */
   private readonly maxKills = new Map<string, number>();
+  /**
+   * playerId → the raw high-water mark at the instant the round was judged to have started.
+   *
+   * Subtracted from every reading afterwards, so anything scored before that instant — on the
+   * warmup island, if it turns out to register there at all — cannot reach the scoreboard. A plain
+   * `maxKills.clear()` would not do this: `killsFor` takes the *maximum* of the cache and the API's
+   * own current reading, so if PCOB's own `killNum` carries a warmup kill into the round under the
+   * same `GameID` (unconfirmed, `specs/PCOB-API.md` §8), the API's value would win regardless of
+   * what our cache remembers. An offset is the only thing that actually zeroes it out either way.
+   */
+  private readonly killBaseline = new Map<string, number>();
+  /**
+   * Latched once the round has started, and never unlatched for the same match: players leave the
+   * air within seconds of the drop, so the in-flight signal is a starting gun, not a state to poll.
+   */
+  private started = false;
 
   constructor(options: PcobMapperOptions = {}) {
     const log = options.log ?? (() => {});
@@ -99,18 +128,56 @@ export class PcobMapper {
       this.matchId = matchId;
       this.slots.clear();
       this.maxKills.clear();
+      this.killBaseline.clear();
+      this.started = false;
     }
 
     const players = this.mapPlayers(root.raw(F.players));
 
+    // An empty lobby unlatches it as well as a new match id does. `GameID` is the signal §7.6 is
+    // built on, but it comes from `getallinfo` and its absence is a documented possibility — with no
+    // id ever changing, the latch would otherwise survive from the first round of the day to the
+    // last and let every later warmup through.
+    if (players.length === 0) {
+      this.started = false;
+    } else if (!this.started && this.sawFlight) {
+      // The plane is a precise instant: everyone in one poll, at the ground, the next, in the air.
+      // Crossing it *is* leaving warmup, so this is exactly when a baseline belongs — see
+      // `killBaseline`. Snapshot taken from `maxKills` as it stands after this same tick's
+      // `mapPlayers` call above: "whatever each player had accumulated through this instant." This
+      // tick's own returned `players` still carries the pre-baseline (potentially inflated) reading;
+      // fixing that costs detecting the signal before scoring runs at all, for one poll interval
+      // (~1s) of exposure that self-corrects immediately, and can never reach the series history
+      // either way — no map closes during warmup, automatically or by hand.
+      this.started = true;
+      for (const [playerId, killsSoFar] of this.maxKills) {
+        this.killBaseline.set(playerId, killsSoFar);
+      }
+    } else if (!this.started && hasRoundStartedByFallback(players)) {
+      // The recovery path: the app started, or reconnected, after the plane had already flown, so
+      // there was no instant to snapshot a baseline against. Deliberately does not set one — every
+      // reading kept in `maxKills` up to now came from an already-live round in this branch (the
+      // signal is `rank`, which warmup has no equivalent of), so it is not warmup contamination to
+      // net out. Baselining it anyway would erase whatever the team had genuinely earned between
+      // this match's true start and the moment this fallback caught up with it.
+      this.started = true;
+    }
+
+    const inWarmup = players.length > 0 && !this.started;
+
     return {
       matchId,
-      phase: derivePhase(root, snapshot.isInGame, players.length),
+      phase: derivePhase(root, snapshot.isInGame, players, inWarmup),
       players,
+      inWarmup,
     };
   }
 
+  /** Set by `mapPlayers` for the poll it is mapping — see `IN_FLIGHT_STATES`. */
+  private sawFlight = false;
+
   private mapPlayers(raw: unknown): IngestPlayer[] {
+    this.sawFlight = false;
     if (!Array.isArray(raw)) {
       // Not a warning: before the observer joins a room the list is legitimately absent, and that
       // is the normal state for most of the time the app is running.
@@ -144,12 +211,15 @@ export class PcobMapper {
 
       const healthMax = reader.number(F.healthMax, DEFAULT_HEALTH_MAX);
 
+      const rawLiveState = reader.number(F.liveState, -1);
+      if (IN_FLIGHT_STATES.has(rawLiveState)) this.sawFlight = true;
+
       players.push({
         id: stableId,
         name: name !== '' ? name : stableId,
         teamNo,
         slot,
-        liveState: this.liveStateFor(reader),
+        liveState: this.liveStateFor(rawLiveState),
         health: Math.max(0, reader.number(F.health, 0)),
         // A zero or negative maximum would make the bar's fraction meaningless, and healthMax is
         // the denominator everywhere downstream.
@@ -162,8 +232,7 @@ export class PcobMapper {
     return players;
   }
 
-  private liveStateFor(reader: FieldReader): PlayerLiveState {
-    const raw = reader.number(F.liveState, -1);
+  private liveStateFor(raw: number): PlayerLiveState {
     const mapped = LIVE_STATE[raw];
     if (mapped) return mapped;
 
@@ -205,9 +274,14 @@ export class PcobMapper {
       ? Math.max(0, reader.number(F.killNumBeforeDie, 0))
       : 0;
 
+    // The raw high-water mark is tracked unconditionally, on the API's own numbers — never itself
+    // reduced by the baseline below, or a mid-match baseline update would corrupt it.
     const best = Math.max(current, beforeDeath, this.maxKills.get(playerId) ?? 0);
     this.maxKills.set(playerId, best);
-    return best;
+
+    // See `killBaseline`. Zero for a player never seen before the round started, which is correct:
+    // there is nothing of theirs to net out.
+    return Math.max(0, best - (this.killBaseline.get(playerId) ?? 0));
   }
 
   /**
@@ -243,19 +317,75 @@ export class PcobMapper {
 }
 
 /**
- * Which phase the match is in.
+ * The fallback signal for "the round has started", for when the plane cannot answer: the app
+ * started, or reconnected, after everyone had already landed.
  *
- * `isInGame` is the signal ob.js actually serves, and it is the one we trust. `FinishedStartTime` —
- * documented as the moment WWCD appears — refines it when present, because a match that has ended
- * but whose room is still open should not keep reading as live. Only source B documents that field,
- * so its absence is expected rather than exceptional and simply leaves `isInGame` in charge.
+ * `rank` only, deliberately, not kills or a dead/knocked state. PUBG Mobile's warmup island is a
+ * real pre-drop practice area where players can shoot and knock each other, so any of those three
+ * can happen *during* warmup itself — using them here would let warmup PvP trigger this exact
+ * signal, the opposite of what it exists to detect. `rank` is different in kind: it is a team's
+ * placement in the battle-royale round proper, a concept warmup has no equivalent of, so its
+ * presence is not contaminated the same way.
+ *
+ * Deliberately kept separate from the flight signal at the call site, not folded into one combined
+ * check: the two answer different questions. Seeing the plane means *this instant* is the boundary,
+ * which is exactly when a kill baseline belongs (see `killBaseline`). This fallback only means the
+ * round is *already* past its start by an unknown amount — baselining against it would erase
+ * whatever a team had genuinely earned between the round's true start and however late this signal
+ * happened to catch up.
  */
-function derivePhase(root: FieldReader, isInGame: boolean, playerCount: number): MatchPhase {
+function hasRoundStartedByFallback(players: readonly IngestPlayer[]): boolean {
+  return players.some((player) => player.rank > 0);
+}
+
+/**
+ * How many distinct teams still have a standing player — the same predicate `MatchStore` and
+ * `standings.ts` use for "still in the fight" (knocked and disconnected both count; only dead does
+ * not).
+ */
+function standingTeamCount(players: readonly IngestPlayer[]): number {
+  const standing = new Set<number>();
+  for (const player of players) {
+    if (player.liveState === 'alive' || player.liveState === 'knocked' || player.liveState === 'disconnected') {
+      standing.add(player.teamNo);
+    }
+  }
+  return standing.size;
+}
+
+/**
+ * Whether the round has *actually* concluded, as opposed to a metadata field claiming it has.
+ *
+ * Found live, on the same tournament match this file's warmup detection was built for: `ended` (via
+ * either signal below) fired while 11 of 13 teams were still fighting, and every one of them was
+ * immediately handed a full, final placement — 1st through 13th, real points, hours before any of
+ * it was true. §7.6 assumed both signals reset per match; at least one of them, in practice, did
+ * not. A battle royale round structurally has at most one team with any player left standing when
+ * it is genuinely over (WWCD) — a fact about the game, not about either field's behaviour — so that
+ * is now required in addition to whichever signal fires, and is what actually caught the failure.
+ */
+function derivePhase(
+  root: FieldReader,
+  isInGame: boolean,
+  players: readonly IngestPlayer[],
+  inWarmup: boolean,
+): MatchPhase {
+  if (inWarmup) return 'live';
+
+  const roundCouldHaveConcluded = standingTeamCount(players) <= 1;
+
   const finishedAt = root.has(F.finishedAt) ? root.string(F.finishedAt, '') : '';
-  if (finishedAt !== '') return 'ended';
+  if (finishedAt !== '' && players.length > 0 && roundCouldHaveConcluded) return 'ended';
   if (isInGame) return 'live';
 
+  // No players at all: nothing to report either way. Distinct from the "players present but the
+  // standings disagree it has ended" case just below — that one is `live`, not `idle`, so as not to
+  // make MatchStore drop tracking for a match that is demonstrably still going.
+  if (players.length === 0) return 'idle';
+
   // Not in a game but players are still being reported: the match just ended and the payload has
-  // not been cleared. Reporting `idle` here would make MatchStore drop the final standings.
-  return playerCount > 0 ? 'ended' : 'idle';
+  // not been cleared. Reporting `idle` here would make MatchStore drop the final standings. But
+  // only when the standings themselves agree the round could really be over — `isInGame` flipping
+  // false for one poll during real, ongoing combat must not read as the match having concluded.
+  return roundCouldHaveConcluded ? 'ended' : 'live';
 }

@@ -36,10 +36,20 @@ export interface JsonDocumentOptions<T> {
  * **Reads are validated.** These files are meant to be hand-editable, and an operator with Notepad
  * is a supported workflow. A malformed file therefore has to fail loudly at startup, not load
  * half-populated and produce a subtly wrong overlay mid-broadcast.
+ *
+ * **Writes are serialized within this instance.** Two overlapping `write()` calls sharing the same
+ * `${filePath}.${process.pid}.tmp` name is not a hypothetical — confirmed by reproducing it directly
+ * (two concurrent writes on one instance): one write's `rename` can consume the temp file out from
+ * under the other, and the in-memory `cached` value can end up describing a *different* write than
+ * the one that actually landed on disk. A queue, not a lock: each call waits for every earlier one on
+ * this instance to settle, success or failure, before its own temp-file dance begins.
  */
 export class JsonDocument<T> {
   private readonly options: JsonDocumentOptions<T>;
   private cached: T | null = null;
+  /** Every `write()` chains onto this; see the class doc comment. Always a settled-or-pending
+   *  promise that itself never rejects, so one failed write cannot wedge every write after it. */
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: JsonDocumentOptions<T>) {
     this.options = options;
@@ -98,8 +108,20 @@ export class JsonDocument<T> {
     return result.data;
   }
 
-  /** Validate, persist atomically, then update the in-memory value. */
+  /** Validate, persist atomically, then update the in-memory value. Queued — see the class doc comment. */
   async write(value: T): Promise<T> {
+    const run = this.writeQueue.then(() => this.writeNow(value));
+    // Only the internal chain link swallows a failure — never `run` itself, which is what the
+    // caller awaits and must still see fail. Without this, one bad write would permanently wedge
+    // every write after it, since a rejected promise short-circuits every `.then()` chained onto it.
+    this.writeQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async writeNow(value: T): Promise<T> {
     const { filePath, schema } = this.options;
 
     // Validate before touching the disk, so an invalid write cannot corrupt a good file.

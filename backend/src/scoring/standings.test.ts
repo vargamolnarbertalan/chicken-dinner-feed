@@ -348,10 +348,10 @@ describe('computeStandings', () => {
       expect(teams[0]?.hasAppeared).toBe(false);
     });
 
-    it('suppressThisMapPoints stops double-counting a just-closed map still frozen on screen', () => {
+    it('bankedPointsByTeam stops double-counting a just-closed map still frozen on screen', () => {
       // Regression: found live, running the app — a map closing pushed its own points into the
       // series total while MatchStore was still showing that same match's data (frozen, per
-      // ADR-0007, until the next map's first update). Without suppression, PTS briefly counted the
+      // ADR-0007, until the next map's first update). Without netting, PTS briefly counted the
       // closing map's points twice, then visibly dropped once the next match actually started.
       const [team] = computeStandings({
         players: [player({ teamNo: 1, slot: 1, kills: 8 })],
@@ -359,7 +359,7 @@ describe('computeStandings', () => {
         ruleset: pubgmRuleset,
         placements: new Map([[1, 1]]), // this map's own, now-final placement: 1st.
         seriesPointsByTeam: new Map([[1, 121]]), // already includes this same map's 18 points.
-        suppressThisMapPoints: true,
+        bankedPointsByTeam: new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
       });
 
       // killPoints/placementPoints are still computed and returned normally for display...
@@ -367,6 +367,60 @@ describe('computeStandings', () => {
       expect(team?.placementPoints).toBe(10);
       // ...but totalPoints only counts the series figure, not a second helping on top of it.
       expect(team?.totalPoints).toBe(121);
+    });
+
+    it('still counts what is earned after a close, rather than freezing the column', () => {
+      // Regression: an operator closing a map while the game was genuinely still running watched
+      // PTS freeze for the rest of that match. The old all-or-nothing flag suppressed the match
+      // wholesale and only cleared on a new match id, which never came while the same game ran on.
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 11 })], // three more kills since the close.
+        roster: roster(1),
+        ruleset: pubgmRuleset,
+        placements: new Map([[1, 1]]),
+        seriesPointsByTeam: new Map([[1, 121]]),
+        bankedPointsByTeam: new Map([[1, { killPoints: 8, placementPoints: 10 }]]), // at the close.
+      });
+
+      // 11 kills + 10 placement = 21 earned this match, 18 of it already banked → 3 new points.
+      expect(team?.totalPoints).toBe(124);
+    });
+
+    it('nets each half against its own kind, so a banked placement cannot eat live eliminations', () => {
+      // Regression, caught by running the real store rather than by reading it. A map closed out of
+      // a still-running match banks a *final* placement (survivors take the best remaining slots —
+      // 1st, worth 10), but the live projection that follows is back to a *guaranteed minimum* (8
+      // teams alive, worth 1). Netting one combined figure against the other compared the two
+      // different bases: the leader's next six kills all vanished into a nine-point deficit before
+      // the column moved at all — the very freeze this whole mechanism exists to prevent.
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 6 })], // one more kill since the close.
+        roster: roster(1, 2, 3, 4, 5, 6, 7, 8),
+        ruleset: pubgmRuleset,
+        placements: new Map(), // Still live: nobody has placed, so all eight are guaranteed 8th.
+        seriesPointsByTeam: new Map([[1, 15]]),
+        bankedPointsByTeam: new Map([[1, { killPoints: 5, placementPoints: 10 }]]),
+      });
+
+      expect(team?.placementPoints).toBe(1); // The guaranteed minimum, reported gross as always.
+      // 15 already banked + the one kill scored since. Not 15, and not 15 + 6 + 1 either.
+      expect(team?.totalPoints).toBe(16);
+    });
+
+    it('never returns a negative total, whatever the banked figure claims', () => {
+      // `Team.totalPoints` is schema-typed non-negative, and a client silently drops a snapshot that
+      // fails validation — an overlay frozen on its last good frame with no visible error. A stale
+      // banked figure (a corrected map, say) must degrade to a stalled column, not a dead overlay.
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 1 })],
+        roster: roster(1),
+        ruleset: pubgmRuleset,
+        placements: new Map([[1, 1]]),
+        seriesPointsByTeam: new Map([[1, 50]]),
+        bankedPointsByTeam: new Map([[1, { killPoints: 999, placementPoints: 999 }]]),
+      });
+
+      expect(team?.totalPoints).toBe(50);
     });
   });
 });

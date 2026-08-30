@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PcobMapper, type PcobSnapshot } from './payload.js';
 
@@ -227,14 +228,20 @@ describe('PcobMapper', () => {
     });
 
     it('is ended once FinishedStartTime is set, even while isInGame lingers', () => {
-      const update = new PcobMapper().map(snapshot([player()], { FinishedStartTime: '1820' }, true));
+      const mapper = new PcobMapper();
+      mapper.map(snapshot([player({ liveState: 1 })])); // Primes "started" — the plane has flown.
+
+      const update = mapper.map(snapshot([player()], { FinishedStartTime: '1820' }, true));
 
       expect(update.phase).toBe('ended');
     });
 
     it('is ended, not idle, when the game drops out but players are still reported', () => {
       // Reporting idle here would make MatchStore reset and discard the final standings.
-      const update = new PcobMapper().map(snapshot([player()], {}, false));
+      const mapper = new PcobMapper();
+      mapper.map(snapshot([player({ liveState: 1 })])); // Primes "started" — the plane has flown.
+
+      const update = mapper.map(snapshot([player()], {}, false));
 
       expect(update.phase).toBe('ended');
     });
@@ -283,6 +290,186 @@ describe('PcobMapper', () => {
       );
 
       expect(update.players[0]).toMatchObject({ id: 'Nameless', name: 'Nameless' });
+    });
+  });
+
+  describe('warmup', () => {
+    /**
+     * The two real tournament-lobby captures this detection was built from, one taken during warmup
+     * and one the moment the plane launched (`specs/PCOB-API.md` §8). Asserting against the actual
+     * payloads rather than a hand-written imitation is the whole point: an imitation would only
+     * prove the code agrees with my reading of the format.
+     */
+    function capture(name: 'warmup' | 'plane'): Record<string, unknown>[] {
+      const file = new URL(`../../../../specs/${name}.txt`, import.meta.url);
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
+        playerInfoList: Record<string, unknown>[];
+      };
+      return parsed.playerInfoList;
+    }
+
+    it('reads the real warmup capture as warmup', () => {
+      const players = capture('warmup');
+      expect(players.every((entry) => entry['liveState'] === 0)).toBe(true);
+
+      const update = new PcobMapper().map(snapshot(players));
+
+      expect(update.inWarmup).toBe(true);
+    });
+
+    it('reads the real plane capture as the round having started', () => {
+      const players = capture('plane');
+      expect(players.every((entry) => entry['liveState'] === 1)).toBe(true);
+
+      const update = new PcobMapper().map(snapshot(players));
+
+      expect(update.inWarmup).toBe(false);
+    });
+
+    it('never reports a warmup lobby as ended, whatever isInGame says', () => {
+      // The dangerous path: with `isInGame` false and players present, the mapper used to call that
+      // an ended match — which auto-closes a map, with final placements for a round nobody has
+      // played, into the permanent series history. Whether `isInGame` is true during warmup is
+      // still unconfirmed, so this must hold either way.
+      const warmup = capture('warmup');
+
+      expect(new PcobMapper().map(snapshot(warmup, {}, false)).phase).toBe('live');
+      expect(new PcobMapper().map(snapshot(warmup, {}, true)).phase).toBe('live');
+    });
+
+    it('stays started once the lobby has dropped, as players land back to liveState 0', () => {
+      // The in-flight signal is a starting gun, not a state to poll: everyone is back on the ground
+      // within seconds, and falling back to "warmup" then would stop recording the whole round.
+      const mapper = new PcobMapper();
+      expect(mapper.map(snapshot(capture('plane'))).inWarmup).toBe(false);
+
+      expect(mapper.map(snapshot(capture('warmup'))).inWarmup).toBe(false);
+    });
+
+    it('starts fresh for a new match, so the next warmup is caught too', () => {
+      const mapper = new PcobMapper();
+      mapper.map(snapshot(capture('plane')));
+
+      const next = mapper.map({
+        allInfo: { TotalPlayerList: capture('warmup'), GameID: 'room-2' },
+        isInGame: true,
+      });
+
+      expect(next.inWarmup).toBe(true);
+    });
+
+    it('treats a decided placement as the round being under way, with no plane in sight', () => {
+      // The fallback for connecting after everyone has landed. `rank` only: it is a team's
+      // placement in the battle-royale round proper, a concept warmup has no equivalent of.
+      const update = new PcobMapper().map(
+        snapshot([player(), player({ playerKey: 2, playerName: 'Other', rank: 4 })]),
+      );
+
+      expect(update.inWarmup).toBe(false);
+    });
+
+    it.each([
+      ['a scored elimination', { killNum: 3 }],
+      ['a player already out', { liveState: 5 }],
+      ['a player knocked', { liveState: 4 }],
+    ])(
+      'does NOT treat %s as the round starting — warmup-island PvP produces exactly this',
+      (_label, overrides) => {
+        // Regression: PUBG Mobile's warmup island is a real pre-drop practice area where players
+        // can shoot, knock and kill each other. Using any of these as a "round started" signal
+        // would let warmup PvP trigger it — found live, on the first real tournament match this
+        // detection ran against: a warmup skirmish closed a phantom "map 1" with a full placement
+        // table and real points, out of a round nobody had played.
+        const update = new PcobMapper().map(
+          snapshot([player(), player({ playerKey: 2, playerName: 'Other', ...overrides })]),
+        );
+
+        expect(update.inWarmup).toBe(true);
+      },
+    );
+
+    it('nets out a warmup kill once the plane launches, even if the API keeps reporting it', () => {
+      // The real failure mode this baseline exists for: a plain `maxKills.clear()` would do nothing
+      // if PCOB's own `killNum` genuinely carries the warmup kill forward under the same `GameID`,
+      // since `killsFor` takes the *maximum* of our cache and the API's own current reading.
+      const mapper = new PcobMapper();
+      const shooterId = 'shooter';
+      const warmupWithAKill = [player({ playerKey: shooterId, killNum: 3, liveState: 0 })];
+      const planeStillReportingIt = [player({ playerKey: shooterId, killNum: 3, liveState: 1 })];
+
+      mapper.map(snapshot(warmupWithAKill, {}, false));
+      const atLaunch = mapper.map(snapshot(planeStillReportingIt));
+
+      expect(atLaunch.inWarmup).toBe(false);
+      // Zeroed, not 3 — this is the tick after the boundary, once the baseline has taken effect.
+      const nextTick = mapper.map(snapshot(planeStillReportingIt));
+      expect(nextTick.players[0]?.kills).toBe(0);
+
+      // Real kills scored afterwards still count, on top of the netted-out baseline.
+      const twoRealKillsLater = mapper.map(
+        snapshot([player({ playerKey: shooterId, killNum: 5, liveState: 1 })]),
+      );
+      expect(twoRealKillsLater.players[0]?.kills).toBe(2);
+    });
+
+    it('does not net out real kills recovered mid-round via the rank fallback', () => {
+      // The recovery path (no flight signal seen, `rank` catches up instead) means the app is
+      // joining an *already-live* round, not crossing the warmup boundary — so nothing here is
+      // warmup contamination. Baselining it anyway would erase kills the team had genuinely earned
+      // between the round's real start and however late this signal happened to catch up.
+      const mapper = new PcobMapper();
+      const alreadyMidRound = [
+        player({ playerKey: 'a', killNum: 4, liveState: 0 }),
+        player({ playerKey: 'b', killNum: 0, liveState: 0, rank: 3 }), // already eliminated, ranked.
+      ];
+
+      const update = mapper.map(snapshot(alreadyMidRound));
+
+      expect(update.inWarmup).toBe(false);
+      expect(update.players.find((p) => p.id === 'a')?.kills).toBe(4); // Not netted to 0.
+    });
+
+    it('starts a fresh baseline for a new match, unaffected by the previous one', () => {
+      const mapper = new PcobMapper();
+      const shooterId = 'shooter';
+      mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 7, liveState: 0 })], GameID: 'g1' },
+        isInGame: false,
+      });
+      mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 7, liveState: 1 })], GameID: 'g1' },
+        isInGame: true,
+      }); // baseline for g1 = 7.
+
+      const freshMatch = mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 0, liveState: 0 })], GameID: 'g2' },
+        isInGame: false,
+      });
+
+      expect(freshMatch.players[0]?.kills).toBe(0); // Not negative, not stale from g1.
+    });
+
+    it('is not warmup when there are no players at all', () => {
+      const update = new PcobMapper().map(snapshot([]));
+
+      expect(update.inWarmup).toBe(false);
+      expect(update.phase).toBe('live');
+    });
+
+    it('unlatches on an empty lobby, so the next warmup is caught without a new match id', () => {
+      // `GameID` comes from `getallinfo` and its absence is a documented possibility (§8). With no
+      // id ever changing, the latch would otherwise survive from the first round of the day to the
+      // last and let every later warmup through.
+      const mapper = new PcobMapper();
+      const noGameId = (players: Record<string, unknown>[]): PcobSnapshot => ({
+        allInfo: { TotalPlayerList: players },
+        isInGame: true,
+      });
+
+      expect(mapper.map(noGameId(capture('plane'))).inWarmup).toBe(false);
+      mapper.map(noGameId([])); // The lobby empties between rounds.
+
+      expect(mapper.map(noGameId(capture('warmup'))).inWarmup).toBe(true);
     });
   });
 });

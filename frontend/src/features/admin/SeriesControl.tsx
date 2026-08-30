@@ -4,7 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { api, ApiError } from '@/lib/api';
 import { useLiveStore } from '@/stores/live-store';
 import { toast } from '@/stores/toast-store';
-import { EditMapDialog } from './EditMapDialog';
+import { MapResultDialog, type MapTeamResultValue } from './MapResultDialog';
 
 function describe(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -18,10 +18,23 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-interface EditValue {
-  placement: number;
-  eliminations: number;
+/**
+ * When a map ran, as far as anything is known about it. A map added by hand has no clock at all; one
+ * recorded across a backend restart has an end but no start.
+ */
+function formatWhen(map: ClosedMapResult): string {
+  if (map.endedAt === null) return 'Added by hand — not played through the app';
+
+  const ended = new Date(map.endedAt).toLocaleString();
+  if (map.startedAt === null) return `start unknown → ${ended}`;
+  return `${new Date(map.startedAt).toLocaleString()} → ${ended} (${formatDuration(map.endedAt - map.startedAt)})`;
 }
+
+/**
+ * Which map form is open. One at a time, sharing a single set of values: correcting a recorded map
+ * and adding one by hand collect exactly the same per-team inputs.
+ */
+type MapForm = { mode: 'edit'; map: ClosedMapResult } | { mode: 'add'; position: number } | null;
 
 /**
  * Multi-map series scoring (specs/SCORING-LOGIC-UPDATE.md).
@@ -39,10 +52,19 @@ export function SeriesControl() {
   const [pendingCloseMap, setPendingCloseMap] = useState(false);
   const [pendingReset, setPendingReset] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ClosedMapResult | null>(null);
-  const [editingMap, setEditingMap] = useState<ClosedMapResult | null>(null);
-  const [editValues, setEditValues] = useState<Record<number, EditValue>>({});
+  const [form, setForm] = useState<MapForm>(null);
+  const [formValues, setFormValues] = useState<Record<number, MapTeamResultValue>>({});
 
   const currentStandings = liveTeams ?? fallbackStandings;
+  const closedMaps = seriesDocument?.closedMaps ?? [];
+
+  // Team-number order, not the live ranking: adding a map by hand means transcribing a results
+  // sheet, and a list that reorders itself as the running match changes is the wrong thing to read
+  // down. The edit form keeps the map's own recorded order for the same reason.
+  const rosterTeamNos = [...currentStandings].map((team) => team.teamNo).sort((a, b) => a - b);
+
+  const formTeamNos =
+    form?.mode === 'edit' ? form.map.teams.map((team) => team.teamNo) : rosterTeamNos;
 
   const reload = async () => {
     try {
@@ -95,8 +117,8 @@ export function SeriesControl() {
   };
 
   const startEditing = (map: ClosedMapResult) => {
-    setEditingMap(map);
-    setEditValues(
+    setForm({ mode: 'edit', map });
+    setFormValues(
       Object.fromEntries(
         map.teams.map((team) => [
           team.teamNo,
@@ -106,46 +128,104 @@ export function SeriesControl() {
     );
   };
 
-  const patchEdit = (teamNo: number, changes: Partial<EditValue>) => {
-    setEditValues((previous) => {
-      const team = editingMap?.teams.find((entry) => entry.teamNo === teamNo);
-      return {
-        ...previous,
-        [teamNo]: {
-          placement: previous[teamNo]?.placement ?? team?.placement ?? 1,
-          eliminations: previous[teamNo]?.eliminations ?? team?.eliminations ?? 0,
-          ...changes,
-        },
-      };
-    });
+  const startAdding = () => {
+    if (rosterTeamNos.length === 0) {
+      toast.error(
+        'No teams to add a map for',
+        'Configure the team roster first, on the Teams tab.',
+      );
+      return;
+    }
+    setForm({ mode: 'add', position: closedMaps.length + 1 });
+    // Seeded with distinct placements in team order so an untouched form is already valid — the
+    // server rejects two teams sharing a placement, and a blank form that cannot be saved without
+    // first fixing every row would be a poor starting point for transcribing a results sheet.
+    setFormValues(
+      Object.fromEntries(
+        rosterTeamNos.map((teamNo, index) => [teamNo, { placement: index + 1, eliminations: 0 }]),
+      ),
+    );
   };
 
-  const saveEdit = async () => {
-    if (!editingMap) return;
+  const patchValue = (teamNo: number, changes: Partial<MapTeamResultValue>) => {
+    setFormValues((previous) => ({
+      ...previous,
+      [teamNo]: {
+        placement: previous[teamNo]?.placement ?? 1,
+        eliminations: previous[teamNo]?.eliminations ?? 0,
+        ...changes,
+      },
+    }));
+  };
+
+  const submitForm = async () => {
+    if (!form) return;
+
+    const teams = formTeamNos.map((teamNo) => ({
+      teamNo,
+      placement: formValues[teamNo]?.placement ?? 1,
+      eliminations: formValues[teamNo]?.eliminations ?? 0,
+    }));
+
     try {
-      const teams = editingMap.teams.map((team) => ({
-        teamNo: team.teamNo,
-        placement: editValues[team.teamNo]?.placement ?? team.placement,
-        eliminations: editValues[team.teamNo]?.eliminations ?? team.eliminations,
-      }));
-      setSeriesDocument(await api.updateClosedMap(editingMap.id, teams));
-      toast.success(`Map ${editingMap.mapNumber} updated`, 'Series totals were recalculated.');
-      setEditingMap(null);
+      if (form.mode === 'edit') {
+        setSeriesDocument(await api.updateClosedMap(form.map.id, teams));
+        toast.success(`Map ${form.map.mapNumber} updated`, 'Series totals were recalculated.');
+      } else {
+        setSeriesDocument(await api.addManualMap(form.position, teams));
+        toast.success(
+          `Map added at position ${form.position}`,
+          'The maps after it were renumbered and every series total recalculated.',
+        );
+      }
+      setForm(null);
     } catch (error) {
-      toast.error('Could not save the correction', describe(error));
+      toast.error(
+        form.mode === 'edit' ? 'Could not save the correction' : 'Could not add the map',
+        describe(error),
+      );
     }
   };
 
   return (
     <div className="grid max-w-6xl gap-6">
-      <EditMapDialog
-        map={editingMap}
-        values={editValues}
+      <MapResultDialog
+        open={form !== null}
+        title={form?.mode === 'edit' ? `Correct map ${form.map.mapNumber}` : 'Add a map by hand'}
+        description={
+          form?.mode === 'edit'
+            ? 'Points are always recalculated from the scoring ruleset — enter the real placement and elimination count, not the points themselves.'
+            : 'Records a map the app never saw played, exactly as if it had been. Points are calculated from the scoring ruleset, so enter placements and eliminations only.'
+        }
+        confirmLabel={form?.mode === 'edit' ? 'Save correction' : 'Add this map'}
+        teamNos={formTeamNos}
+        values={formValues}
         teamName={teamName}
-        onChange={patchEdit}
-        onCancel={() => setEditingMap(null)}
-        onSave={() => void saveEdit()}
-      />
+        onChange={patchValue}
+        onCancel={() => setForm(null)}
+        onConfirm={() => void submitForm()}
+      >
+        {form?.mode === 'add' && (
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground text-xs">Position in the series</span>
+            <select
+              className="border-border bg-background w-fit rounded border px-2 py-1.5 text-sm"
+              value={form.position}
+              onChange={(event) => setForm({ mode: 'add', position: Number(event.target.value) })}
+            >
+              {Array.from({ length: closedMaps.length + 1 }, (_unused, index) => index + 1).map(
+                (position) => (
+                  <option key={position} value={position}>
+                    {position === closedMaps.length + 1
+                      ? `Last (map ${position})`
+                      : `Map ${position} — pushes the current map ${position} and everything after it down`}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        )}
+      </MapResultDialog>
 
       <ConfirmDialog
         open={pendingCloseMap}
@@ -203,6 +283,13 @@ export function SeriesControl() {
         </button>
         <button
           type="button"
+          className="border-border rounded border px-3 py-1.5 text-sm"
+          onClick={startAdding}
+        >
+          Add map by hand
+        </button>
+        <button
+          type="button"
           className="bg-destructive rounded px-3 py-1.5 text-sm font-medium text-white"
           onClick={() => setPendingReset(true)}
         >
@@ -236,23 +323,19 @@ export function SeriesControl() {
 
       <section className="grid gap-2">
         <h3 className="text-sm font-medium">Finished maps</h3>
-        {seriesDocument && seriesDocument.closedMaps.length === 0 && (
+        {seriesDocument && closedMaps.length === 0 && (
           <p className="text-muted-foreground text-sm">No map has finished yet this series.</p>
         )}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {seriesDocument?.closedMaps.map((map) => (
+          {closedMaps.map((map) => (
             <div key={map.id} className="border-border grid content-start gap-2 rounded border p-3">
               <div className="grid gap-0.5">
                 <span className="text-sm font-medium">
                   Map {map.mapNumber}
                   {map.mapName ? ` — ${map.mapName}` : ''}
                 </span>
-                <span className="text-muted-foreground text-xs">
-                  {map.startedAt ? new Date(map.startedAt).toLocaleString() : 'start unknown'} →{' '}
-                  {new Date(map.endedAt).toLocaleString()}
-                  {map.startedAt ? ` (${formatDuration(map.endedAt - map.startedAt)})` : ''}
-                </span>
+                <span className="text-muted-foreground text-xs">{formatWhen(map)}</span>
               </div>
 
               <div className="grid gap-1">

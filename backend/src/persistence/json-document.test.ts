@@ -103,4 +103,65 @@ describe('JsonDocument', () => {
     await expect(document.write({ schemaVersion: 1, label: '' } as Doc)).rejects.toThrow();
     expect(document.current.label).toBe('first');
   });
+
+  describe('concurrent writes', () => {
+    it('never lets the in-memory value diverge from what actually landed on disk', async () => {
+      // Regression: reproduced directly before this fix — two `write()` calls fired without an
+      // `await` between them shared one PID-named temp file. One `rename` consumed it out from
+      // under the other, and `current` ended up describing a write that was not the one on disk.
+      const document = makeDocument();
+      await document.load();
+
+      const first = document.write({ schemaVersion: 1, label: 'first' });
+      const second = document.write({ schemaVersion: 1, label: 'second' });
+      await Promise.all([first, second]);
+
+      const onDisk = JSON.parse(await readFile(filePath, 'utf8')) as Doc;
+      expect(document.current).toEqual(onDisk);
+    });
+
+    it('resolves both calls, in the order they were queued, rather than dropping one', async () => {
+      const document = makeDocument();
+      await document.load();
+
+      const first = document.write({ schemaVersion: 1, label: 'first' });
+      const second = document.write({ schemaVersion: 1, label: 'second' });
+
+      await expect(first).resolves.toMatchObject({ label: 'first' });
+      await expect(second).resolves.toMatchObject({ label: 'second' });
+      expect(document.current.label).toBe('second');
+    });
+
+    it('a write that fails validation does not block a later write from succeeding', async () => {
+      // A rejected promise short-circuits every `.then()` chained onto it — without swallowing the
+      // failure internally, one bad write would wedge every write after it on this instance.
+      const document = makeDocument();
+      await document.load();
+
+      const bad = document.write({ schemaVersion: 1, label: '' } as Doc); // Fails `min(1)`.
+      const good = document.write({ schemaVersion: 1, label: 'ok' });
+
+      await expect(bad).rejects.toThrow();
+      await expect(good).resolves.toMatchObject({ label: 'ok' });
+
+      // And the instance keeps working normally afterwards.
+      await document.write({ schemaVersion: 1, label: 'still fine' });
+      expect(document.current.label).toBe('still fine');
+    });
+
+    it('serializes many overlapping writes without losing or corrupting any of them', async () => {
+      const document = makeDocument();
+      await document.load();
+
+      await Promise.all(
+        Array.from({ length: 20 }, (_unused, index) =>
+          document.write({ schemaVersion: 1, label: `label-${index}` }),
+        ),
+      );
+
+      const onDisk = JSON.parse(await readFile(filePath, 'utf8')) as Doc;
+      expect(document.current).toEqual(onDisk); // Whichever one landed last, both agree which.
+      expect(onDisk.label).toMatch(/^label-\d+$/);
+    });
+  });
 });

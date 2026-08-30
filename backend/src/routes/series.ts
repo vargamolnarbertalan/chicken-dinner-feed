@@ -15,16 +15,22 @@ export interface SeriesRoutesOptions {
 
 const errorSchema = z.object({ error: z.string() });
 
-const editSchema = z.object({
-  teams: z
-    .array(
-      z.object({
-        teamNo: z.number().int().min(1).max(25),
-        placement: z.number().int().min(1),
-        eliminations: z.number().int().min(0),
-      }),
-    )
-    .min(1),
+const teamResultsSchema = z
+  .array(
+    z.object({
+      teamNo: z.number().int().min(1).max(25),
+      placement: z.number().int().min(1),
+      eliminations: z.number().int().min(0),
+    }),
+  )
+  .min(1);
+
+const editSchema = z.object({ teams: teamResultsSchema });
+
+const addMapSchema = z.object({
+  /** 1-based insert position. Clamped server-side, so "past the end" simply appends. */
+  position: z.number().int().min(1),
+  teams: teamResultsSchema,
 });
 
 /**
@@ -54,19 +60,53 @@ export const seriesRoutes: FastifyPluginAsyncZod<SeriesRoutesOptions> = async (a
       schema: {
         summary: 'Manually close the currently running map',
         tags: ['series'],
-        response: { 200: seriesDocumentSchema },
+        response: { 200: seriesDocumentSchema, 400: errorSchema },
       },
     },
-    async () => {
-      const projection = match.projectAsEnded();
-      await series.closeMapNow(projection, Date.now());
-      // Same reason as the auto-close path: without this, the window until the next match's first
-      // update would double-count this map's points via both "current match" and the series total.
-      if (projection.match.matchId !== null) {
-        match.suppressContributionFor(projection.match.matchId);
+    async (_request, reply) => {
+      try {
+        // Checked here rather than in the store, which only ever sees a projection — and
+        // `projectAsEnded()` has by then already dressed a warmup lobby up as a finished match,
+        // complete with a final placement for every team in it.
+        if (match.isInWarmup()) {
+          throw new Error(
+            'The round has not started yet — the lobby is still warming up. Nothing has been played to record.',
+          );
+        }
+
+        await series.closeMapNow(match.projectAsEnded(), Date.now());
+        // Re-derives what this match has now banked, so the PTS column stops counting it twice
+        // without freezing: anything scored *after* this close still lands in the total.
+        onSeriesChanged();
+        return series.getState();
+      } catch (error) {
+        return reply.code(400).send({ error: (error as Error).message });
       }
-      onSeriesChanged();
-      return series.getState();
+    },
+  );
+
+  app.post(
+    '/series/maps',
+    {
+      schema: {
+        summary: 'Add a map by hand, at any position in the series',
+        tags: ['series'],
+        body: addMapSchema,
+        response: { 200: seriesDocumentSchema, 400: errorSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await series.insertManualMap(
+          request.body.position,
+          request.body.teams,
+          config.scoring.current,
+        );
+        onSeriesChanged();
+        return series.getState();
+      } catch (error) {
+        return reply.code(400).send({ error: (error as Error).message });
+      }
     },
   );
 

@@ -134,6 +134,16 @@ export const api = {
 
   resetSeries: () => request<SeriesDocument>('/series/reset', { method: 'POST' }),
 
+  /** `position` is 1-based and clamped server-side, so anything past the end simply appends. */
+  addManualMap: (
+    position: number,
+    teams: { teamNo: number; placement: number; eliminations: number }[],
+  ) =>
+    request<SeriesDocument>('/series/maps', {
+      method: 'POST',
+      body: JSON.stringify({ position, teams }),
+    }),
+
   updateClosedMap: (
     mapId: string,
     teams: { teamNo: number; placement: number; eliminations: number }[],

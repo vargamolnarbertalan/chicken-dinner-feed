@@ -11,6 +11,54 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+### Added
+
+- **Add map by hand**, on the Series control page: record a map the app never saw played — one from
+  before it was running, or from another machine — at any position in the series, not just at the
+  end. Inserting one between two existing maps renumbers everything after it and recalculates every
+  team's series total. Enter placements and eliminations only; points come from your scoring
+  ruleset, exactly as they do for a correction.
+
+### Fixed
+
+- **The PTS column stopped counting after "Close current map now".** If you closed a map while the
+  game was still running, every elimination scored afterwards was thrown away — the column sat at
+  the series total until an entirely new match started. It now keeps counting what is earned after
+  the close, while still not counting the closed map twice.
+- **Warmup no longer creates anything.** Before the plane launches, players are already reported and
+  the app could treat that as a match: recording a finished map — final placements and all, for a
+  round nobody had played — into the series history, and logging a team wiped on the warmup island
+  as eliminated, which stuck for the whole round that followed. Nothing is recorded now until the
+  round genuinely starts (the whole lobby entering the air at once, or — if the app connects after
+  everyone has already landed — a team's real placement becoming known, never a kill or a knockout,
+  since PUBG Mobile's warmup island allows real PvP and either can happen there too), and no team
+  greys out or drops off the "teams remaining" count for being wiped on the warmup island. Any kills
+  scored on the warmup island are also netted out of the round's kill count the moment it starts,
+  even if the API itself keeps reporting them. The leaderboard still shows normally during warmup,
+  with the series standings so far.
+- **A map no longer closes on `isInGame`/`FinishedStartTime` reporting the match has ended.** That
+  signal turned out unreliable in practice — it locked onto "ended" while most of the lobby was
+  still fighting, instantly handing every team still alive a full final placement live on air.
+  Automatic closing now trusts a single, different signal instead: only one team having any player
+  left standing, checked directly against the actual player data rather than an upstream field —
+  the literal definition of a battle royale round having concluded. "Close current map now" remains
+  as an explicit backup for anything this does not catch (a stopped scrim, or any other way a round
+  can end without coming down to one team).
+- **Closing the same match twice, or with nothing running, is refused** instead of writing a
+  duplicate or empty entry that then has to be found and deleted by hand. Use "Add map by hand" to
+  record an extra map deliberately.
+- **Automatic closing could have fired early in warmup**, before every team's players had even
+  arrived once, for the same reason automatic closing generally needed hardening above. It now
+  checks the same "still warming up" state the manual button already refused to act on.
+- **Two overlapping attempts to close a map — automatic racing another automatic, or racing a
+  manual click — could both succeed and silently overwrite each other**, in the rare case one
+  started before the other had fully finished. Every change to your series history (closing,
+  correcting, deleting, adding by hand, resetting) is now processed one at a time.
+- **The overlay could momentarily show a false "match ended" state** — full placements for every
+  team, before anyone had actually placed — on a single glitched update where the app briefly saw
+  fewer teams than are actually playing. It now cross-checks against everything it has already
+  observed this match before ever treating a "the match ended" signal as real.
+
 ## [1.1.0] - 2026-08-29
 
 ### Added

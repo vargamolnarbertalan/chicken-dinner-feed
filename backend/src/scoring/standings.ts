@@ -1,6 +1,20 @@
 import type { Player, ScoringRuleset, Team, TeamRosterEntry } from '@cdf/shared';
 import type { IngestPlayer } from '../ingest/source.js';
 
+/**
+ * What a team already put into the series total out of the match currently being displayed.
+ *
+ * Kept split rather than summed, because the two halves are not comparable across the boundary that
+ * uses them. A map closed out of a still-running match banks a **final** placement, while the live
+ * projection that follows is back to awarding a **guaranteed minimum** — subtracting one combined
+ * figure from the other compares the two different bases and swallows real points (a leader banked
+ * at 1st place needed nine further kills before the column moved at all).
+ */
+export interface BankedPoints {
+  killPoints: number;
+  placementPoints: number;
+}
+
 export interface StandingsInput {
   players: readonly IngestPlayer[];
   roster: readonly TeamRosterEntry[];
@@ -30,14 +44,31 @@ export interface StandingsInput {
    */
   seriesHasAppeared?: ReadonlySet<number>;
   /**
-   * True once this match's own result has already been banked into `seriesPointsByTeam` (a map that
-   * closed but whose data is still what `MatchStore` is showing, frozen, until the next map's first
-   * update arrives — ADR-0007's "freeze until the next map"). Suppresses this map's own kill and
-   * placement points from being added a *second* time on top of the series total that already
-   * includes them; `killPoints`/`placementPoints` are still computed and returned as normal; only
-   * `totalPoints` stops summing them in. Defaults to false.
+   * How much of *this* match's own kill and placement points is already banked into
+   * `seriesPointsByTeam`, per team — because a map was closed from this same match, and
+   * `MatchStore` is still showing that match (frozen until the next one's first update arrives,
+   * ADR-0007).
+   *
+   * Subtracted per component from this match's points so they are not counted a second time on top
+   * of the series total that already contains them. Crucially it is a per-team *amount*, not an
+   * all-or-nothing flag: at the instant of the close the two are equal and the match contributes
+   * nothing extra, but every elimination scored afterwards still lands in the PTS column. An
+   * operator who closes a map while the game is genuinely still running used to watch PTS freeze for
+   * the rest of that match.
+   *
+   * `killPoints`/`placementPoints` are still computed and returned gross — they describe the PCOB
+   * match, which has not restarted. Only `totalPoints` nets this out. Defaults to nothing banked.
    */
-  suppressThisMapPoints?: boolean;
+  bankedPointsByTeam?: ReadonlyMap<number, BankedPoints>;
+  /**
+   * True while the lobby is still warming up — see `IngestUpdate.inWarmup`.
+   *
+   * No team counts as eliminated then, however many of its players are down: they respawn on the
+   * warmup island, so a wipe there is not a wipe. Without this a team greys out on air and
+   * `standingTeamCount` — which a director reads off a Stream Deck button through `/feedback` —
+   * drops and climbs back with the warmup scuffle. Defaults to false.
+   */
+  inWarmup?: boolean;
 }
 
 /**
@@ -87,7 +118,8 @@ export function computeStandings(input: StandingsInput): Team[] {
   const presentTeams = input.presentTeams ?? new Set(roster.map((entry) => entry.teamNo));
   const seriesPointsByTeam = input.seriesPointsByTeam;
   const seriesHasAppeared = input.seriesHasAppeared;
-  const suppressThisMapPoints = input.suppressThisMapPoints ?? false;
+  const bankedPointsByTeam = input.bankedPointsByTeam;
+  const inWarmup = input.inWarmup ?? false;
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -119,7 +151,8 @@ export function computeStandings(input: StandingsInput): Team[] {
       placement,
       // A team with no reported players has not been wiped out — it has not been seen. Treating
       // "unknown" as "eliminated" would black out the whole table before the first update arrives.
-      isEliminated: teamPlayers.length > 0 && standingPlayerCount === 0,
+      // Nor has a team wiped on the warmup island: it respawns.
+      isEliminated: !inWarmup && teamPlayers.length > 0 && standingPlayerCount === 0,
       hasAppeared,
     };
   });
@@ -139,12 +172,23 @@ export function computeStandings(input: StandingsInput): Team[] {
           ? placementPointsFor(standingCount, ruleset)
           : 0;
     const seriesPoints = seriesPointsByTeam?.get(team.teamNo) ?? 0;
+    const banked = bankedPointsByTeam?.get(team.teamNo);
+
+    // Each half is netted against its own kind and clamped on its own. Clamping the sum instead
+    // lets a banked final placement eat real eliminations: a leader banked at 1st place, then back
+    // to a guaranteed minimum on the next live projection, went nine further kills before the
+    // column moved. The clamp itself is load-bearing too — `Team.totalPoints` is schema-typed
+    // non-negative and a client silently drops a snapshot that fails validation, freezing the
+    // overlay on its last good frame with no visible error (the failure mode ADR-0006 exists to
+    // prevent). A stalled number beats a dead overlay.
+    const earnedKillPoints = Math.max(0, killPoints - (banked?.killPoints ?? 0));
+    const earnedPlacementPoints = Math.max(0, placementPoints - (banked?.placementPoints ?? 0));
 
     return {
       ...team,
       killPoints,
       placementPoints,
-      totalPoints: (suppressThisMapPoints ? 0 : killPoints + placementPoints) + seriesPoints,
+      totalPoints: earnedKillPoints + earnedPlacementPoints + seriesPoints,
       placement: team.placement ?? null,
     };
   });
