@@ -9,7 +9,7 @@ import type {
 } from '@cdf/shared';
 import { DEFAULT_SCORING_RULESET, DEFAULT_TEAM_ROSTER } from '@cdf/shared';
 import type { IngestUpdate } from '../ingest/source.js';
-import { computeStandings } from '../scoring/standings.js';
+import { computeStandings, type BankedPoints } from '../scoring/standings.js';
 
 export interface MatchStoreOptions {
   source: IngestSourceKind;
@@ -77,7 +77,7 @@ export class MatchStore {
    * deleted map or an imported backup: whatever the history says is banked right now is what gets
    * netted out, with no stale flag of our own to go wrong.
    */
-  private bankedPointsByTeam: ReadonlyMap<number, number> = new Map();
+  private bankedPointsByTeam: ReadonlyMap<number, BankedPoints> = new Map();
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -97,7 +97,7 @@ export class MatchStore {
   setSeriesContext(
     seriesPointsByTeam: ReadonlyMap<number, number>,
     seriesHasAppeared: ReadonlySet<number>,
-    bankedPointsByTeam: ReadonlyMap<number, number> = new Map(),
+    bankedPointsByTeam: ReadonlyMap<number, BankedPoints> = new Map(),
   ): void {
     this.seriesPointsByTeam = seriesPointsByTeam;
     this.seriesHasAppeared = seriesHasAppeared;

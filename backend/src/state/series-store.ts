@@ -8,6 +8,7 @@ import type {
 } from '@cdf/shared';
 import { createDefaultSeriesDocument, seriesDocumentSchema } from '@cdf/shared';
 import type { Projection } from './match-store.js';
+import type { BankedPoints } from '../scoring/standings.js';
 import { JsonDocument } from '../persistence/json-document.js';
 import { migrateSchemaVersionOnly } from '../persistence/migrations.js';
 
@@ -144,14 +145,18 @@ export class SeriesStore {
    * here, so a deleted map, a correction or a series reset takes effect immediately with nothing to
    * invalidate.
    */
-  getBankedPointsForMatch(matchId: string | null): ReadonlyMap<number, number> {
-    const banked = new Map<number, number>();
+  getBankedPointsForMatch(matchId: string | null): ReadonlyMap<number, BankedPoints> {
+    const banked = new Map<number, BankedPoints>();
     if (matchId === null) return banked;
 
     for (const map of this.document.current.closedMaps) {
       if (map.matchId !== matchId) continue;
       for (const team of map.teams) {
-        banked.set(team.teamNo, (banked.get(team.teamNo) ?? 0) + team.totalPoints);
+        const running = banked.get(team.teamNo);
+        banked.set(team.teamNo, {
+          killPoints: (running?.killPoints ?? 0) + team.killPoints,
+          placementPoints: (running?.placementPoints ?? 0) + team.placementPoints,
+        });
       }
     }
     return banked;

@@ -1,6 +1,20 @@
 import type { Player, ScoringRuleset, Team, TeamRosterEntry } from '@cdf/shared';
 import type { IngestPlayer } from '../ingest/source.js';
 
+/**
+ * What a team already put into the series total out of the match currently being displayed.
+ *
+ * Kept split rather than summed, because the two halves are not comparable across the boundary that
+ * uses them. A map closed out of a still-running match banks a **final** placement, while the live
+ * projection that follows is back to awarding a **guaranteed minimum** — subtracting one combined
+ * figure from the other compares the two different bases and swallows real points (a leader banked
+ * at 1st place needed nine further kills before the column moved at all).
+ */
+export interface BankedPoints {
+  killPoints: number;
+  placementPoints: number;
+}
+
 export interface StandingsInput {
   players: readonly IngestPlayer[];
   roster: readonly TeamRosterEntry[];
@@ -35,16 +49,17 @@ export interface StandingsInput {
    * `MatchStore` is still showing that match (frozen until the next one's first update arrives,
    * ADR-0007).
    *
-   * Subtracted from this match's points so they are not counted a second time on top of the series
-   * total that already contains them. Crucially it is a per-team *amount*, not an all-or-nothing
-   * flag: at the instant of the close the two are equal and the match contributes nothing extra, but
-   * every elimination scored afterwards still lands in the PTS column. An operator who closes a map
-   * while the game is genuinely still running used to watch PTS freeze for the rest of that match.
+   * Subtracted per component from this match's points so they are not counted a second time on top
+   * of the series total that already contains them. Crucially it is a per-team *amount*, not an
+   * all-or-nothing flag: at the instant of the close the two are equal and the match contributes
+   * nothing extra, but every elimination scored afterwards still lands in the PTS column. An
+   * operator who closes a map while the game is genuinely still running used to watch PTS freeze for
+   * the rest of that match.
    *
    * `killPoints`/`placementPoints` are still computed and returned gross — they describe the PCOB
    * match, which has not restarted. Only `totalPoints` nets this out. Defaults to nothing banked.
    */
-  bankedPointsByTeam?: ReadonlyMap<number, number>;
+  bankedPointsByTeam?: ReadonlyMap<number, BankedPoints>;
 }
 
 /**
@@ -146,19 +161,23 @@ export function computeStandings(input: StandingsInput): Team[] {
           ? placementPointsFor(standingCount, ruleset)
           : 0;
     const seriesPoints = seriesPointsByTeam?.get(team.teamNo) ?? 0;
-    const banked = bankedPointsByTeam?.get(team.teamNo) ?? 0;
+    const banked = bankedPointsByTeam?.get(team.teamNo);
+
+    // Each half is netted against its own kind and clamped on its own. Clamping the sum instead
+    // lets a banked final placement eat real eliminations: a leader banked at 1st place, then back
+    // to a guaranteed minimum on the next live projection, went nine further kills before the
+    // column moved. The clamp itself is load-bearing too — `Team.totalPoints` is schema-typed
+    // non-negative and a client silently drops a snapshot that fails validation, freezing the
+    // overlay on its last good frame with no visible error (the failure mode ADR-0006 exists to
+    // prevent). A stalled number beats a dead overlay.
+    const earnedKillPoints = Math.max(0, killPoints - (banked?.killPoints ?? 0));
+    const earnedPlacementPoints = Math.max(0, placementPoints - (banked?.placementPoints ?? 0));
 
     return {
       ...team,
       killPoints,
       placementPoints,
-      // Clamped at zero deliberately, not defensively-by-habit: `Team.totalPoints` is schema-typed
-      // as a non-negative integer, and a client silently drops a snapshot that fails validation —
-      // freezing the overlay on its last good frame with no visible error, the exact failure mode
-      // ADR-0006 exists to prevent. Kills are monotonic and the guaranteed-minimum placement only
-      // improves, so this should never bind; if a future change makes it bind, a stalled PTS beats a
-      // dead overlay.
-      totalPoints: Math.max(0, killPoints + placementPoints - banked) + seriesPoints,
+      totalPoints: earnedKillPoints + earnedPlacementPoints + seriesPoints,
       placement: team.placement ?? null,
     };
   });

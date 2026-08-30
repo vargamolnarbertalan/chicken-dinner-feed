@@ -359,7 +359,7 @@ describe('computeStandings', () => {
         ruleset: pubgmRuleset,
         placements: new Map([[1, 1]]), // this map's own, now-final placement: 1st.
         seriesPointsByTeam: new Map([[1, 121]]), // already includes this same map's 18 points.
-        bankedPointsByTeam: new Map([[1, 18]]), // ...which is exactly what was banked from it.
+        bankedPointsByTeam: new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
       });
 
       // killPoints/placementPoints are still computed and returned normally for display...
@@ -379,11 +379,32 @@ describe('computeStandings', () => {
         ruleset: pubgmRuleset,
         placements: new Map([[1, 1]]),
         seriesPointsByTeam: new Map([[1, 121]]),
-        bankedPointsByTeam: new Map([[1, 18]]), // banked at 8 kills + 1st place.
+        bankedPointsByTeam: new Map([[1, { killPoints: 8, placementPoints: 10 }]]), // at the close.
       });
 
       // 11 kills + 10 placement = 21 earned this match, 18 of it already banked → 3 new points.
       expect(team?.totalPoints).toBe(124);
+    });
+
+    it('nets each half against its own kind, so a banked placement cannot eat live eliminations', () => {
+      // Regression, caught by running the real store rather than by reading it. A map closed out of
+      // a still-running match banks a *final* placement (survivors take the best remaining slots —
+      // 1st, worth 10), but the live projection that follows is back to a *guaranteed minimum* (8
+      // teams alive, worth 1). Netting one combined figure against the other compared the two
+      // different bases: the leader's next six kills all vanished into a nine-point deficit before
+      // the column moved at all — the very freeze this whole mechanism exists to prevent.
+      const [team] = computeStandings({
+        players: [player({ teamNo: 1, slot: 1, kills: 6 })], // one more kill since the close.
+        roster: roster(1, 2, 3, 4, 5, 6, 7, 8),
+        ruleset: pubgmRuleset,
+        placements: new Map(), // Still live: nobody has placed, so all eight are guaranteed 8th.
+        seriesPointsByTeam: new Map([[1, 15]]),
+        bankedPointsByTeam: new Map([[1, { killPoints: 5, placementPoints: 10 }]]),
+      });
+
+      expect(team?.placementPoints).toBe(1); // The guaranteed minimum, reported gross as always.
+      // 15 already banked + the one kill scored since. Not 15, and not 15 + 6 + 1 either.
+      expect(team?.totalPoints).toBe(16);
     });
 
     it('never returns a negative total, whatever the banked figure claims', () => {
@@ -396,7 +417,7 @@ describe('computeStandings', () => {
         ruleset: pubgmRuleset,
         placements: new Map([[1, 1]]),
         seriesPointsByTeam: new Map([[1, 50]]),
-        bankedPointsByTeam: new Map([[1, 999]]),
+        bankedPointsByTeam: new Map([[1, { killPoints: 999, placementPoints: 999 }]]),
       });
 
       expect(team?.totalPoints).toBe(50);

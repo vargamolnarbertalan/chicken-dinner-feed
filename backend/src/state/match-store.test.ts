@@ -240,7 +240,11 @@ describe('MatchStore', () => {
       expect(beforeClose?.totalPoints).toBe(18); // killPoints(8) + placementPoints[0] (10).
 
       // The series total now includes this same match's 18 points, as it would right after close.
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]), new Map([[1, 18]]));
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
+      );
 
       expect(store.project().match.teams[0]?.totalPoints).toBe(18); // Unchanged — not 36.
     });
@@ -251,7 +255,11 @@ describe('MatchStore', () => {
       // kill moved nothing at all.
       const store = new MatchStore({ source: 'pcob', roster: roster(1) });
       store.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })] }));
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]), new Map([[1, 18]]));
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
+      );
       expect(store.project().match.teams[0]?.totalPoints).toBe(18);
 
       // Same match, same id — the game did not restart, a player just got two more kills.
@@ -266,7 +274,11 @@ describe('MatchStore', () => {
       store.applyUpdate(
         update({ players: [player({ teamNo: 1, slot: 1, kills: 8 })], phase: 'ended' }),
       );
-      store.setSeriesContext(new Map([[1, 18]]), new Set([1]), new Map([[1, 18]]));
+      store.setSeriesContext(
+        new Map([[1, 18]]),
+        new Set([1]),
+        new Map([[1, { killPoints: 8, placementPoints: 10 }]]),
+      );
 
       store.applyUpdate(
         update({ matchId: 'match-2', players: [player({ teamNo: 1, slot: 1, kills: 3 })] }),
