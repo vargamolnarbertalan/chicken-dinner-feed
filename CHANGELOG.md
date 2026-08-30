@@ -11,6 +11,8 @@ release time — add to `[Unreleased]` in the same change that makes the change.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-30
+
 ### Added
 
 - **Add map by hand**, on the Series control page: record a map the app never saw played — one from
@@ -153,7 +155,8 @@ was supposed to guarantee it had a gap.
 - Team placement now trusts PCOB's own `rank` field instead of only an internal elimination-order
   guess, and a roster team that never joined a match no longer outranks one that did.
 
-[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.2.0
 [1.1.0]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.1.0
 [1.0.2]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.2
 [1.0.1]: https://github.com/vargamolnarbertalan/chicken-dinner-feed/releases/tag/v1.0.1
