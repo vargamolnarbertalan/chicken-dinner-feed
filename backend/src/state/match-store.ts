@@ -110,6 +110,18 @@ export class MatchStore {
   }
 
   /**
+   * Whether the lobby is still warming up — see `IngestUpdate.inWarmup`.
+   *
+   * Exposed because `projectAsEnded()` deliberately reports the match *as if* it had ended, which is
+   * exactly right for closing a real map and exactly wrong during warmup: it would hand every team
+   * in the lobby a final placement for a round nobody has played. The phase gate that stops the
+   * automatic close cannot stop that one, so the caller has to ask.
+   */
+  isInWarmup(): boolean {
+    return this.lastUpdate?.inWarmup ?? false;
+  }
+
+  /**
    * Replace the roster.
    *
    * Applied to the next projection rather than to stored state, so an operator fixing a team name

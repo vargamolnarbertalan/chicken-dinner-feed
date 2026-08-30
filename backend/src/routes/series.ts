@@ -65,6 +65,15 @@ export const seriesRoutes: FastifyPluginAsyncZod<SeriesRoutesOptions> = async (a
     },
     async (_request, reply) => {
       try {
+        // Checked here rather than in the store, which only ever sees a projection — and
+        // `projectAsEnded()` has by then already dressed a warmup lobby up as a finished match,
+        // complete with a final placement for every team in it.
+        if (match.isInWarmup()) {
+          throw new Error(
+            'The round has not started yet — the lobby is still warming up. Nothing has been played to record.',
+          );
+        }
+
         await series.closeMapNow(match.projectAsEnded(), Date.now());
         // Re-derives what this match has now banked, so the PTS column stops counting it twice
         // without freezing: anything scored *after* this close still lands in the total.

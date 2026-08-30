@@ -239,6 +239,13 @@ export class SeriesStore {
       );
     }
 
+    // A match id can outlive the player list it belongs to. Recording the empty map that results is
+    // the same nuisance as recording one with no match at all: a zero-point entry that has to be
+    // hunted down and deleted before the totals read correctly again.
+    if (!projection.match.teams.some((team) => team.hasAppeared && team.placement !== null)) {
+      throw new Error('No team has played this map yet, so there is nothing to record.');
+    }
+
     this.lastClosedMatchId = matchId;
     return this.persistClosedMap(projection, now);
   }

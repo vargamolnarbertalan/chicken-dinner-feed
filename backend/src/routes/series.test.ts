@@ -181,6 +181,37 @@ describe('series routes', () => {
     expect(seriesChanged).toBe(0);
   });
 
+  it('POST /series/close-map responds 400 during warmup, never recording an unplayed round', async () => {
+    // The automatic close is gated by the phase, which can never read `ended` during warmup. This
+    // path is not: it forces `projectAsEnded()`, which hands every team in the lobby a final
+    // placement — a fabricated map, worth real points, in the permanent history.
+    match.applyUpdate(
+      update({
+        inWarmup: true,
+        players: [player({ teamNo: 1, slot: 1 }), player({ teamNo: 2, slot: 1 })],
+      }),
+    );
+
+    const response = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/warming up/);
+    expect(series.getState().closedMaps).toEqual([]);
+    expect(seriesChanged).toBe(0);
+  });
+
+  it('POST /series/close-map responds 400 when a match id outlived its player list', async () => {
+    // A match id can still be reported after the payload has been cleared. Recording the empty map
+    // that results is the same nuisance as recording one with no match at all.
+    match.applyUpdate(update({ players: [] }));
+
+    const response = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/nothing to record/);
+    expect(series.getState().closedMaps).toEqual([]);
+  });
+
   it('POST /series/close-map responds 400 rather than recording the same match twice', async () => {
     match.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 1 })] }));
     await app.inject({ method: 'POST', url: '/api/series/close-map' });
