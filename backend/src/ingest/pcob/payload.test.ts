@@ -352,19 +352,95 @@ describe('PcobMapper', () => {
       expect(next.inWarmup).toBe(true);
     });
 
-    it.each([
-      ['a scored elimination', { killNum: 1 }],
-      ['a decided placement', { rank: 4 }],
-      ['a player already out', { liveState: 5 }],
-      ['a player knocked', { liveState: 4 }],
-    ])('treats %s as the round being under way, with no plane in sight', (_label, overrides) => {
-      // The fallback for connecting after everyone has landed. Broad on purpose: holding off while
-      // nobody has done anything costs nothing, ignoring a real round blanks the leaderboard.
+    it('treats a decided placement as the round being under way, with no plane in sight', () => {
+      // The fallback for connecting after everyone has landed. `rank` only: it is a team's
+      // placement in the battle-royale round proper, a concept warmup has no equivalent of.
       const update = new PcobMapper().map(
-        snapshot([player(), player({ playerKey: 2, playerName: 'Other', ...overrides })]),
+        snapshot([player(), player({ playerKey: 2, playerName: 'Other', rank: 4 })]),
       );
 
       expect(update.inWarmup).toBe(false);
+    });
+
+    it.each([
+      ['a scored elimination', { killNum: 3 }],
+      ['a player already out', { liveState: 5 }],
+      ['a player knocked', { liveState: 4 }],
+    ])(
+      'does NOT treat %s as the round starting — warmup-island PvP produces exactly this',
+      (_label, overrides) => {
+        // Regression: PUBG Mobile's warmup island is a real pre-drop practice area where players
+        // can shoot, knock and kill each other. Using any of these as a "round started" signal
+        // would let warmup PvP trigger it — found live, on the first real tournament match this
+        // detection ran against: a warmup skirmish closed a phantom "map 1" with a full placement
+        // table and real points, out of a round nobody had played.
+        const update = new PcobMapper().map(
+          snapshot([player(), player({ playerKey: 2, playerName: 'Other', ...overrides })]),
+        );
+
+        expect(update.inWarmup).toBe(true);
+      },
+    );
+
+    it('nets out a warmup kill once the plane launches, even if the API keeps reporting it', () => {
+      // The real failure mode this baseline exists for: a plain `maxKills.clear()` would do nothing
+      // if PCOB's own `killNum` genuinely carries the warmup kill forward under the same `GameID`,
+      // since `killsFor` takes the *maximum* of our cache and the API's own current reading.
+      const mapper = new PcobMapper();
+      const shooterId = 'shooter';
+      const warmupWithAKill = [player({ playerKey: shooterId, killNum: 3, liveState: 0 })];
+      const planeStillReportingIt = [player({ playerKey: shooterId, killNum: 3, liveState: 1 })];
+
+      mapper.map(snapshot(warmupWithAKill, {}, false));
+      const atLaunch = mapper.map(snapshot(planeStillReportingIt));
+
+      expect(atLaunch.inWarmup).toBe(false);
+      // Zeroed, not 3 — this is the tick after the boundary, once the baseline has taken effect.
+      const nextTick = mapper.map(snapshot(planeStillReportingIt));
+      expect(nextTick.players[0]?.kills).toBe(0);
+
+      // Real kills scored afterwards still count, on top of the netted-out baseline.
+      const twoRealKillsLater = mapper.map(
+        snapshot([player({ playerKey: shooterId, killNum: 5, liveState: 1 })]),
+      );
+      expect(twoRealKillsLater.players[0]?.kills).toBe(2);
+    });
+
+    it('does not net out real kills recovered mid-round via the rank fallback', () => {
+      // The recovery path (no flight signal seen, `rank` catches up instead) means the app is
+      // joining an *already-live* round, not crossing the warmup boundary — so nothing here is
+      // warmup contamination. Baselining it anyway would erase kills the team had genuinely earned
+      // between the round's real start and however late this signal happened to catch up.
+      const mapper = new PcobMapper();
+      const alreadyMidRound = [
+        player({ playerKey: 'a', killNum: 4, liveState: 0 }),
+        player({ playerKey: 'b', killNum: 0, liveState: 0, rank: 3 }), // already eliminated, ranked.
+      ];
+
+      const update = mapper.map(snapshot(alreadyMidRound));
+
+      expect(update.inWarmup).toBe(false);
+      expect(update.players.find((p) => p.id === 'a')?.kills).toBe(4); // Not netted to 0.
+    });
+
+    it('starts a fresh baseline for a new match, unaffected by the previous one', () => {
+      const mapper = new PcobMapper();
+      const shooterId = 'shooter';
+      mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 7, liveState: 0 })], GameID: 'g1' },
+        isInGame: false,
+      });
+      mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 7, liveState: 1 })], GameID: 'g1' },
+        isInGame: true,
+      }); // baseline for g1 = 7.
+
+      const freshMatch = mapper.map({
+        allInfo: { TotalPlayerList: [player({ playerKey: shooterId, killNum: 0, liveState: 0 })], GameID: 'g2' },
+        isInGame: false,
+      });
+
+      expect(freshMatch.players[0]?.kills).toBe(0); // Not negative, not stale from g1.
     });
 
     it('is not warmup when there are no players at all', () => {
