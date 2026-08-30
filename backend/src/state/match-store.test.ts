@@ -200,6 +200,98 @@ describe('MatchStore', () => {
     });
   });
 
+  describe('project() distrusting an untrustworthy "ended"', () => {
+    // A second, independent layer under the ingest adapter's own phase gate (`payload.ts`), which
+    // only ever sees one poll's raw player list. `specs/PCOB-API.md` §6 documents that a single PCOB
+    // response can be a *partial* object, so a momentary glitch reporting only a handful of teams
+    // could make the adapter's own gate misfire too. This uses everything MatchStore has
+    // accumulated across the whole match instead, which one bad poll cannot erase.
+
+    it('downgrades phase back to live when more than one team is still unresolved', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3, 4) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1 }),
+            player({ teamNo: 2, slot: 1 }),
+            player({ teamNo: 3, slot: 1 }),
+            player({ teamNo: 4, slot: 1 }),
+          ],
+        }),
+      );
+
+      // A glitched poll reports only team 1 and claims the round has ended — but teams 2, 3 and 4
+      // have neither an API rank nor our own elimination-order fallback, so this cannot be real.
+      store.applyUpdate(update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      const { match } = store.project();
+      expect(match.phase).toBe('live');
+      expect(match.teams.find((t) => t.teamNo === 4)?.placement).toBeNull();
+    });
+
+    it('does not downgrade projectAsEnded — an explicit trigger is always trusted', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2, 3, 4) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1 }),
+            player({ teamNo: 2, slot: 1 }),
+            player({ teamNo: 3, slot: 1 }),
+            player({ teamNo: 4, slot: 1 }),
+          ],
+        }),
+      );
+      store.applyUpdate(update({ phase: 'ended', players: [player({ teamNo: 1, slot: 1 })] }));
+
+      const { match } = store.projectAsEnded();
+      expect(match.phase).toBe('ended');
+      expect(match.teams.find((t) => t.teamNo === 4)?.placement).not.toBeNull();
+    });
+
+    it('still resolves a genuine one-survivor conclusion normally', () => {
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      store.applyUpdate(
+        update({
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+      store.applyUpdate(
+        update({
+          phase: 'ended',
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'dead' }),
+          ],
+        }),
+      );
+
+      const { match } = store.project();
+      expect(match.phase).toBe('ended');
+      expect(match.teams.find((t) => t.teamNo === 1)?.placement).toBe(1);
+    });
+
+    it('does not count against a team the API has already ranked, even if we have not detected it as eliminated', () => {
+      // A team resolved via API rank should not itself count as "unresolved" just because our own
+      // elimination-order fallback has not (yet, or ever) caught up to it independently.
+      const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });
+      store.applyUpdate(
+        update({
+          phase: 'ended',
+          players: [
+            player({ teamNo: 1, slot: 1, liveState: 'alive' }),
+            player({ teamNo: 2, slot: 1, liveState: 'alive', rank: 2 }), // Ranked, not "eliminated".
+          ],
+        }),
+      );
+
+      const { match } = store.project();
+      expect(match.phase).toBe('ended');
+    });
+  });
+
   describe('setSeriesContext', () => {
     it('adds series points on top of this match and keeps a never-appeared team last', () => {
       const store = new MatchStore({ source: 'pcob', roster: roster(1, 2) });

@@ -183,9 +183,36 @@ export class MatchStore {
    * Deliberately carries no timestamp: the broadcaster stamps that. If the projection contained
    * `Date.now()` it would differ on every call, defeating the change detection that stops the
    * overlay re-animating twice a second for nothing (ADR-0007).
+   *
+   * `phase` is taken from the ingest source, except a natural `'ended'` is downgraded back to
+   * `'live'` here if too many teams are still unresolved — see `hasTooManyUnresolvedTeams`. This is
+   * a second, independent layer under the ingest adapter's own `standingTeamCount`-based phase gate
+   * (`payload.ts`), not a replacement for it: that check only ever sees one poll's raw player list,
+   * and `specs/PCOB-API.md` §6 documents that a single PCOB response can be a *partial* object —
+   * "everything absent from that POST vanishes from the next response" — which could momentarily
+   * under-report how many teams are actually still in the fight. This check instead uses everything
+   * `MatchStore` has accumulated across every poll of this match, which one bad poll cannot erase.
+   * `projectAsEnded()` deliberately does not apply this — an explicit operator/auto-close trigger is
+   * trusted to mean "resolve everyone now", not "only if few enough are technically unresolved".
    */
   project(): Projection {
-    return this.buildProjection(this.lastUpdate?.phase ?? 'idle');
+    const phase = this.lastUpdate?.phase ?? 'idle';
+    const trustworthy = phase !== 'ended' || !this.hasTooManyUnresolvedTeams();
+    return this.buildProjection(trustworthy ? phase : 'live');
+  }
+
+  /**
+   * Whether more than one team present this match has neither a confirmed API placement
+   * (`apiRankByTeam`) nor our own elimination-order fallback — i.e., whether trusting `ended` at
+   * face value right now would fabricate final placements for teams nobody has actually confirmed
+   * are out. A real battle royale conclusion leaves at most one team in this state (the winner).
+   */
+  private hasTooManyUnresolvedTeams(): boolean {
+    const ranked = this.apiRankByTeam();
+    const unresolved = [...this.seenTeams].filter(
+      (teamNo) => !ranked.has(teamNo) && !this.eliminated.has(teamNo),
+    ).length;
+    return unresolved > 1;
   }
 
   /**
