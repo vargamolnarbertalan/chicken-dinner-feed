@@ -171,4 +171,102 @@ describe('series routes', () => {
 
     expect(response.statusCode).toBe(400);
   });
+
+  it('POST /series/close-map responds 400 when there is no match to close', async () => {
+    const response = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/no match running/);
+    expect(series.getState().closedMaps).toEqual([]);
+    expect(seriesChanged).toBe(0);
+  });
+
+  it('POST /series/close-map responds 400 during warmup, never recording an unplayed round', async () => {
+    // Manual close forces `projectAsEnded()`, which hands every team in the lobby a final
+    // placement regardless of what the real phase reads — a fabricated map, worth real points, in
+    // the permanent history, unless this check stops it.
+    match.applyUpdate(
+      update({
+        inWarmup: true,
+        players: [player({ teamNo: 1, slot: 1 }), player({ teamNo: 2, slot: 1 })],
+      }),
+    );
+
+    const response = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/warming up/);
+    expect(series.getState().closedMaps).toEqual([]);
+    expect(seriesChanged).toBe(0);
+  });
+
+  it('POST /series/close-map responds 400 when a match id outlived its player list', async () => {
+    // A match id can still be reported after the payload has been cleared. Recording the empty map
+    // that results is the same nuisance as recording one with no match at all.
+    match.applyUpdate(update({ players: [] }));
+
+    const response = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/nothing to record/);
+    expect(series.getState().closedMaps).toEqual([]);
+  });
+
+  it('POST /series/close-map responds 400 rather than recording the same match twice', async () => {
+    match.applyUpdate(update({ players: [player({ teamNo: 1, slot: 1, kills: 1 })] }));
+    await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    const second = await app.inject({ method: 'POST', url: '/api/series/close-map' });
+
+    expect(second.statusCode).toBe(400);
+    expect(second.json().error).toMatch(/already been closed/);
+    expect(series.getState().closedMaps).toHaveLength(1);
+  });
+
+  it('POST /series/maps adds a map at the requested position and renumbers', async () => {
+    for (const eliminations of [0, 1]) {
+      await app.inject({
+        method: 'POST',
+        url: '/api/series/maps',
+        payload: { position: 99, teams: [{ teamNo: 1, placement: 1, eliminations }] },
+      });
+    }
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/series/maps',
+      payload: {
+        position: 1,
+        teams: [
+          { teamNo: 1, placement: 1, eliminations: 4 },
+          { teamNo: 2, placement: 2, eliminations: 2 },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const maps = response.json().closedMaps;
+    expect(maps.map((map: { mapNumber: number }) => map.mapNumber)).toEqual([1, 2, 3]);
+    expect(maps[0].teams).toHaveLength(2); // The new one really did land first.
+    expect(maps[0].endedAt).toBeNull();
+    expect(maps[0].matchId).toBeNull();
+    expect(seriesChanged).toBe(3);
+  });
+
+  it('POST /series/maps responds 400 for two teams sharing a placement', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/series/maps',
+      payload: {
+        position: 1,
+        teams: [
+          { teamNo: 1, placement: 1, eliminations: 0 },
+          { teamNo: 2, placement: 1, eliminations: 0 },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(series.getState().closedMaps).toEqual([]);
+  });
 });

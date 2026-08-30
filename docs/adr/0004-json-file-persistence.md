@@ -58,8 +58,9 @@ after-match statistics are out of scope for v1.
 
 - **No transactions across files.** Accepted: our writes are per-aggregate and operator-initiated.
 - **No concurrent-write safety** beyond a single process. The bundle runs one backend; the
-  repository serialises writes per file. Running two instances against one data directory is
-  unsupported and should be prevented by a startup lock file.
+  repository serialises writes per file **within that process** (see the amendment below — this
+  was aspirational until 2026-08-30, not actually true). Running two instances against one data
+  directory is still unsupported and should be prevented by a startup lock file.
 - **No query capability.** Irrelevant at this data size; everything is loaded into memory.
 - Rewriting a whole document per save does not scale — fine for kilobyte-sized configs.
 
@@ -81,6 +82,29 @@ overlay setup before every broadcast.
 
 **`localStorage` in the browser.** Rejected: configuration would be trapped in one browser profile
 and invisible to the backend, which needs the scoring ruleset and team roster server-side.
+
+## Amended 2026-08-30 — concurrent writes within one process actually serialized
+
+"The repository serialises writes per file" above described the intent, not the implementation.
+`JsonDocument.write()` named its temp file `${filePath}.${process.pid}.tmp` — identical for every
+call from the same process — and had no queue: two overlapping `write()` calls on one instance could
+open/truncate/rename the same temp file out from under each other. Reproduced directly (two writes
+fired without an `await` between them): the second's `rename` failed with `ENOENT`, and worse, the
+in-memory `current` value ended up describing a _different_ write than the one that actually landed
+on disk — a real, silent divergence between what the app believed and what was persisted.
+
+Found reviewing `SeriesStore` after adding automatic map-closing that runs once per ingest poll
+(see ADR-0015's amendments) — frequent enough, alongside a manual click, to make two overlapping
+`write()` calls plausible in practice rather than purely theoretical. Fixed with an in-process queue:
+each `write()` call now waits for every earlier one on the same instance to settle, success or
+failure, before its own temp-file dance begins. A failed write does not wedge the queue — only the
+internal chain link swallows its rejection, never the promise the caller itself awaits.
+
+This closes the _corruption_ half of the risk for every `JsonDocument`-backed store, generally.
+`SeriesStore` additionally serializes its own read-then-write bodies (not just the underlying write)
+behind the same pattern, because the write-level queue alone does not stop a second mutation from
+_reading_ a stale `current` before the first one's write has landed and building a duplicate entry
+from it — see ADR-0015's amendment for that half, specific to series-history mutations.
 
 ## Revisit when
 

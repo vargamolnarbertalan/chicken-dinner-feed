@@ -118,9 +118,114 @@ Rejected: a transient disconnect that reconnects moments later would wrongly fre
 The manual "close now" button exists precisely to cover the case where the real `ended` signal never
 arrives.
 
+## Amended 2026-08-30 — automatic closing removed, live, mid-tournament
+
+Automatic closing on `phase: 'ended'` was decided above on the assumption that `FinishedStartTime`
+and `isInGame` reset per match, per `specs/PCOB-API.md` §7.6. Both assumptions failed on the same
+real tournament match this feature ran against for the first time, in two different ways:
+
+- Warmup-island PvP (a real, playable pre-drop area) tripped the round-started fallback signal
+  (`kills > 0`/dead/knocked), which made `phase` read `ended` for a lobby that had not dropped yet —
+  closing a fabricated map, full placement table, real points, out of a round nobody had played.
+- After that was fixed, `phase` locked to `ended` a second time — apparently via a `FinishedStartTime`
+  that did not clear — while 11 of 13 teams were still fighting. Every alive team was immediately
+  handed a full, final placement on air, live: `resolvePlacements('ended')` treats every present team
+  without a decided placement as a survivor and ranks it, the instant phase reads `ended`, regardless
+  of whether the round has anywhere near actually concluded.
+
+The second failure is the one that forced the decision here: it does not only threaten the auto-close
+feature, it corrupts the **live overlay's own standings** for as long as phase misreads `ended` —
+independent of whether closing is automatic or manual. A defensive gate was added regardless
+(`derivePhase` now also requires `standingTeamCount <= 1` — the literal definition of a battle royale
+round actually having concluded — before honoring either signal), but with two upstream signals now
+each independently demonstrated unreliable on the very first live match, and no third one to
+cross-check against, automatic closing itself is removed rather than patched a second time under the
+same pressure that produced the first patch.
+
+**Closing a map is now always an explicit operator action** — `POST /series/close-map`, unchanged in
+every other respect (still forces `projectAsEnded()`'s survivor resolution, still refuses to fire
+during warmup or with no match running, still refuses a second close of the same match). Automatic
+match-_start_ detection (a new `GameID`) is kept: nothing failed there tonight, it is a narrower claim
+than "the round has ended", and `MatchStore` already depends on it for resetting elimination tracking
+independent of anything in this file.
+
+**Consequence accepted, not yet mitigated in code:** if the operator forgets to close before the next
+`GameID` appears, `MatchStore.resetMatch()` discards the finished map's elimination tracking with no
+automatic recovery — there is no longer an automatic backstop. For tonight this was covered by an
+external snapshot log (polling `/api/series` every 2s to a file) and a live reminder once
+`standingTeamCount` reaches 1, specifically so a forgotten close could be reconstructed with "Add map
+by hand" from the last good snapshot. Whether that deserves becoming a real, in-app feature — a
+warning banner, or a short grace window before `resetMatch()` discards anything — is open; see
+Revisit when.
+
+## Amended again, same session — automatic closing reinstated on a different signal
+
+Minutes after the amendment above, with the same match still running: the operator asked whether
+`standingTeamCount <= 1` — a fact about the actual player data, checked directly — was solid enough
+to re-enable automatic closing, given the amendment's own new phase-gate already required exactly
+that condition. It is: unlike `isInGame`/`FinishedStartTime`, `standingTeamCount` is derived from
+player `liveState` alone, is the literal definition of a battle royale round having concluded (WWCD),
+and cannot read `<= 1` during warmup — no team can ever count as not-standing while `inWarmup` is
+true (`standings.ts`'s own fix from earlier the same night). Reinstated as `shouldAutoCloseNow`,
+checked alongside `observeMatch` on every ingest update: two-consecutive-poll stability, same
+protection as a new match id gets, then a close using `MatchStore.projectAsEnded()` — the exact same
+resolution manual close already uses, so there remains exactly one implementation of "how the last
+team gets its placement." `phase` itself is not consulted by this check at all, so neither of
+tonight's two failures can reach it. The manual button stays, as the explicit backup the operator
+asked for, and is what covers everything this signal cannot: a round that ends in some way that
+never drives `standingTeamCount` to exactly 1 (e.g., a stopped scrim), or any future case not yet
+seen. Verified against the built store before redeploying, mid-match: a normal 4→1 death sequence
+closes exactly once with correct placements, a one-tick glitch back up to full does not, warmup does
+not, and a match already closed does not fire again.
+
+## Amended, post-match review before the v1.2.0 tag — three gaps closed, one left open
+
+Reviewed the whole night's changes (three code-reviewer passes) before merging to `main`. Three real
+gaps found, all fixed here; one accepted and left open.
+
+- **Automatic closing was missing the warmup guard the manual route already had.** The manual
+  `POST /series/close-map` checks `MatchStore.isInWarmup()` before forcing a close; the automatic
+  path added the same night did not. Early in warmup, before every team's players have arrived even
+  once, `standingTeamCount` (built from which teams have _appeared_) can genuinely read `<= 1` for a
+  couple of polls simply because most teams have not shown up yet — nothing to do with anyone having
+  won. `shouldAutoCloseNow`'s own doc comment had claimed this was already safe by construction; it
+  was not. `app.ts`'s auto-close call now checks `!store.isInWarmup()` too.
+- **Two overlapping close attempts (an auto-close tick racing another, or racing a manual click)
+  could both pass the "not already closed" guard against the same stale snapshot and both persist,
+  the second silently overwriting the first.** `JsonDocument.write()` gained an in-process queue
+  (ADR-0004's amendment) that stops the _corruption_ this could cause, but not the _duplicate
+  attempt_ itself — a second mutation could still read `this.document.current` before the first
+  one's write had landed. `SeriesStore` now serializes every mutating method's whole read-then-write
+  body (not just the underlying write) behind its own queue, so a second call's own guards see the
+  first call's actual result.
+- **The phase-gate added earlier the same night (`standingTeamCount(players) <= 1` in
+  `payload.ts`) only ever sees one poll's raw player list.** `specs/PCOB-API.md` §6 documents that a
+  single PCOB response can be a _partial_ object — "everything absent from that POST vanishes from
+  the next response" — so a momentary glitched poll reporting only a handful of teams could still
+  make that gate misfire, the same class of failure it was built to prevent, just via the display
+  path rather than the auto-close path. `MatchStore.project()` (not `projectAsEnded()`, which an
+  explicit operator/auto-close trigger must still fully trust) now additionally downgrades a natural
+  `'ended'` back to `'live'` if more than one team present has neither a confirmed API placement nor
+  our own elimination-order fallback — using everything accumulated across the whole match, which
+  one bad poll cannot erase.
+
+**Left open, deliberately:** a match transition arriving before `shouldAutoCloseNow`'s own
+2-consecutive-poll stability completes for the outgoing match silently drops that map — no auto-close
+fires for it, and manual reconstruction (`insertManualMap`) is the only recovery. Judged rare (needs
+the next `GameID` within roughly one poll interval of the round concluding) and already covered by
+the same operational gap the previous amendment already listed below; not fixed under further review
+pressure the night the code needs to ship.
+
 ## Revisit when
 
 - The PCOB API ever exposes which map is being played — `mapName` is already modelled, nothing else
   needs to change.
 - A tournament format needs something other than "every map counts equally toward one flat total"
   (best-of-N drops, weighted maps, etc.) — out of scope for this decision.
+- An operator forgetting to close before the next `GameID` appears turns out to happen often enough
+  in practice to warrant an in-app safeguard (a warning banner, a short grace window, a log line when
+  a standing-close candidate is dropped by a match transition) rather than an external snapshot log —
+  see the amendments above.
+- A confirmed `getallinfo` capture answers whether `isInGame`/`GameID` are already set during warmup,
+  or whether `FinishedStartTime` genuinely never clears — either would let automatic closing be
+  reconsidered on firmer evidence than tonight's.

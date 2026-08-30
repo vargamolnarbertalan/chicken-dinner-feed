@@ -28,8 +28,11 @@ export type ClosedMapTeamResult = z.infer<typeof closedMapTeamResultSchema>;
  * (`specs/PCOB-API.md`). Modelled as nullable rather than omitted so a future API version that does
  * expose it needs no shape change here.
  *
- * `startedAt` is nullable: a backend restart mid-map loses the moment the map actually started, and
- * that must read as "unknown" rather than as a fabricated, wrong timestamp.
+ * `startedAt` and `endedAt` are both nullable, for two different reasons. A backend restart mid-map
+ * loses the moment the map actually started, and that must read as "unknown" rather than as a
+ * fabricated, wrong timestamp. A map added by hand (one played before the app was running, say)
+ * never had either — writing "now" into `endedAt` there would put a map inserted at position 1 later
+ * on the clock than the maps after it.
  */
 export const closedMapResultSchema = z.object({
   /** Server-generated, stable identity for editing/deleting this specific map later. */
@@ -37,8 +40,21 @@ export const closedMapResultSchema = z.object({
   /** 1-based, sequential within the current series. Renumbered on delete so it stays contiguous. */
   mapNumber: z.number().int().min(1),
   mapName: z.string().min(1).nullable(),
+  /**
+   * The PCOB match (`GameID`) this map was closed from, or `null` for a hand-added one.
+   *
+   * Load-bearing in three places, not just informational. It is how a restart mid-`ended` knows the
+   * map is already recorded and must not be closed a second time (the in-memory guard alone does not
+   * survive the restart); how a second close of the same still-running match is refused; and how the
+   * live PTS column knows how much of the currently displayed match is *already* banked in the
+   * series total, so it adds only what has been earned since rather than freezing or double-counting.
+   *
+   * Defaulted rather than migrated: a document written before this field existed reads back with
+   * `null`, which is exactly right — nothing can be inferred about which match those maps came from.
+   */
+  matchId: z.string().nullable().default(null),
   startedAt: z.number().int().nullable(),
-  endedAt: z.number().int(),
+  endedAt: z.number().int().nullable(),
   teams: z.array(closedMapTeamResultSchema),
 });
 export type ClosedMapResult = z.infer<typeof closedMapResultSchema>;

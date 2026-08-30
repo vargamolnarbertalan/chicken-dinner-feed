@@ -176,10 +176,19 @@ export async function buildApp(): Promise<AppContext> {
   await app.register(configRoutes, { prefix: '/api', store: configStore });
 
   // Refreshes what `MatchStore` adds on top of this map's own points, after anything that can change
-  // the series total: a new ingest update (a map may have just auto-closed), or an operator action
-  // on the Series control page (close now, reset, edit, delete).
+  // the series total: a new ingest update, or an operator action on the Series control page (close
+  // now, add by hand, reset, edit, delete) — maps are recorded only by an explicit operator action,
+  // never on their own; see the note on `SeriesStore.observeMatch`.
+  //
+  // Also re-derives how much of the currently displayed match is *already* in that total, which is
+  // why this must run on every ingest update and not only on an operator action — the displayed
+  // match changes on its own.
   const refreshSeriesContext = (): void => {
-    store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
+    store.setSeriesContext(
+      seriesStore.getSeriesTotals(),
+      seriesStore.getSeriesHasAppeared(),
+      seriesStore.getBankedPointsForMatch(store.currentMatchId()),
+    );
   };
 
   await app.register(seriesRoutes, {
@@ -263,19 +272,32 @@ export async function buildApp(): Promise<AppContext> {
         onUpdate(update) {
           store.applyUpdate(update);
           const projection = store.project();
-          // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
-          // that one tick so a map that closes this instant goes out already reflecting its own
-          // series total, rather than catching up only on the next poll.
-          seriesStore
-            .observeMatch(projection, Date.now())
-            .then((closed) => {
-              // The window between a map closing and the next match's first update would otherwise
-              // double-count that map's points: once as "this match's own contribution" (store has
-              // not seen anything new yet) and again via the series total, which now includes them.
-              if (closed && projection.match.matchId !== null) {
-                store.suppressContributionFor(projection.match.matchId);
-              }
-            })
+
+          // Never closes a map itself — see the note on `SeriesStore.observeMatch`. Only tracks the
+          // current match's start time for a close, manual or automatic.
+          const observed = seriesStore.observeMatch(projection, Date.now());
+
+          // The one signal trusted to close a map on its own — see `shouldAutoCloseNow`. Reuses
+          // `closeMapNow` (same validation, same duplicate-close guard) with an ended-forced
+          // projection, exactly like a manual click, just triggered here instead of by hand.
+          //
+          // `!store.isInWarmup()` is not redundant with `shouldAutoCloseNow`'s own reasoning about
+          // `isEliminated`. Early in warmup, before every team's players have arrived even once,
+          // `standingTeamCount` (built from `hasAppeared`) can genuinely read <= 1 simply because
+          // most teams have not been *seen* yet, not because they are down to one survivor — and
+          // that can hold stable for a couple of polls while the lobby is still filling in. The
+          // manual route (`routes/series.ts`) already checks this before forcing a close; the
+          // automatic path needs the exact same guard.
+          const autoClose =
+            !store.isInWarmup() && seriesStore.shouldAutoCloseNow(projection)
+              ? seriesStore
+                  .closeMapNow(store.projectAsEnded(), Date.now())
+                  .catch((error: unknown) =>
+                    app.log.error({ error }, 'Failed to auto-close the map'),
+                  )
+              : Promise.resolve();
+
+          Promise.all([observed, autoClose])
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
             .finally(() => {
               refreshSeriesContext();
