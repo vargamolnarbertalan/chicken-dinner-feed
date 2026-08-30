@@ -373,5 +373,21 @@ describe('PcobMapper', () => {
       expect(update.inWarmup).toBe(false);
       expect(update.phase).toBe('live');
     });
+
+    it('unlatches on an empty lobby, so the next warmup is caught without a new match id', () => {
+      // `GameID` comes from `getallinfo` and its absence is a documented possibility (§8). With no
+      // id ever changing, the latch would otherwise survive from the first round of the day to the
+      // last and let every later warmup through.
+      const mapper = new PcobMapper();
+      const noGameId = (players: Record<string, unknown>[]): PcobSnapshot => ({
+        allInfo: { TotalPlayerList: players },
+        isInGame: true,
+      });
+
+      expect(mapper.map(noGameId(capture('plane'))).inWarmup).toBe(false);
+      mapper.map(noGameId([])); // The lobby empties between rounds.
+
+      expect(mapper.map(noGameId(capture('warmup'))).inWarmup).toBe(true);
+    });
   });
 });

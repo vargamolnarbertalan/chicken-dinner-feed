@@ -119,7 +119,13 @@ export class PcobMapper {
 
     const players = this.mapPlayers(root.raw(F.players));
 
-    if (!this.started) this.started = hasRoundStarted(players, this.sawFlight);
+    // An empty lobby unlatches it as well as a new match id does. `GameID` is the signal §7.6 is
+    // built on, but it comes from `getallinfo` and its absence is a documented possibility — with no
+    // id ever changing, the latch would otherwise survive from the first round of the day to the
+    // last and let every later warmup through.
+    if (players.length === 0) this.started = false;
+    else if (!this.started) this.started = hasRoundStarted(players, this.sawFlight);
+
     const inWarmup = players.length > 0 && !this.started;
 
     return {
