@@ -26,11 +26,54 @@ export interface SeriesStoreOptions {
 
 const DEFAULT_STABILITY_TICKS = 2;
 
-/** A team edit accepted for a closed map: the raw inputs, never a direct points override. */
+/** A team result accepted for a closed map: the raw inputs, never a direct points override. */
 export interface ClosedMapTeamEdit {
   teamNo: number;
   placement: number;
   eliminations: number;
+}
+
+/**
+ * Points are always re-derived from the ruleset, never accepted as an override — the same rule that
+ * governs live scoring. Shared by correcting an existing map and adding one by hand, so the two can
+ * never drift into scoring the same inputs differently.
+ */
+function resultsFromEdits(
+  edits: readonly ClosedMapTeamEdit[],
+  ruleset: ScoringRuleset,
+): ClosedMapTeamResult[] {
+  // Distinct, not necessarily a contiguous 1..N run: a real closed map's own placements can
+  // legitimately skip numbers — `resolvePlacements`'s slot pool is sized by every team ever seen in
+  // the match, which can exceed the count of teams that end up recorded here. Requiring a clean
+  // 1..N permutation would reject the system's own unmodified output (found by testing this against
+  // a real multi-team mock match, not by inspection).
+  const placements = edits.map((edit) => edit.placement);
+  if (new Set(placements).size !== placements.length) {
+    throw new Error('Two teams cannot share the same placement.');
+  }
+
+  const teamNos = edits.map((edit) => edit.teamNo);
+  if (new Set(teamNos).size !== teamNos.length) {
+    throw new Error('The same team cannot appear twice in one map.');
+  }
+
+  return edits.map((edit) => {
+    const killPoints = edit.eliminations * ruleset.pointsPerElimination;
+    const placementPoints = ruleset.placementPoints[edit.placement - 1] ?? 0;
+    return {
+      teamNo: edit.teamNo,
+      placement: edit.placement,
+      eliminations: edit.eliminations,
+      killPoints,
+      placementPoints,
+      totalPoints: killPoints + placementPoints,
+    };
+  });
+}
+
+/** `mapNumber` is positional, so it is rewritten from the array order after every insert or delete. */
+function renumber(maps: readonly ClosedMapResult[]): ClosedMapResult[] {
+  return maps.map((entry, index) => ({ ...entry, mapNumber: index + 1 }));
 }
 
 /**
@@ -94,19 +137,43 @@ export class SeriesStore {
   }
 
   /**
+   * How much of `matchId`'s own points is already recorded in the history, per team.
+   *
+   * What `MatchStore` needs to stop counting a still-displayed match twice — see its
+   * `bankedPointsByTeam`. Derived fresh from `closedMaps` on every call like every other aggregate
+   * here, so a deleted map, a correction or a series reset takes effect immediately with nothing to
+   * invalidate.
+   */
+  getBankedPointsForMatch(matchId: string | null): ReadonlyMap<number, number> {
+    const banked = new Map<number, number>();
+    if (matchId === null) return banked;
+
+    for (const map of this.document.current.closedMaps) {
+      if (map.matchId !== matchId) continue;
+      for (const team of map.teams) {
+        banked.set(team.teamNo, (banked.get(team.teamNo) ?? 0) + team.totalPoints);
+      }
+    }
+    return banked;
+  }
+
+  /** Whether the history already holds a map closed from this PCOB match. */
+  private hasClosedMapFor(matchId: string): boolean {
+    return this.document.current.closedMaps.some((entry) => entry.matchId === matchId);
+  }
+
+  /**
    * Call after every ingest update. Tracks match-id and `ended`-phase stability, and persists a
    * closed map, at most once per match id, once both are trusted.
    *
-   * Returns whether this call is the one that just closed a map — the caller must, in that case,
-   * tell `MatchStore` to stop adding that same match's points a second time on top of the series
-   * total that now already includes them (`MatchStore.suppressContributionFor`).
+   * Returns the map it just closed, or `null` if this call closed nothing.
    */
-  async observeMatch(projection: Projection, now: number): Promise<boolean> {
+  async observeMatch(projection: Projection, now: number): Promise<ClosedMapResult | null> {
     const { matchId, phase } = projection.match;
 
     if (matchId === null) {
       this.resetObservation();
-      return false;
+      return null;
     }
 
     if (matchId !== this.candidateMatchId) {
@@ -122,20 +189,25 @@ export class SeriesStore {
       this.endedStableCount = 0;
     }
 
-    if (this.trustedMatchId !== matchId) return false; // Candidate not stable yet.
+    if (this.trustedMatchId !== matchId) return null; // Candidate not stable yet.
 
     if (phase !== 'ended') {
       this.endedStableCount = 0;
-      return false;
+      return null;
     }
 
     this.endedStableCount += 1;
-    if (this.endedStableCount < this.stabilityTicks) return false;
-    if (this.lastClosedMatchId === matchId) return false; // Already closed, still polling while ended.
+    if (this.endedStableCount < this.stabilityTicks) return null;
+
+    // Both guards are needed, and neither is redundant. The in-memory one is the hot path while
+    // polling continues through the `ended` phase; the persisted one is what survives a restart in
+    // that same window — PCOB keeps serving a finished match's final stats until the next game
+    // starts, so a backend restarted mid-recap would otherwise re-run the whole stability check and
+    // record the same map a second time, silently doubling every team's points for it.
+    if (this.lastClosedMatchId === matchId || this.hasClosedMapFor(matchId)) return null;
 
     this.lastClosedMatchId = matchId;
-    await this.persistClosedMap(projection, now);
-    return true;
+    return this.persistClosedMap(projection, now);
   }
 
   /**
@@ -144,8 +216,69 @@ export class SeriesStore {
    * resolution via the `projection` the caller passes in.
    */
   async closeMapNow(projection: Projection, now: number): Promise<ClosedMapResult> {
-    if (projection.match.matchId !== null) this.lastClosedMatchId = projection.match.matchId;
+    const { matchId } = projection.match;
+
+    // Without this a click with no match running records an empty map, which then has to be found
+    // and deleted by hand before the series totals read correctly again.
+    if (matchId === null) {
+      throw new Error('There is no match running to close. Add the map by hand instead.');
+    }
+
+    // A second close of the same PCOB match would record that match's points twice: the projection
+    // reports them cumulatively from the match's own start, so the second map would repeat
+    // everything the first one already banked. Adding the map by hand is the supported way to record
+    // a result the app did not observe.
+    if (this.hasClosedMapFor(matchId)) {
+      throw new Error(
+        'This match has already been closed into the series. Add a map by hand if you need another entry.',
+      );
+    }
+
+    this.lastClosedMatchId = matchId;
     return this.persistClosedMap(projection, now);
+  }
+
+  /**
+   * Record a map that the app never observed — one played before it was running, or on another
+   * machine — at any position in the series, not only at the end.
+   *
+   * `position` is 1-based and clamped to the ends, so "1" puts it first and anything at or past the
+   * current length appends. Every map is renumbered afterwards, which is what makes inserting
+   * between two existing maps meaningful at all.
+   */
+  async insertManualMap(
+    position: number,
+    teams: readonly ClosedMapTeamEdit[],
+    ruleset: ScoringRuleset,
+  ): Promise<ClosedMapResult> {
+    if (teams.length === 0) {
+      throw new Error('A map needs at least one team result.');
+    }
+
+    const current = this.document.current;
+    const map: ClosedMapResult = {
+      id: randomUUID(),
+      // Overwritten by `renumber` below; the array position is the real source of truth.
+      mapNumber: 1,
+      mapName: null,
+      // Never observed, so there is no match to attribute it to and no clock to report. See
+      // `closedMapResultSchema` on why a fabricated `endedAt` would be worse than none.
+      matchId: null,
+      startedAt: null,
+      endedAt: null,
+      teams: resultsFromEdits(teams, ruleset),
+    };
+
+    const index = Math.max(0, Math.min(current.closedMaps.length, position - 1));
+    const closedMaps = renumber([
+      ...current.closedMaps.slice(0, index),
+      map,
+      ...current.closedMaps.slice(index),
+    ]);
+
+    await this.document.write({ ...current, closedMaps });
+    // The renumbered copy, not the local `map` — its `mapNumber` is only correct after renumbering.
+    return closedMaps[index] as ClosedMapResult;
   }
 
   /**
@@ -196,28 +329,7 @@ export class SeriesStore {
       throw new Error('An edit must cover exactly the teams already recorded for this map.');
     }
 
-    // Distinct, not necessarily a contiguous 1..N run: a real closed map's own placements can
-    // legitimately skip numbers — `resolvePlacements`'s slot pool is sized by every team ever seen
-    // in the match, which can exceed the count of teams that end up recorded here. Requiring a clean
-    // 1..N permutation would reject the system's own unmodified output (found by testing this against
-    // a real multi-team mock match, not by inspection).
-    const placements = edits.map((edit) => edit.placement);
-    if (new Set(placements).size !== placements.length) {
-      throw new Error('Two teams cannot share the same placement.');
-    }
-
-    const teams: ClosedMapTeamResult[] = edits.map((edit) => {
-      const killPoints = edit.eliminations * ruleset.pointsPerElimination;
-      const placementPoints = ruleset.placementPoints[edit.placement - 1] ?? 0;
-      return {
-        teamNo: edit.teamNo,
-        placement: edit.placement,
-        eliminations: edit.eliminations,
-        killPoints,
-        placementPoints,
-        totalPoints: killPoints + placementPoints,
-      };
-    });
+    const teams = resultsFromEdits(edits, ruleset);
 
     return this.document.write({
       ...current,
@@ -234,9 +346,7 @@ export class SeriesStore {
       throw new Error(`No closed map with the id "${mapId}".`);
     }
 
-    const remaining = current.closedMaps
-      .filter((entry) => entry.id !== mapId)
-      .map((entry, index) => ({ ...entry, mapNumber: index + 1 }));
+    const remaining = renumber(current.closedMaps.filter((entry) => entry.id !== mapId));
 
     return this.document.write({ ...current, closedMaps: remaining });
   }
@@ -275,6 +385,7 @@ export class SeriesStore {
       id: randomUUID(),
       mapNumber: current.closedMaps.length + 1,
       mapName: null,
+      matchId: projection.match.matchId,
       startedAt: this.currentMapStartedAt,
       endedAt: now,
       teams,

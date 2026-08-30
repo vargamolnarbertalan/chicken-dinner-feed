@@ -177,9 +177,17 @@ export async function buildApp(): Promise<AppContext> {
 
   // Refreshes what `MatchStore` adds on top of this map's own points, after anything that can change
   // the series total: a new ingest update (a map may have just auto-closed), or an operator action
-  // on the Series control page (close now, reset, edit, delete).
+  // on the Series control page (close now, add by hand, reset, edit, delete).
+  //
+  // Also re-derives how much of the currently displayed match is *already* in that total, which is
+  // why this must run on every ingest update and not only on an operator action — the displayed
+  // match changes on its own.
   const refreshSeriesContext = (): void => {
-    store.setSeriesContext(seriesStore.getSeriesTotals(), seriesStore.getSeriesHasAppeared());
+    store.setSeriesContext(
+      seriesStore.getSeriesTotals(),
+      seriesStore.getSeriesHasAppeared(),
+      seriesStore.getBankedPointsForMatch(store.currentMatchId()),
+    );
   };
 
   await app.register(seriesRoutes, {
@@ -262,20 +270,12 @@ export async function buildApp(): Promise<AppContext> {
       ingestSource.start({
         onUpdate(update) {
           store.applyUpdate(update);
-          const projection = store.project();
           // observeMatch may persist a just-closed map (an async write). Broadcasting is held for
           // that one tick so a map that closes this instant goes out already reflecting its own
-          // series total, rather than catching up only on the next poll.
+          // series total, rather than catching up only on the next poll. `refreshSeriesContext`
+          // then nets that map back out of the still-displayed match, so it counts exactly once.
           seriesStore
-            .observeMatch(projection, Date.now())
-            .then((closed) => {
-              // The window between a map closing and the next match's first update would otherwise
-              // double-count that map's points: once as "this match's own contribution" (store has
-              // not seen anything new yet) and again via the series total, which now includes them.
-              if (closed && projection.match.matchId !== null) {
-                store.suppressContributionFor(projection.match.matchId);
-              }
-            })
+            .observeMatch(store.project(), Date.now())
             .catch((error: unknown) => app.log.error({ error }, 'Failed to record series history'))
             .finally(() => {
               refreshSeriesContext();

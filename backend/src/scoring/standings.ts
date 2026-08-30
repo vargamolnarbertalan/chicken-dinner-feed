@@ -30,14 +30,21 @@ export interface StandingsInput {
    */
   seriesHasAppeared?: ReadonlySet<number>;
   /**
-   * True once this match's own result has already been banked into `seriesPointsByTeam` (a map that
-   * closed but whose data is still what `MatchStore` is showing, frozen, until the next map's first
-   * update arrives — ADR-0007's "freeze until the next map"). Suppresses this map's own kill and
-   * placement points from being added a *second* time on top of the series total that already
-   * includes them; `killPoints`/`placementPoints` are still computed and returned as normal; only
-   * `totalPoints` stops summing them in. Defaults to false.
+   * How much of *this* match's own kill and placement points is already banked into
+   * `seriesPointsByTeam`, per team — because a map was closed from this same match, and
+   * `MatchStore` is still showing that match (frozen until the next one's first update arrives,
+   * ADR-0007).
+   *
+   * Subtracted from this match's points so they are not counted a second time on top of the series
+   * total that already contains them. Crucially it is a per-team *amount*, not an all-or-nothing
+   * flag: at the instant of the close the two are equal and the match contributes nothing extra, but
+   * every elimination scored afterwards still lands in the PTS column. An operator who closes a map
+   * while the game is genuinely still running used to watch PTS freeze for the rest of that match.
+   *
+   * `killPoints`/`placementPoints` are still computed and returned gross — they describe the PCOB
+   * match, which has not restarted. Only `totalPoints` nets this out. Defaults to nothing banked.
    */
-  suppressThisMapPoints?: boolean;
+  bankedPointsByTeam?: ReadonlyMap<number, number>;
 }
 
 /**
@@ -87,7 +94,7 @@ export function computeStandings(input: StandingsInput): Team[] {
   const presentTeams = input.presentTeams ?? new Set(roster.map((entry) => entry.teamNo));
   const seriesPointsByTeam = input.seriesPointsByTeam;
   const seriesHasAppeared = input.seriesHasAppeared;
-  const suppressThisMapPoints = input.suppressThisMapPoints ?? false;
+  const bankedPointsByTeam = input.bankedPointsByTeam;
 
   const playersByTeam = new Map<number, IngestPlayer[]>();
   for (const player of players) {
@@ -139,12 +146,19 @@ export function computeStandings(input: StandingsInput): Team[] {
           ? placementPointsFor(standingCount, ruleset)
           : 0;
     const seriesPoints = seriesPointsByTeam?.get(team.teamNo) ?? 0;
+    const banked = bankedPointsByTeam?.get(team.teamNo) ?? 0;
 
     return {
       ...team,
       killPoints,
       placementPoints,
-      totalPoints: (suppressThisMapPoints ? 0 : killPoints + placementPoints) + seriesPoints,
+      // Clamped at zero deliberately, not defensively-by-habit: `Team.totalPoints` is schema-typed
+      // as a non-negative integer, and a client silently drops a snapshot that fails validation —
+      // freezing the overlay on its last good frame with no visible error, the exact failure mode
+      // ADR-0006 exists to prevent. Kills are monotonic and the guaranteed-minimum placement only
+      // improves, so this should never bind; if a future change makes it bind, a stalled PTS beats a
+      // dead overlay.
+      totalPoints: Math.max(0, killPoints + placementPoints - banked) + seriesPoints,
       placement: team.placement ?? null,
     };
   });

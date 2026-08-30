@@ -67,13 +67,17 @@ export class MatchStore {
   private seriesPointsByTeam: ReadonlyMap<number, number> = new Map();
   private seriesHasAppeared: ReadonlySet<number> = new Set();
   /**
-   * Set once a match has been banked into series history while its data is still what this store is
-   * showing (frozen, until the next map's first update arrives). Without this, the window between a
-   * map closing and the next match's first update would double-count that map's own points: once as
-   * "this match's own contribution" (this store has not seen anything new yet) and again via
-   * `seriesPointsByTeam`, which by then already includes it.
+   * How much of the currently displayed match is already banked in `seriesPointsByTeam`, per team,
+   * because a map was closed from this same match. Without it, the window between a map closing and
+   * the next match's first update double-counts that map's points: once as "this match's own
+   * contribution" (this store has seen nothing new yet) and again via the series total.
+   *
+   * Held as a plain value set from outside, and **derived** by the caller from the persisted series
+   * history rather than accumulated here. That is what keeps it honest across a series reset, a
+   * deleted map or an imported backup: whatever the history says is banked right now is what gets
+   * netted out, with no stale flag of our own to go wrong.
    */
-  private suppressedMatchId: string | null = null;
+  private bankedPointsByTeam: ReadonlyMap<number, number> = new Map();
 
   constructor(private readonly options: MatchStoreOptions) {
     this.roster = options.roster ?? DEFAULT_TEAM_ROSTER.teams;
@@ -85,24 +89,24 @@ export class MatchStore {
     this.ruleset = ruleset;
   }
 
-  /** See the field comments above. Called whenever the series history changes. */
+  /**
+   * See the field comments above. Called whenever the series history changes — and on every ingest
+   * update, since `bankedPointsByTeam` is only meaningful against the match currently displayed and
+   * that can change from one update to the next.
+   */
   setSeriesContext(
     seriesPointsByTeam: ReadonlyMap<number, number>,
     seriesHasAppeared: ReadonlySet<number>,
+    bankedPointsByTeam: ReadonlyMap<number, number> = new Map(),
   ): void {
     this.seriesPointsByTeam = seriesPointsByTeam;
     this.seriesHasAppeared = seriesHasAppeared;
+    this.bankedPointsByTeam = bankedPointsByTeam;
   }
 
-  /**
-   * Call once `matchId` has been persisted into series history (a real `ended` close or a manual
-   * "close this map now"). A no-op if `matchId` is not the match this store is currently showing —
-   * it only ever suppresses its *own* current match, never a stale or future one.
-   */
-  suppressContributionFor(matchId: string): void {
-    if (this.lastUpdate?.matchId === matchId) {
-      this.suppressedMatchId = matchId;
-    }
+  /** The match this store is currently showing, so a caller can ask the series what it has banked for it. */
+  currentMatchId(): string | null {
+    return this.lastUpdate?.matchId ?? null;
   }
 
   /**
@@ -189,8 +193,7 @@ export class MatchStore {
       presentTeams: this.seenTeams,
       seriesPointsByTeam: this.seriesPointsByTeam,
       seriesHasAppeared: this.seriesHasAppeared,
-      suppressThisMapPoints:
-        this.suppressedMatchId !== null && update?.matchId === this.suppressedMatchId,
+      bankedPointsByTeam: this.bankedPointsByTeam,
     });
 
     return {
@@ -216,7 +219,8 @@ export class MatchStore {
     this.eliminationOrder = [];
     this.eliminated.clear();
     this.seenTeams.clear();
-    this.suppressedMatchId = null;
+    // `bankedPointsByTeam` is deliberately not cleared here: it is owned by whoever set it and is
+    // re-derived from the series history on the very same update that triggered this reset.
   }
 
   /**
