@@ -3,7 +3,7 @@
 The running record of what is done, what is next, and what is blocked. Required by
 `specs/APP-PLAN.md`. Update it in the same commit as the work it describes.
 
-**Last updated:** 2026-08-28 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
+**Last updated:** 2026-09-01 · **Version:** 0.1.0 · **Phase:** feature build · **Client:** Esport1 (Zsófia Berze)
 
 ---
 
@@ -503,9 +503,50 @@ reproducing the `NODE_ENV` bug in that process rather than discovering it from a
 
 ### Backlog
 
-- **Post-match export** (final standings as CSV or a sheet-ready table). The client performs exactly
-  this by hand today — save JSON, convert to CSV, paste into a Google Sheet. High value per unit of
-  effort. _(`specs/PCOB-FINDINGS.md` §6)_
+- **Post-match / per-map stat export**, scope still open. The client performs a version of this by
+  hand today — save JSON, convert to CSV, paste into a Google Sheet — which is why final-standings
+  CSV export was already flagged as high value per unit of effort. _(`specs/PCOB-FINDINGS.md` §6)_
+  2026-09-01 raised widening this to a **per-map/stage summary**, not only the final post-match
+  standings. **Needs product input before scoping**: which stats per map, one export per map vs. a
+  combined multi-map sheet, format (CSV / sheet-ready table / other), and whether it exports live
+  per-map data or only after each map ends.
+- **Per-page sticky pin for a control element**, user-controlled. Two related mechanisms exist today,
+  neither of which is this: `AdminPage`'s sidebar collapse is a show/hide toggle persisted globally
+  per browser (`localStorage['cdf.admin.sidebar']`, not per subpage) — `frontend/src/pages/AdminPage.tsx:82-95`.
+  `InstanceToolbar` (rename/save/on-air/delete) is already always-sticky while the appearance editor
+  scrolls, but that is hardcoded, not something the operator can opt in or out of —
+  `frontend/src/features/admin/InstanceToolbar.tsx`, rendered at `AdminPage.tsx:484-499`. What's
+  missing is a per-subpage, user-toggleable "keep this control pinned/visible everywhere" setting.
+  Needs a decision on where that preference lives (per page? one global switch?) before implementing.
+- **Eliminated-team rows: dim vs. hide, as an operator choice.** `appearance.maxTeams` already caps
+  the leaderboard at N rows (default 16, range 1–25), editable per overlay instance in
+  `AppearanceEditor` — `shared/src/config/overlay-instance.ts:95,156`,
+  `frontend/src/features/admin/AppearanceEditor.tsx:175-176`. What it does not do: an eliminated team
+  still occupies a row, just dimmed — `frontend/src/components/overlay/TeamRow.tsx:40-46`, "Eliminated
+  teams recede rather than disappear," a deliberate design choice, not a bug. Request 2026-09-01: an
+  operator who only wants to show, say, 13 of 16 rows because the rest are already out on prior maps
+  wants those rows gone, not grayed. **This reverses a decision already made once** — treat it as a
+  conscious trade-off (e.g. a per-instance "dim eliminated" vs. "hide eliminated" toggle) rather than
+  silently flipping the current default; confirm which broadcasts still want the dim behavior before
+  changing it project-wide.
+- **Measure end-to-end latency, game → PCOB → ingestion → overlay render, then reduce it if the
+  numbers justify it.** No stage is currently instrumented with timestamps, so today there is only a
+  design-time estimate, not a measurement: ADR-0010 accepted "up to ~1 s of added latency" against an
+  assumed ~2 s upstream PCOB refresh cadence, as the trade-off for polling `PCOB_POLL_INTERVAL_MS`
+  (default `1000`, configurable 200–10000 — `backend/src/config.ts:51`,
+  `backend/src/ingest/pcob/pcob-source.ts:23,73`) instead of hammering the local API faster. On top of
+  that: `LiveHub` recomputes a full `JSON.stringify` change-key on every poll tick and coalesces
+  broadcasts with a 50 ms debounce before it sends (`backend/src/ws/live-hub.ts:93,209-226,271-274`) —
+  cost currently unmeasured, and only likely to grow with match/team-list size. On the render side,
+  reorder and value-change animations are deliberately slow enough to add to _perceived_ latency on
+  top of data latency — team-row reorder up to 0.55 s (`frontend/src/components/overlay/TeamRow.tsx:32`),
+  health-bar height animation up to 1.6 s (`frontend/src/components/overlay/AlivePlayerBars.tsx:86`).
+  Before touching the poll rate or the coalesce/animation timings, thread a timestamp or trace id
+  through ingestion → snapshot → WebSocket send → frontend receipt → paint, so any change is judged
+  against a real number instead of ADR-0010's estimate — and note that lowering
+  `PCOB_POLL_INTERVAL_MS` reopens that ADR's staleness-vs-request-load trade-off, not just a config
+  tweak. Related to the broadcast-machine performance check below, but distinct: that one is about
+  frontend rendering cost, this one is the whole pipeline's data latency.
 - Startup lock file so two backends cannot share one `data/` directory. _(ADR-0004)_
 - Lazy-load the admin route tree so overlay pages do not parse admin JavaScript. _(ADR-0008)_
 - Performance check of the real overlay on a broadcast machine — the known risk in ADR-0003.

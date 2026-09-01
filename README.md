@@ -153,3 +153,9 @@ what was confirmed when: [`specs/PCOB-API.md`](specs/PCOB-API.md) and
 Branch from `develop` as `feat/*`, `fix/*`, `chore/*` or `docs/*`; merge back by pull request using
 [Conventional Commits](https://www.conventionalcommits.org/). See
 [ADR-0009](docs/adr/0009-git-workflow-and-release-process.md).
+
+## License
+
+Proprietary. **Not open source, not freeware.** All rights are reserved by Bertalan
+Varga-Molnár; no use is permitted without a written, per-Event license. See
+[`LICENSE`](LICENSE) for the full terms and licensing contact.
